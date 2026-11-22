@@ -210,12 +210,15 @@ class RecorderTests(unittest.TestCase):
 
 
 class FakeWebSocket:
-    def __init__(self, active=False, reject_pause=False):
+    def __init__(self, active=False, reject_pause=False, delay=0):
         self.responses = [dict(op=0,d=dict(authentication=dict(salt='salt',challenge='challenge')))]
         self.sent = []
         self.active = active
         self.paused = False
         self.reject_pause = reject_pause
+        self.delay = delay
+        self.transition = None
+        self.remaining = 0
 
     def send(self, payload):
         item = json.loads(payload); self.sent.append(item)
@@ -223,10 +226,17 @@ class FakeWebSocket:
             self.responses.append(dict(op=2,d=dict(negotiatedRpcVersion=1)))
         elif item['op'] == 6:
             name = item['d']['requestType']
-            if name == 'StartRecord': self.active = True
-            if name == 'StopRecord': self.active = False
-            if name == 'PauseRecord' and not self.reject_pause: self.paused = True
-            if name == 'ResumeRecord': self.paused = False
+            changes = {'StartRecord':('active',True), 'StopRecord':('active',False),
+                       'PauseRecord':('paused',True), 'ResumeRecord':('paused',False)}
+            if name in changes and not (name == 'PauseRecord' and self.reject_pause):
+                self.transition = changes[name]
+                self.remaining = self.delay
+            if name == 'GetRecordStatus' and self.transition:
+                if self.remaining > 0:
+                    self.remaining -= 1
+                else:
+                    setattr(self,*self.transition)
+                    self.transition = None
             data = dict(outputActive=self.active,outputPaused=self.paused,outputDuration=1500,outputPath='test.mp4')
             self.responses.append(dict(op=7,d=dict(requestId=item['d']['requestId'],requestStatus=dict(result=True),responseData=data)))
 
@@ -237,6 +247,8 @@ class FakeWebSocket:
 class OBSProtocolTests(unittest.TestCase):
     def connect(self, fake):
         obs = OBS()
+        obs.STATE_TIMEOUT = .05
+        obs.STATE_POLL = .001
         with patch('websocket.create_connection', return_value=fake): obs.connect(4455,'password')
         return obs
 
@@ -260,6 +272,15 @@ class OBSProtocolTests(unittest.TestCase):
     def test_unconfirmed_pause_is_error(self):
         obs = self.connect(FakeWebSocket(reject_pause=True)); obs.start()
         with self.assertRaisesRegex(ValueError,'no confirmó la pausa'): obs.pause()
+
+    def test_async_acknowledgments_wait_for_real_state_on_all_transitions(self):
+        fake = FakeWebSocket(delay=3); obs = self.connect(fake)
+        self.assertTrue(obs.start()['active'])
+        self.assertTrue(obs.pause()['paused'])
+        self.assertFalse(obs.resume()['paused'])
+        self.assertEqual(obs.stop(),'test.mp4')
+        self.assertFalse(fake.active)
+        self.assertFalse(obs.owned)
 
 
 class HTTPTests(unittest.TestCase):

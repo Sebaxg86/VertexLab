@@ -37,6 +37,9 @@ Git. Reconecta OBS al reiniciar RaceLab; también puedes proporcionar la contras
 con `RACELAB_OBS_PASSWORD` en el entorno. OBS debe estar abierto previamente.
 RaceLab controla exclusivamente grabaciones que él mismo inicia. Si OBS ya está
 grabando, guarda sólo telemetría y muestra el conflicto. No inicia ni detiene streams.
+Las órdenes de OBS se confirman consultando su estado durante un máximo de cinco
+segundos: la respuesta inicial de WebSocket puede llegar antes de que el cambio se
+haya aplicado. Se espera también la finalización antes de ofrecer el archivo de video.
 
 ## Flujo automático
 
@@ -70,6 +73,8 @@ No hay reconocimiento visual de resultados ni rebobinado soportado en esta entre
 Abre una sesión guardada. Se carga automáticamente el video asociado si sigue en su
 ruta original y el navegador admite su codec. Las sesiones antiguas del MVP siguen
 abriéndose y permiten seleccionar MP4 y ajustar el desfase como antes.
+Si existe video pero faltan referencias de sincronización, se puede reproducir por
+separado y se muestra un aviso; no se inventa una relación con la telemetría.
 
 Marca vueltas y elige una de referencia. Arrastra sobre las gráficas para moverte por
 distancia en esa vuelta: el video y el marcador de su trazada saltan al instante.

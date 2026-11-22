@@ -8,6 +8,8 @@ import uuid
 
 
 class OBS:
+    STATE_TIMEOUT = 5.0
+    STATE_POLL = .05
     def __init__(self):
         self.ws = None
         self.owned = False
@@ -91,6 +93,19 @@ class OBS:
                     uncertainty=(after-before)/2, paused=status['outputPaused'],
                     active=status['outputActive'])
 
+    def wait_state(self, active, paused=None, message='OBS no confirmó el cambio'):
+        # WebSocket acknowledges the request before the OBS frontend applies it.
+        # Read fresh status until the actual output reaches the requested state.
+        deadline = time.monotonic() + self.STATE_TIMEOUT
+        while True:
+            anchor = self.anchor()
+            if anchor['active'] == active and (paused is None or anchor['paused'] == paused):
+                self.error = None
+                return anchor
+            if time.monotonic() >= deadline:
+                raise ValueError(message)
+            time.sleep(self.STATE_POLL)
+
     def start(self):
         if not self.enabled:
             return None
@@ -99,32 +114,26 @@ class OBS:
             raise ValueError('OBS ya graba por tu cuenta; RaceLab no modificará esa grabación')
         self.request('StartRecord')
         self.owned = True
-        anchor = self.anchor()
-        if not anchor['active'] or anchor['paused']:
-            raise ValueError('OBS no confirmó el inicio de la grabación')
-        return anchor
+        return self.wait_state(True, False, 'OBS no confirmó el inicio de la grabación')
 
     def pause(self):
         if not self.owned:
             return
-        self.request('PauseRecord')
-        anchor = self.anchor()
-        if not anchor['paused']:
-            raise ValueError('OBS no confirmó la pausa; revisa el modo de salida')
-        return anchor
+        if not self.anchor()['paused']:
+            self.request('PauseRecord')
+        return self.wait_state(True, True, 'OBS no confirmó la pausa; revisa el modo de salida')
 
     def resume(self):
         if not self.owned:
             return None
-        self.request('ResumeRecord')
-        anchor = self.anchor()
-        if not anchor['active'] or anchor['paused']:
-            raise ValueError('OBS no confirmó la reanudación')
-        return anchor
+        if self.anchor()['paused']:
+            self.request('ResumeRecord')
+        return self.wait_state(True, False, 'OBS no confirmó la reanudación')
 
     def stop(self):
         if not self.owned:
             return None
         response = self.request('StopRecord')
+        self.wait_state(False, message='OBS no confirmó la finalización del archivo')
         self.owned = False
         return response.get('outputPath')

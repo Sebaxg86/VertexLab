@@ -74,7 +74,9 @@ async function load(id) {
   }
   $('sync-status').textContent = session.meta.syncState === 'estimated'
     ? 'Sincronización automática por tramos de OBS; precisión estimada, pendiente de calibrar con una captura real.'
+    : session.meta.syncState === 'recovered' ? 'Sincronización recuperada del registro real de OBS; alineación estimada.'
     : session.meta.syncState === 'error' ? 'Hubo un error de OBS. Revisa la grabación; la sincronización puede estar incompleta.' : 'Sin referencias automáticas de OBS.';
+  if (videoOnly()) $('sync-status').textContent = 'El video está disponible, pero no tiene referencias de sincronización. Puedes reproducirlo por separado; las gráficas no moverán el video.';
   seek(0);
   await list();
 }
@@ -121,6 +123,7 @@ $('video').onerror = () => {
 };
 
 function currentMeta() { return {...session?.meta, offset: Number($('offset').value) || 0}; }
+function videoOnly() { return hasVideo && session?.meta.version === 2 && !session.meta.syncSegments?.length; }
 function toVideo(time) { return session ? RaceTimeline.toVideo(currentMeta(), time) : null; }
 function setVideoTime(value) {
   if (!Number.isFinite(value) || !Number.isFinite($('video').duration)) return;
@@ -169,8 +172,9 @@ $('video').addEventListener('seeking', () => {
 $('video').addEventListener('play', () => { if (session) setPlaying(true); });
 $('video').addEventListener('pause', () => {
   // Internal pauses cover missing footage; native controls otherwise pause everything.
-  if (toVideo(t) !== null && !$('video').ended) { playing = false; $('play').textContent = '▶ Reproducir'; }
+  if ((toVideo(t) !== null || videoOnly()) && !$('video').ended) { playing = false; $('play').textContent = '▶ Reproducir'; }
 });
+$('video').addEventListener('ended', () => setPlaying(false));
 
 function canvas(id) {
   const element = $(id), rect = element.getBoundingClientRect(), ratio = devicePixelRatio || 1;
@@ -248,7 +252,14 @@ $('fit').onclick = () => { zoom = 1; pan = [0, 0]; draw(); };
 window.onresize = draw;
 
 function frame(now) {
-  if (playing && session) {
+  if (playing && videoOnly()) {
+    const video = $('video');
+    if (Number.isFinite(video.duration)) {
+      if (video.ended) setPlaying(false);
+      else if (video.paused) video.play().catch(() => { setPlaying(false); $('message').textContent = 'Pulsa reproducir directamente en el video.'; });
+      $('clock').textContent = video.currentTime.toFixed(2) + ' s · video sin sincronizar';
+    }
+  } else if (playing && session) {
     t = Math.min(Number($('time').max), t + Math.min((now-last)/1000, .1)*Number($('rate').value));
     const videoTime = toVideo(t), video = $('video');
     if (hasVideo && videoTime !== null && Number.isFinite(video.duration)) {
