@@ -84,6 +84,12 @@ mantiene el reparto 60/40: video e indicadores instantáneos a la izquierda; la 
 derecha se divide en dos filas de igual altura: gráficas desplazables arriba y recorrido abajo.
 La telemetría observada
 corresponde al cursor de la sesión; Volver a LIVE muestra los paquetes actuales del juego.
+El acceso a Volver a LIVE está dentro del menú. La columna de gráficas tiene un
+encabezado compacto y tres filas visibles: velocidad, RPM, acelerador, freno, tiempos
+y distancia se recorren verticalmente. Los tiempos de vuelta y carrera se muestran
+como minutos decimales con tres cifras (por ejemplo, `1.234 min`), manteniendo segundos
+en los datos originales y en la sincronización. Posición X/Y/Z, marcha y posición
+de carrera no se muestran como gráficas; la marcha permanece en el panel del motor.
 El video no tiene controles internos: usa la barra flotante para reproducir, pausar,
 deslizar el tiempo, saltar cinco segundos, ajustar velocidad, volumen o silencio. Rueda/arrastre sobre el
 mapa: zoom/pan; Encuadrar restablece la vista. No se incluye imagen del mapa de Forza.

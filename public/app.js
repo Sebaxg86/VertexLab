@@ -12,14 +12,9 @@ const metricDefs = [
   {key:'rpm', name:'Revoluciones', unit:'RPM', decimals:0},
   {key:'throttle', name:'Acelerador', unit:'%', decimals:0, max:100},
   {key:'brake', name:'Freno', unit:'%', decimals:0, max:100},
-  {key:'gear', name:'Marcha', unit:'', decimals:0, step:true},
-  {key:'racePosition', name:'Posición en carrera', unit:'', decimals:0, step:true},
-  {key:'lapTime', name:'Tiempo de vuelta', unit:'s', decimals:2},
-  {key:'raceTime', name:'Tiempo de carrera', unit:'s', decimals:2},
-  {key:'d', name:'Distancia', unit:'m', decimals:0},
-  {key:'x', name:'Posición X', unit:'m', decimals:1},
-  {key:'y', name:'Altura', unit:'m', decimals:1},
-  {key:'z', name:'Posición Z', unit:'m', decimals:1}
+  {key:'lapTime', name:'Tiempo de vuelta', unit:'min', decimals:3, divisor:60},
+  {key:'raceTime', name:'Tiempo de carrera', unit:'min', decimals:3, divisor:60},
+  {key:'d', name:'Distancia', unit:'m', decimals:0}
 ];
 const tireLabels = ['Del. izq.', 'Del. der.', 'Tras. izq.', 'Tras. der.'];
 for (let index=0; index<4; index++) {
@@ -362,11 +357,7 @@ function drawInstruments(sample) {
   }
 }
 function updateTelemetryContext() {
-  const connected = latest?.lastPacket && Date.now()/1000 - latest.lastPacket < 2;
-  $('live-state').textContent = session ? 'SESIÓN' : connected && latest.packet?.active ? 'LIVE' : 'EN ESPERA';
-  $('live-car').textContent = session ? `${session.meta.name} · clase ${session.meta.carClass ?? '—'} · PI ${session.meta.carPI ?? '—'}`
-    : latest?.packet ? `${latest.carName || 'Vehículo #' + latest.packet.carOrdinal} · clase ${latest.packet.carClass} · PI ${latest.packet.carPI}` : 'Esperando el vehículo';
-  $('telemetry-axis').textContent = session ? 'Comparación por distancia · valores en el cursor' : 'Últimos 20 segundos · valores en vivo';
+  $('telemetry-scroll').setAttribute('aria-label',session ? 'Gráficas por distancia del instante observado' : 'Gráficas en vivo de los últimos veinte segundos');
 }
 function metricScale(metric, series) {
   const cacheKey = metric.key + ':' + series.map(item => item.id).join(',');
@@ -396,9 +387,10 @@ function drawMetrics(sample, laps) {
   $('chart-pan').setAttribute('aria-valuetext',rangeLabel);
   $('chart-pan').title = available < .001 ? 'Acerca las gráficas para desplazarlas' : rangeLabel;
   const scrollRect = $('telemetry-scroll').getBoundingClientRect();
+  $('telemetry-rows').style.setProperty('--metric-height',Math.max(1,scrollRect.height/3)+'px');
   for (const [index, metric] of metricDefs.entries()) {
     const value = observed?.[metric.key];
-    $('value-' + metric.key).textContent = Number.isFinite(value) ? metric.key === 'gear' && value === 0 ? 'R' : value.toFixed(metric.decimals) : '—';
+    $('value-' + metric.key).textContent = Number.isFinite(value) ? (value/(metric.divisor||1)).toFixed(metric.decimals) : '—';
     const id = index === 0 ? 'charts' : 'chart-' + metric.key, element = $(id), rect = element.getBoundingClientRect();
     element.classList.toggle('live-chart', !session);
     element.setAttribute('aria-label', metric.name + (session ? ' por distancia' : ' en vivo'));
@@ -407,7 +399,8 @@ function drawMetrics(sample, laps) {
     const left = 28, right = width - 8, top = 6, bottom = height - 19;
     const end = (liveHistory.at(-1)?.liveTime || 0)-liveChartOffset;
     const point = row => [session ? left + (row.d-range.start)/span*(right-left) : left + (row.liveTime - (end-liveChartSpan))/liveChartSpan*(right-left), bottom - (row[metric.key]-min)/(max-min || 1)*(bottom-top)];
-    chart.font = '9px Segoe UI'; chart.fillStyle = '#7489a2'; chart.fillText(max.toFixed(0), 0, top+6); chart.fillText(min.toFixed(0), 0, bottom);
+    const axisValue=value=>(value/(metric.divisor||1)).toFixed(metric.divisor?3:0);
+    chart.font = '9px Segoe UI'; chart.fillStyle = '#7489a2'; chart.fillText(axisValue(max), 0, top+6); chart.fillText(axisValue(min), 0, bottom);
     chart.strokeStyle = '#26354a'; chart.lineWidth = 1; chart.beginPath(); chart.moveTo(left, bottom); chart.lineTo(right, bottom); chart.stroke();
     chart.save(); chart.beginPath(); chart.rect(left,top,right-left,bottom-top); chart.clip();
     for (const item of series) {
