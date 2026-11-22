@@ -62,7 +62,7 @@
     <section class="telemetry-column" aria-label="Telemetría por parámetro">
       <div class="telemetry-heading"><div><span class="eyebrow">DATOS DE CONDUCCIÓN</span><h2>Telemetría</h2></div><button id="show-live" hidden>Volver a LIVE</button><span id="live-state" class="source-badge">LIVE</span></div>
       <div class="telemetry-context"><span id="live-car">Esperando el vehículo</span><small id="telemetry-axis">Últimos 20 segundos</small></div>
-      <div class="chart-zoom-tools" role="group" aria-label="Zoom compartido de las gráficas"><span>Zoom al cursor</span><button id="chart-zoom-out" aria-label="Alejar todas las gráficas">−</button><output id="chart-zoom-label">1×</output><button id="chart-zoom-in" aria-label="Acercar todas las gráficas">+</button><button id="chart-zoom-reset">Ver todo</button></div>
+      <div class="chart-zoom-tools" role="group" aria-label="Zoom compartido de las gráficas"><span>Zoom al cursor</span><input id="chart-pan" type="range" min="0" max="1000" step="1" value="0" disabled aria-label="Desplazar la zona visible de todas las gráficas"><button id="chart-zoom-out" aria-label="Alejar todas las gráficas">−</button><output id="chart-zoom-label">1×</output><button id="chart-zoom-in" aria-label="Acercar todas las gráficas">+</button><button id="chart-zoom-reset">Ver todo</button></div>
       <div id="telemetry-scroll" tabindex="0" aria-label="Parámetros de telemetría; desplazar para ver más"><div id="telemetry-rows"></div><p class="telemetry-note">Arrastra cualquier gráfica para mover video y recorrido en la vuelta de referencia.</p></div>
     </section>
       <article class="map-panel">

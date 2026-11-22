@@ -4,7 +4,7 @@ let session = null, selected = new Set(), reference = null, t = 0, playing = fal
 let last = 0, zoom = 1, pan = [0, 0], drag = null, objectUrl = null, hasVideo = false;
 let latest = null, revision = null, pendingSeek = null, chartDragging = false;
 let liveHistory = [], lastLiveStamp = null, legendKey = null, toastTimer;
-let chartRange = null, liveChartSpan = 20;
+let chartRange = null, liveChartSpan = 20, liveChartOffset = 0;
 const scaleCache = new Map();
 for (let i=0;i<16;i++) { const led=document.createElement('i'); led.style.setProperty('--led-color',i<9?'#59e2ba':i<13?'#ffc66e':'#f77d94'); $('rev-lights').append(led); }
 const metricDefs = [
@@ -381,6 +381,15 @@ function drawMetrics(sample, laps) {
   const range = chartRange || {start:0,end:maxDistance};
   const span = Math.max(.001,range.end-range.start);
   $('chart-zoom-label').textContent = (session ? maxDistance/span : 20/liveChartSpan).toFixed(1).replace('.0','')+'×';
+  const full = session ? maxDistance : 20, shown = session ? span : liveChartSpan;
+  const available = Math.max(0,full-shown);
+  const start = session ? range.start : available-liveChartOffset;
+  $('chart-pan').disabled = available < .001;
+  $('chart-pan').value = available > .001 ? Math.round(Math.max(0,Math.min(1,start/available))*1000) : 0;
+  $('chart-pan').style.setProperty('--window-width',Math.min(100,shown/full*100)+'%');
+  const rangeLabel = session ? `Tramo visible: ${range.start.toFixed(0)} a ${range.end.toFixed(0)} metros` : `Tramo visible: hace ${(liveChartOffset+liveChartSpan).toFixed(1)} a ${liveChartOffset.toFixed(1)} segundos`;
+  $('chart-pan').setAttribute('aria-valuetext',rangeLabel);
+  $('chart-pan').title = available < .001 ? 'Acerca las gráficas para desplazarlas' : rangeLabel;
   const scrollRect = $('telemetry-scroll').getBoundingClientRect();
   for (const [index, metric] of metricDefs.entries()) {
     const value = observed?.[metric.key];
@@ -391,7 +400,7 @@ function drawMetrics(sample, laps) {
     if (rect.bottom < scrollRect.top || rect.top > scrollRect.bottom) continue;
     const [chart, width, height] = canvas(id), [min, max] = metricScale(metric, series);
     const left = 28, right = width - 8, top = 6, bottom = height - 19;
-    const end = liveHistory.at(-1)?.liveTime || 0;
+    const end = (liveHistory.at(-1)?.liveTime || 0)-liveChartOffset;
     const point = row => [session ? left + (row.d-range.start)/span*(right-left) : left + (row.liveTime - (end-liveChartSpan))/liveChartSpan*(right-left), bottom - (row[metric.key]-min)/(max-min || 1)*(bottom-top)];
     chart.font = '9px Segoe UI'; chart.fillStyle = '#7489a2'; chart.fillText(max.toFixed(0), 0, top+6); chart.fillText(min.toFixed(0), 0, bottom);
     chart.strokeStyle = '#26354a'; chart.lineWidth = 1; chart.beginPath(); chart.moveTo(left, bottom); chart.lineTo(right, bottom); chart.stroke();
@@ -410,8 +419,8 @@ function drawMetrics(sample, laps) {
     }
     if (sample) { const x = left + (sample.d-range.start)/span*(right-left); chart.strokeStyle = '#e3fff0aa'; chart.beginPath(); chart.moveTo(x, top); chart.lineTo(x, bottom); chart.stroke(); }
     chart.restore();
-    chart.fillStyle = '#7489a2'; chart.fillText(session ? range.start.toFixed(0)+' m' : '−'+liveChartSpan.toFixed(1)+' s', left, height-3);
-    chart.textAlign = 'right'; chart.fillText(session ? range.end.toFixed(0)+' m' : 'Ahora', right, height-3); chart.textAlign = 'left';
+    chart.fillStyle = '#7489a2'; chart.fillText(session ? range.start.toFixed(0)+' m' : '−'+(liveChartSpan+liveChartOffset).toFixed(1)+' s', left, height-3);
+    chart.textAlign = 'right'; chart.fillText(session ? range.end.toFixed(0)+' m' : liveChartOffset<.01?'Ahora':'−'+liveChartOffset.toFixed(1)+' s', right, height-3); chart.textAlign = 'left';
   }
 }
 function chartSeek(event) {
@@ -438,7 +447,7 @@ for (const element of $('telemetry-rows').querySelectorAll('canvas')) {
   },{passive:false});
 }
 function zoomCharts(factor,anchor) {
-  if (!session) liveChartSpan=Math.max(.5,Math.min(20,liveChartSpan/factor));
+  if (!session) { liveChartSpan=Math.max(.5,Math.min(20,liveChartSpan/factor)); liveChartOffset=Math.min(liveChartOffset,20-liveChartSpan); }
   else {
     const max=Math.max(1,...visible().map(lap=>lap.rows.at(-1)?.d||0));
     const lap=session.laps.find(lap=>lap.rows.length&&t>=lap.rows[0].t&&t<=lap.rows.at(-1).t);
@@ -454,7 +463,17 @@ function zoomCharts(factor,anchor) {
 }
 $('chart-zoom-in').onclick=()=>zoomCharts(2);
 $('chart-zoom-out').onclick=()=>zoomCharts(.5);
-$('chart-zoom-reset').onclick=()=>{chartRange=null;liveChartSpan=20;scaleCache.clear();draw();};
+$('chart-zoom-reset').onclick=()=>{chartRange=null;liveChartSpan=20;liveChartOffset=0;scaleCache.clear();draw();};
+$('chart-pan').oninput=()=>{
+  const fraction=Number($('chart-pan').value)/1000;
+  if (session) {
+    const full=Math.max(1,...visible().map(lap=>lap.rows.at(-1)?.d||0));
+    const span=chartRange?chartRange.end-chartRange.start:full;
+    const start=fraction*Math.max(0,full-span);
+    chartRange={start,end:start+span};
+  } else liveChartOffset=(1-fraction)*(20-liveChartSpan);
+  scaleCache.clear(); draw();
+};
 $('telemetry-scroll').onscroll = () => requestAnimationFrame(draw);
 $('map').addEventListener('wheel',event=>{
   event.preventDefault();

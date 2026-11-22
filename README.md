@@ -90,6 +90,9 @@ mapa: zoom/pan; Encuadrar restablece la vista. No se incluye imagen del mapa de 
 En el recorrido, la rueda mantiene fijo el punto bajo el mouse. Los botones +/− de
 las gráficas amplían todas a la vez alrededor del cursor de análisis; Ver todo restaura
 la distancia completa. Ctrl + rueda sobre una gráfica amplía alrededor del puntero.
+La barra horizontal entre el texto y los botones desplaza la ventana ampliada de todas
+las gráficas sin cambiar el zoom ni mover el cursor del video. El ancho del control
+representa la proporción visible; se desactiva cuando ya se ve toda la distancia.
 El zoom horizontal es compartido y las escalas verticales se ajustan a la zona observada;
 arrastrar una gráfica sigue buscando el instante correcto dentro de esa zona. En LIVE,
 los botones cambian la ventana reciente de 20 hasta 0.5 segundos.
