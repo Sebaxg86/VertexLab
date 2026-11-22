@@ -81,7 +81,7 @@ Marca vueltas y elige una de referencia. Arrastra sobre las gráficas para mover
 distancia en esa vuelta: el video y el marcador de su trazada saltan al instante.
 Los marcadores de las otras vueltas se comparan a la misma distancia. La vista de escritorio
 mantiene el reparto 60/40: video e indicadores instantáneos a la izquierda; la zona
-derecha se divide por mitades entre gráficas desplazables y recorrido de altura completa.
+derecha se divide en dos filas de igual altura: gráficas desplazables arriba y recorrido abajo.
 La telemetría observada
 corresponde al cursor de la sesión; Volver a LIVE muestra los paquetes actuales del juego.
 El video no tiene controles internos: usa la barra flotante para reproducir, pausar,
