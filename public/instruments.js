@@ -12,6 +12,15 @@
         slip: finite(sample?.tireSlipCombined?.[i]) ? Math.abs(sample.tireSlipCombined[i]) : null
       }))};
   }
-  root.RaceInstruments = {values};
-  if (typeof module !== 'undefined') module.exports = {values};
+  function duration(seconds) {
+    if (!finite(seconds)) return {text:'—',unit:'s'};
+    return seconds<60 ? {text:seconds.toFixed(3),unit:'s'} : {text:(seconds/60).toFixed(3),unit:'min'};
+  }
+  function rpmReference(sample, observedPeak) {
+    const engine = finite(sample?.engineMaxRpm) && sample.engineMaxRpm>0;
+    const maximum = engine ? sample.engineMaxRpm : finite(observedPeak) && observedPeak>0 ? observedPeak : null;
+    return {maximum,engine,ratio:maximum && finite(sample?.rpm) ? Math.max(0,Math.min(1,sample.rpm/maximum)) : null};
+  }
+  root.RaceInstruments = {values,duration,rpmReference};
+  if (typeof module !== 'undefined') module.exports = root.RaceInstruments;
 })(globalThis);

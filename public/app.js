@@ -5,6 +5,7 @@ let last = 0, zoom = 1, pan = [0, 0], drag = null, objectUrl = null, hasVideo = 
 let latest = null, revision = null, pendingSeek = null, chartDragging = false;
 let liveHistory = [], lastLiveStamp = null, legendKey = null, toastTimer;
 let chartRange = null, liveChartSpan = 20, liveChartOffset = 0;
+let sessionRpmPeak = 0, liveRpmPeak = 0, liveRpmCar = null;
 const scaleCache = new Map();
 for (let i=0;i<16;i++) { const led=document.createElement('i'); led.style.setProperty('--led-color',i<9?'#59e2ba':i<13?'#ffc66e':'#f77d94'); $('rev-lights').append(led); }
 const metricDefs = [
@@ -93,6 +94,7 @@ async function load(id) {
   setPlaying(false);
   clearVideo();
   session = await api('sessions/' + id);
+  sessionRpmPeak = session.laps.reduce((peak,lap)=>lap.rows.reduce((max,row)=>Number.isFinite(row.rpm)?Math.max(max,row.rpm):max,peak),0);
   scaleCache.clear(); chartRange = null; legendKey = null; $('telemetry-scroll').scrollTop = 0;
   selected = new Set(session.laps.map(lap => lap.id));
   reference = session.laps[0]?.id ?? null;
@@ -318,16 +320,16 @@ function draw() {
   if (session && hasVideo && !videoOnly() && toVideo(t) === null) $('clock').textContent += ' · sin video';
 }
 function drawInstruments(sample) {
-  const rpm = sample?.rpm, gear = sample?.gear, maximum = sample?.engineMaxRpm;
-  const ratio = Number.isFinite(rpm) && maximum>0 ? Math.max(0,Math.min(1,rpm/maximum)) : null;
+  const rpm = sample?.rpm, gear = sample?.gear;
+  const {ratio,maximum,engine} = RaceInstruments.rpmReference(sample,session?sessionRpmPeak:liveRpmPeak);
   $('instant-gear').textContent = Number.isFinite(gear) ? gear===0?'R':String(gear) : '—';
   $('instant-rpm').textContent = Number.isFinite(rpm) ? Math.round(rpm).toLocaleString('es-MX') : '—';
-  $('instant-speed').textContent = Number.isFinite(sample?.speed) ? sample.speed.toFixed(0)+' km/h' : '— km/h';
+  $('instant-speed').textContent = Number.isFinite(sample?.speed) ? sample.speed.toFixed(0) : '—';
   $('rpm-fill').style.transform = `scaleX(${ratio ?? 0})`;
-  $('rpm-scale').textContent = ratio === null ? 'Sin escala máxima en esta captura' : `Escala del motor · ${Math.round(maximum).toLocaleString('es-MX')} RPM`;
+  $('rpm-scale').textContent = ratio === null ? 'Sin datos del motor' : `${engine?'Máximo del motor':'Pico medido · referencia visual'} · ${Math.round(maximum).toLocaleString('es-MX')} RPM`;
   $('rev-lights').classList.toggle('no-reading',ratio===null);
   [...$('rev-lights').children].forEach((led,index)=>led.classList.toggle('lit',ratio!==null&&ratio >= (index+1)/16));
-  $('instant-gear').dataset.highRpm = ratio !== null && ratio>.95 ? 'true' : 'false';
+  $('instant-gear').dataset.highRpm = engine && ratio !== null && ratio>.95 ? 'true' : 'false';
   const measured = RaceInstruments.values(sample);
   $('instant-source').textContent = session ? 'Sesión · ' + t.toFixed(2) + ' s' : sample ? 'LIVE' : 'En espera';
   const missing = measured.steer === null || measured.lateral === null || measured.longitudinal === null || measured.tires.some(tire => tire.temp === null || tire.slip === null);
@@ -390,16 +392,18 @@ function drawMetrics(sample, laps) {
   $('telemetry-rows').style.setProperty('--metric-height',Math.max(1,scrollRect.height/3)+'px');
   for (const [index, metric] of metricDefs.entries()) {
     const value = observed?.[metric.key];
-    $('value-' + metric.key).textContent = Number.isFinite(value) ? (value/(metric.divisor||1)).toFixed(metric.decimals) : '—';
+    const duration = metric.divisor ? RaceInstruments.duration(value) : null;
+    $('value-' + metric.key).textContent = duration ? duration.text : Number.isFinite(value) ? value.toFixed(metric.decimals) : '—';
+    if (duration) $('value-' + metric.key).nextElementSibling.textContent=duration.unit;
     const id = index === 0 ? 'charts' : 'chart-' + metric.key, element = $(id), rect = element.getBoundingClientRect();
     element.classList.toggle('live-chart', !session);
     element.setAttribute('aria-label', metric.name + (session ? ' por distancia' : ' en vivo'));
     if (rect.bottom < scrollRect.top || rect.top > scrollRect.bottom) continue;
     const [chart, width, height] = canvas(id), [min, max] = metricScale(metric, series);
-    const left = 28, right = width - 8, top = 6, bottom = height - 19;
+    const left = metric.divisor?58:28, right = width - 8, top = 6, bottom = height - 19;
     const end = (liveHistory.at(-1)?.liveTime || 0)-liveChartOffset;
     const point = row => [session ? left + (row.d-range.start)/span*(right-left) : left + (row.liveTime - (end-liveChartSpan))/liveChartSpan*(right-left), bottom - (row[metric.key]-min)/(max-min || 1)*(bottom-top)];
-    const axisValue=value=>(value/(metric.divisor||1)).toFixed(metric.divisor?3:0);
+    const axisValue=value=>{if(!metric.divisor)return value.toFixed(0);const d=RaceInstruments.duration(value);return d.text+' '+d.unit;};
     chart.font = '9px Segoe UI'; chart.fillStyle = '#7489a2'; chart.fillText(axisValue(max), 0, top+6); chart.fillText(axisValue(min), 0, bottom);
     chart.strokeStyle = '#26354a'; chart.lineWidth = 1; chart.beginPath(); chart.moveTo(left, bottom); chart.lineTo(right, bottom); chart.stroke();
     chart.save(); chart.beginPath(); chart.rect(left,top,right-left,bottom-top); chart.clip();
@@ -428,7 +432,8 @@ function chartSeek(event) {
   const rect = event.currentTarget.getBoundingClientRect();
   const max = Math.max(1, ...visible().map(item => item.rows.at(-1)?.d || 0));
   const range = chartRange || {start:0,end:max};
-  const distance = range.start + Math.max(0, Math.min(1, (event.clientX-rect.left-28)/(rect.width-36))) * (range.end-range.start);
+  const left=['lapTime','raceTime'].includes(event.currentTarget.dataset.key)?58:28;
+  const distance = range.start + Math.max(0, Math.min(1, (event.clientX-rect.left-left)/(rect.width-left-8))) * (range.end-range.start);
   seek(nearest(lap.rows, 'd', distance).t);
 }
 for (const element of $('telemetry-rows').querySelectorAll('canvas')) {
@@ -440,7 +445,8 @@ for (const element of $('telemetry-rows').querySelectorAll('canvas')) {
     event.preventDefault();
     const max=Math.max(1,...visible().map(lap=>lap.rows.at(-1)?.d||0));
     const range=chartRange||{start:0,end:max}, rect=element.getBoundingClientRect();
-    const fraction=Math.max(0,Math.min(1,(event.clientX-rect.left-28)/(rect.width-36)));
+    const left=['lapTime','raceTime'].includes(element.dataset.key)?58:28;
+    const fraction=Math.max(0,Math.min(1,(event.clientX-rect.left-left)/(rect.width-left-8)));
     zoomCharts(Math.exp(-event.deltaY*.002),range.start+fraction*(range.end-range.start));
   },{passive:false});
 }
@@ -522,6 +528,10 @@ function live(state) {
   $('obs-status').textContent = state.obs.error || (state.obs.connected ? `OBS conectado${state.obs.owned ? ' · grabación de RaceLab' : ' · listo'}` : state.obs.enabled ? 'OBS desconectado · revisa la conexión' : 'Sin conectar · sólo telemetría');
   if (state.error) $('message').textContent = state.error;
   const packet = state.packet;
+  if(packet?.active && Number.isFinite(packet.rpm)) {
+    if(packet.carOrdinal!==liveRpmCar){liveRpmCar=packet.carOrdinal;liveRpmPeak=0;}
+    liveRpmPeak=Math.max(liveRpmPeak,packet.rpm);
+  }
   if (packet && packet.timestamp !== lastLiveStamp) {
     lastLiveStamp = packet.timestamp;
     const now = performance.now()/1000;

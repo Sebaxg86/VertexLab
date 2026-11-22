@@ -87,9 +87,12 @@ corresponde al cursor de la sesión; Volver a LIVE muestra los paquetes actuales
 El acceso a Volver a LIVE está dentro del menú. La columna de gráficas tiene un
 encabezado compacto y tres filas visibles: velocidad, RPM, acelerador, freno, tiempos
 y distancia se recorren verticalmente. Los tiempos de vuelta y carrera se muestran
-como minutos decimales con tres cifras (por ejemplo, `1.234 min`), manteniendo segundos
+como segundos con tres decimales por debajo de un minuto (`45.123 s`) y minutos
+decimales a partir de 60 segundos (`1.234 min`), manteniendo segundos
 en los datos originales y en la sincronización. Posición X/Y/Z, marcha y posición
 de carrera no se muestran como gráficas; la marcha permanece en el panel del motor.
+El desplazamiento vertical encaja en los límites de cada fila; al terminar el gesto
+quedan tres gráficas completas. La velocidad tiene un indicador destacado junto al motor.
 El video no tiene controles internos: usa la barra flotante para reproducir, pausar,
 deslizar el tiempo, saltar cinco segundos, ajustar velocidad, volumen o silencio. Rueda/arrastre sobre el
 mapa: zoom/pan; Encuadrar restablece la vista. No se incluye imagen del mapa de Forza.
@@ -142,7 +145,9 @@ adicionales: muestran Sin datos, sin reconstruirlos ni sustituirlos por datos LI
 Dirección es la entrada firmada `Steer` normalizada a porcentaje; el giro del icono es
 ilustrativo. Las luces y la barra de RPM usan EngineMaxRpm del juego como escala,
 sin afirmar un régimen óptimo de cambio de marcha. Capturas antiguas sin ese campo
-muestran la cifra de RPM y la marcha, pero no inventan una escala máxima. El giro del volante es
+muestran la cifra de RPM y la marcha, y las luces usan el pico realmente medido en la
+sesión como referencia visual explícita (no se considera límite del motor ni régimen
+óptimo de cambio). En LIVE, ese pico se acumula para el vehículo actual. El giro del volante es
 ilustrativo y no representa grados físicos del volante. Las G laterales/longitudinales
 se calculan de AccelerationX/Z divididas entre 9.80665, con derecha/adelante positivos;
 la cifra combinada es la magnitud en el plano X/Z. El diagrama limita el punto al borde
