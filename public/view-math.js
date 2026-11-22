@@ -12,6 +12,12 @@
   function anchoredPan(pan, pointer, center, ratio) {
     return pan.map((value,i) => pointer[i]-center[i]-ratio*(pointer[i]-center[i]-value));
   }
-  root.RaceView = {zoomRange,anchoredPan};
+  function followRange(range, domain, cursor) {
+    if (!range) return null;
+    const span = Math.min(domain[1]-domain[0],range.end-range.start);
+    const start = clamp(cursor-span/2,domain[0],domain[1]-span);
+    return {start,end:start+span};
+  }
+  root.RaceView = {zoomRange,anchoredPan,followRange};
   if (typeof module !== 'undefined') module.exports = root.RaceView;
 })(globalThis);

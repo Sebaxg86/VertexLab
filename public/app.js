@@ -288,6 +288,11 @@ function draw() {
   const laps = visible(), rows = laps.flatMap(lap => lap.rows);
   const current = session?.laps.find(lap => lap.rows.length && t >= lap.rows[0].t && t <= lap.rows.at(-1).t);
   const sample = current ? nearest(current.rows, 't', t) : null;
+  if (playing && sample && chartRange) {
+    const full = Math.max(1,...laps.map(lap=>lap.rows.at(-1)?.d||0));
+    const next = RaceView.followRange(chartRange,[0,full],sample.d);
+    if (Math.abs(next.start-chartRange.start)>.001) { chartRange=next; scaleCache.clear(); }
+  }
   $('clock').textContent = t.toFixed(2) + ' s';
   $('metrics').textContent = sample ? `${sample.speed.toFixed(0)} km/h · ${sample.d.toFixed(0)} m` : '';
   updateTelemetryContext();

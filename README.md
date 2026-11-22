@@ -93,6 +93,9 @@ la distancia completa. Ctrl + rueda sobre una gráfica amplía alrededor del pun
 La barra horizontal entre el texto y los botones desplaza la ventana ampliada de todas
 las gráficas sin cambiar el zoom ni mover el cursor del video. El ancho del control
 representa la proporción visible; se desactiva cuando ya se ve toda la distancia.
+Durante la reproducción con zoom, la ventana compartida sigue automáticamente el
+cursor por distancia sin cambiar el nivel de ampliación. Al pausar, vuelve a permitir
+la exploración manual; al inicio y al final de cada vuelta se respetan sus límites.
 El zoom horizontal es compartido y las escalas verticales se ajustan a la zona observada;
 arrastrar una gráfica sigue buscando el instante correcto dentro de esa zona. En LIVE,
 los botones cambian la ventana reciente de 20 hasta 0.5 segundos.
