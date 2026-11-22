@@ -3,6 +3,55 @@ const colors = ['#59e2ba', '#bc91ff', '#ffb65b', '#69baff', '#ff7295'];
 let session = null, selected = new Set(), reference = null, t = 0, playing = false;
 let last = 0, zoom = 1, pan = [0, 0], drag = null, objectUrl = null, hasVideo = false;
 let latest = null, revision = null, pendingSeek = null, chartDragging = false;
+let liveHistory = [], lastLiveStamp = null, legendKey = null, toastTimer;
+const scaleCache = new Map();
+const metricDefs = [
+  {key:'speed', name:'Velocidad', unit:'km/h', decimals:0},
+  {key:'rpm', name:'Revoluciones', unit:'RPM', decimals:0},
+  {key:'throttle', name:'Acelerador', unit:'%', decimals:0, max:100},
+  {key:'brake', name:'Freno', unit:'%', decimals:0, max:100},
+  {key:'gear', name:'Marcha', unit:'', decimals:0, step:true},
+  {key:'racePosition', name:'Posición en carrera', unit:'', decimals:0, step:true},
+  {key:'lapTime', name:'Tiempo de vuelta', unit:'s', decimals:2},
+  {key:'raceTime', name:'Tiempo de carrera', unit:'s', decimals:2},
+  {key:'d', name:'Distancia', unit:'m', decimals:0},
+  {key:'x', name:'Posición X', unit:'m', decimals:1},
+  {key:'y', name:'Altura', unit:'m', decimals:1},
+  {key:'z', name:'Posición Z', unit:'m', decimals:1}
+];
+for (const [index, metric] of metricDefs.entries()) {
+  const card = document.createElement('article');
+  card.className = 'metric-card';
+  card.innerHTML = `<div class="metric-heading"><h3 class="metric-name">${metric.name}</h3><div class="metric-number"><output id="value-${metric.key}">—</output><span class="metric-unit">${metric.unit}</span></div></div><canvas id="${index === 0 ? 'charts' : 'chart-' + metric.key}" aria-label="${metric.name} por distancia" data-key="${metric.key}"></canvas>`;
+  $('telemetry-rows').append(card);
+}
+
+function setMenu(open) {
+  $('session-menu').hidden = !open;
+  $('menu-backdrop').hidden = !open;
+  $('menu-toggle').setAttribute('aria-expanded', String(open));
+  $('menu-toggle').setAttribute('aria-label', open ? 'Cerrar menú' : 'Abrir menú');
+  $('workspace').inert = open;
+  $('player').inert = open;
+  if (open) $('menu-close').focus(); else $('menu-toggle').focus();
+}
+$('menu-toggle').onclick = () => setMenu($('session-menu').hidden);
+$('menu-close').onclick = $('menu-backdrop').onclick = () => setMenu(false);
+document.addEventListener('keydown', event => {
+  if ($('session-menu').hidden) return;
+  if (event.key === 'Escape') { setMenu(false); return; }
+  if (event.key !== 'Tab') return;
+  const focusable = [...$('session-menu').querySelectorAll('button,input,select,summary,[tabindex="0"]')]
+    .filter(element => !element.disabled && element.getClientRects().length);
+  const first = focusable[0], end = focusable.at(-1);
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); end?.focus(); }
+  else if (!event.shiftKey && document.activeElement === end) { event.preventDefault(); first?.focus(); }
+});
+new MutationObserver(() => {
+  $('message').hidden = !$('message').textContent;
+  clearTimeout(toastTimer);
+  if (!$('message').hidden) toastTimer = setTimeout(() => { $('message').hidden = true; }, 7000);
+}).observe($('message'), {childList:true, characterData:true, subtree:true});
 
 async function api(path, body) {
   const response = await fetch('/api/' + path, body === undefined ? {} : {
@@ -22,7 +71,7 @@ async function list() {
     const button = document.createElement('button');
     button.textContent = `${item.name} · ${new Date(item.created * 1000).toLocaleString()}${item.version === 2 && !item.ended ? ' · abierta' : ''}`;
     button.classList.toggle('selected', session?.meta.id === item.id);
-    button.onclick = action(() => load(item.id));
+    button.onclick = action(async () => { await load(item.id); setMenu(false); });
     $('sessions').append(button);
   }
 }
@@ -34,11 +83,13 @@ function clearVideo() {
   if (objectUrl) URL.revokeObjectURL(objectUrl);
   objectUrl = null;
   hasVideo = false;
+  $('video-empty').hidden = false;
 }
 async function load(id) {
   setPlaying(false);
   clearVideo();
   session = await api('sessions/' + id);
+  scaleCache.clear(); legendKey = null; $('telemetry-scroll').scrollTop = 0;
   selected = new Set(session.laps.map(lap => lap.id));
   reference = session.laps[0]?.id ?? null;
   $('title').textContent = session.meta.name;
@@ -64,9 +115,12 @@ async function load(id) {
   }
   $('reference').value = String(reference);
   $('time').max = Math.max(0, ...session.laps.map(lap => lap.rows.at(-1)?.t || 0));
+  $('duration').textContent = Number($('time').max).toFixed(2) + ' s';
+  $('show-live').hidden = false;
   t = 0; zoom = 1; pan = [0, 0];
   if (session.meta.videoPath) {
     hasVideo = true;
+    $('video-empty').hidden = true;
     $('video').src = '/api/video/' + id;
     $('video-status').textContent = 'Video asociado por OBS. Si tu navegador no admite el formato, remultiplexa a MP4 H.264 y ábrelo con «Abrir video local».';
   } else {
@@ -116,10 +170,34 @@ $('file').onchange = () => {
   // A manually imported video without OBS references uses the legacy offset mapping.
   if (session && !session.meta.syncSegments?.length) session.meta.version = 1;
 };
-$('video').onloadedmetadata = () => seek(t);
+$('video').onloadedmetadata = () => {
+  $('video-empty').hidden = true;
+  if (videoOnly()) { $('time').max = $('video').duration; $('duration').textContent = $('video').duration.toFixed(2) + ' s'; }
+  seek(t);
+};
 $('video').onerror = () => {
   setPlaying(false);
   $('video-status').textContent = 'No se pudo abrir el video. Comprueba que existe y que usa un codec compatible (por ejemplo, MP4 H.264).';
+};
+$('skip-back').onclick = () => seek(t - 5);
+$('skip-forward').onclick = () => seek(t + 5);
+$('mute').onclick = () => {
+  $('video').muted = !$('video').muted;
+  updateVolume();
+};
+$('volume').oninput = () => { $('video').volume = Number($('volume').value); $('video').muted = $('video').volume === 0; updateVolume(); };
+function updateVolume() {
+  $('mute').setAttribute('aria-pressed', String($('video').muted));
+  $('mute').setAttribute('aria-label', $('video').muted ? 'Activar sonido del video' : 'Silenciar video');
+  $('mute').textContent = $('video').muted ? '♪̸' : '♪';
+}
+$('show-live').onclick = () => {
+  setPlaying(false); clearVideo(); session = null; selected.clear(); reference = null;
+  $('title').textContent = 'Telemetría en vivo'; $('session-info').textContent = 'Los valores corresponden a los paquetes actuales del juego.';
+  $('time').max = 0; $('time').value = 0; t = 0; $('duration').textContent = '0.00 s';
+  $('show-live').hidden = true; $('reference').replaceChildren(); $('laps').textContent = 'Selecciona una sesión.';
+  $('sync-status').textContent = ''; $('video-status').textContent = 'Abre una sesión desde el menú para analizar su video.';
+  scaleCache.clear(); legendKey = null; draw();
 };
 
 function currentMeta() { return {...session?.meta, offset: Number($('offset').value) || 0}; }
@@ -133,7 +211,7 @@ function setVideoTime(value) {
 function seek(value) {
   t = Math.max(0, Math.min(Number($('time').max), value));
   $('time').value = t;
-  const videoTime = toVideo(t);
+  const videoTime = videoOnly() ? t : toVideo(t);
   if (hasVideo && videoTime !== null) setVideoTime(videoTime);
   draw();
 }
@@ -160,6 +238,9 @@ $('play').onclick = () => {
   if (!session) return;
   if (t >= Number($('time').max)) seek(0);
   setPlaying(!playing);
+  if (playing && hasVideo && Number.isFinite($('video').duration)) {
+    $('video').play().catch(() => { setPlaying(false); $('message').textContent = 'No se pudo reproducir el video. Vuelve a pulsar Reproducir en la barra.'; });
+  }
 };
 $('rate').onchange = () => { $('video').playbackRate = Number($('rate').value); };
 $('video').addEventListener('seeking', () => {
@@ -199,6 +280,12 @@ function draw() {
   const sample = current ? nearest(current.rows, 't', t) : null;
   $('clock').textContent = t.toFixed(2) + ' s';
   $('metrics').textContent = sample ? `${sample.speed.toFixed(0)} km/h · ${sample.d.toFixed(0)} m` : '';
+  updateTelemetryContext();
+  const nextLegend = laps.map(lap => lap.id).join(',');
+  if (legendKey !== nextLegend) {
+    legendKey = nextLegend; $('lap-legend').replaceChildren();
+    for (const lap of laps) { const label = document.createElement('span'), dot = document.createElement('i'); dot.style.background = colors[lap.id % colors.length]; label.append(dot, `Vuelta ${lap.number}`); $('lap-legend').append(label); }
+  }
   const [map, w, h] = canvas('map');
   if (rows.length) {
     let xmin = Infinity, xmax = -Infinity, zmin = Infinity, zmax = -Infinity;
@@ -213,37 +300,79 @@ function draw() {
       if (row && sample.d <= lap.rows.at(-1).d) { map.fillStyle = map.strokeStyle; map.beginPath(); map.arc(...point(row), 5, 0, Math.PI*2); map.fill(); }
     }
   } else {
-    map.fillStyle = '#8997aa'; map.font = '14px Segoe UI'; map.fillText('Selecciona una sesión con muestras.', 20, h/2);
+    map.fillStyle = '#8997aa'; map.font = '12px Segoe UI'; map.fillText('Abre una sesión para ver su recorrido.', 20, h/2);
   }
-  const [chart, cw, ch] = canvas('charts');
+  drawMetrics(sample, laps);
+  if (session && hasVideo && !videoOnly() && toVideo(t) === null) $('clock').textContent += ' · sin video';
+}
+function updateTelemetryContext() {
+  const connected = latest?.lastPacket && Date.now()/1000 - latest.lastPacket < 2;
+  $('live-state').textContent = session ? 'SESIÓN' : connected && latest.packet?.active ? 'LIVE' : 'EN ESPERA';
+  $('live-car').textContent = session ? `${session.meta.name} · clase ${session.meta.carClass ?? '—'} · PI ${session.meta.carPI ?? '—'}`
+    : latest?.packet ? `${latest.carName || 'Vehículo #' + latest.packet.carOrdinal} · clase ${latest.packet.carClass} · PI ${latest.packet.carPI}` : 'Esperando el vehículo';
+  $('telemetry-axis').textContent = session ? 'Comparación por distancia · valores en el cursor' : 'Últimos 20 segundos · valores en vivo';
+}
+function metricScale(metric, series) {
+  const cacheKey = metric.key + ':' + series.map(item => item.id).join(',');
+  if (session && scaleCache.has(cacheKey)) return scaleCache.get(cacheKey);
+  let min = 0, max = metric.max || 1;
+  if (!metric.max) for (const item of series) for (const row of item.rows) if (Number.isFinite(row[metric.key])) {
+    min = Math.min(min, row[metric.key]); max = Math.max(max, row[metric.key]);
+  }
+  const bounds = [min, max];
+  if (session) scaleCache.set(cacheKey, bounds);
+  return bounds;
+}
+function drawMetrics(sample, laps) {
+  const series = session ? laps : [{id:0, rows:liveHistory}];
+  const observed = session ? sample : latest?.packet ? {...latest.packet, d:latest.packet.distance} : null;
   const maxDistance = Math.max(1, ...laps.map(lap => lap.rows.at(-1)?.d || 0));
-  const speedMax = Math.max(100, ...laps.map(lap => lap.rows.reduce((max, row) => Math.max(max, row.speed), 0)));
-  ['speed', 'throttle', 'brake'].forEach((key, index) => {
-    const top = index*105+22, bottom = top+70, max = index === 0 ? speedMax : 100;
-    chart.fillStyle = '#91a3bb'; chart.font = '11px Segoe UI';
-    chart.fillText(['Velocidad km/h', 'Acelerador %', 'Freno %'][index], 8, top-8);
-    chart.strokeStyle = '#29364b'; chart.beginPath(); chart.moveTo(45, bottom); chart.lineTo(cw-15, bottom); chart.stroke();
-    for (const lap of laps) {
-      chart.strokeStyle = colors[lap.id % colors.length]; chart.beginPath();
-      lap.rows.forEach((row, i) => { const x = 45+row.d/maxDistance*(cw-60), y = bottom-row[key]/max*65; i === 0 || row.gap ? chart.moveTo(x, y) : chart.lineTo(x, y); });
+  const scrollRect = $('telemetry-scroll').getBoundingClientRect();
+  for (const [index, metric] of metricDefs.entries()) {
+    const value = observed?.[metric.key];
+    $('value-' + metric.key).textContent = Number.isFinite(value) ? metric.key === 'gear' && value === 0 ? 'R' : value.toFixed(metric.decimals) : '—';
+    const id = index === 0 ? 'charts' : 'chart-' + metric.key, element = $(id), rect = element.getBoundingClientRect();
+    element.classList.toggle('live-chart', !session);
+    element.setAttribute('aria-label', metric.name + (session ? ' por distancia' : ' en vivo'));
+    if (rect.bottom < scrollRect.top || rect.top > scrollRect.bottom) continue;
+    const [chart, width, height] = canvas(id), [min, max] = metricScale(metric, series);
+    const left = 28, right = width - 8, top = 6, bottom = height - 19;
+    const end = liveHistory.at(-1)?.liveTime || 0;
+    const point = row => [session ? left + row.d/maxDistance*(right-left) : left + (row.liveTime - (end-20))/20*(right-left), bottom - (row[metric.key]-min)/(max-min || 1)*(bottom-top)];
+    chart.font = '9px Segoe UI'; chart.fillStyle = '#7489a2'; chart.fillText(max.toFixed(0), 0, top+6); chart.fillText(min.toFixed(0), 0, bottom);
+    chart.strokeStyle = '#26354a'; chart.lineWidth = 1; chart.beginPath(); chart.moveTo(left, bottom); chart.lineTo(right, bottom); chart.stroke();
+    for (const item of series) {
+      chart.strokeStyle = session ? colors[item.id % colors.length] : colors[0]; chart.lineWidth = 1.4; chart.beginPath();
+      let previous = null;
+      for (const row of item.rows) {
+        if (!Number.isFinite(row[metric.key])) { previous = null; continue; }
+        const p = point(row);
+        if (!previous || row.gap || row.breakBefore) chart.moveTo(...p);
+        else { if (metric.step) chart.lineTo(p[0], previous[1]); chart.lineTo(...p); }
+        previous = p;
+      }
       chart.stroke();
     }
-    if (sample) { const x = 45+sample.d/maxDistance*(cw-60); chart.strokeStyle = '#ffffff99'; chart.beginPath(); chart.moveTo(x, top); chart.lineTo(x, bottom); chart.stroke(); }
-  });
-  chart.fillStyle = '#91a3bb'; chart.fillText(`0 m → ${maxDistance.toFixed(0)} m`, cw-140, ch-2);
-  if (session && hasVideo && toVideo(t) === null) $('clock').textContent += ' · sin video en este tramo';
+    if (sample) { const x = left + sample.d/maxDistance*(right-left); chart.strokeStyle = '#e3fff0aa'; chart.beginPath(); chart.moveTo(x, top); chart.lineTo(x, bottom); chart.stroke(); }
+    chart.fillStyle = '#7489a2'; chart.fillText(session ? '0 m' : '−20 s', left, height-3);
+    chart.textAlign = 'right'; chart.fillText(session ? maxDistance.toFixed(0)+' m' : 'Ahora', right, height-3); chart.textAlign = 'left';
+  }
 }
 function chartSeek(event) {
+  if (!session) return;
   const lap = session?.laps.find(item => item.id === reference);
   if (!lap?.rows.length) return;
-  const rect = $('charts').getBoundingClientRect();
+  const rect = event.currentTarget.getBoundingClientRect();
   const max = Math.max(1, ...visible().map(item => item.rows.at(-1)?.d || 0));
-  const distance = Math.max(0, Math.min(1, (event.clientX-rect.left-45)/(rect.width-60))) * max;
+  const distance = Math.max(0, Math.min(1, (event.clientX-rect.left-28)/(rect.width-36))) * max;
   seek(nearest(lap.rows, 'd', distance).t);
 }
-$('charts').onpointerdown = event => { chartDragging = true; $('charts').setPointerCapture(event.pointerId); chartSeek(event); };
-$('charts').onpointermove = event => { if (chartDragging) chartSeek(event); };
-$('charts').onpointerup = $('charts').onpointercancel = () => { chartDragging = false; };
+for (const element of $('telemetry-rows').querySelectorAll('canvas')) {
+  element.onpointerdown = event => { if (!session) return; chartDragging = true; element.setPointerCapture(event.pointerId); chartSeek(event); };
+  element.onpointermove = event => { if (chartDragging) chartSeek(event); };
+  element.onpointerup = element.onpointercancel = () => { chartDragging = false; };
+}
+$('telemetry-scroll').onscroll = () => requestAnimationFrame(draw);
 $('map').onwheel = event => { event.preventDefault(); zoom = Math.max(.2, Math.min(30, zoom*Math.exp(-event.deltaY*.001))); draw(); };
 $('map').onpointerdown = event => { drag = [event.clientX, event.clientY]; $('map').setPointerCapture(event.pointerId); };
 $('map').onpointermove = event => { if (drag) { pan[0] += event.clientX-drag[0]; pan[1] += event.clientY-drag[1]; drag = [event.clientX, event.clientY]; draw(); } };
@@ -256,7 +385,8 @@ function frame(now) {
     const video = $('video');
     if (Number.isFinite(video.duration)) {
       if (video.ended) setPlaying(false);
-      else if (video.paused) video.play().catch(() => { setPlaying(false); $('message').textContent = 'Pulsa reproducir directamente en el video.'; });
+      else if (video.paused) video.play().catch(() => { setPlaying(false); $('message').textContent = 'Vuelve a pulsar Reproducir en la barra flotante.'; });
+      t = video.currentTime; $('time').value = t;
       $('clock').textContent = video.currentTime.toFixed(2) + ' s · video sin sincronizar';
     }
   } else if (playing && session) {
@@ -265,7 +395,7 @@ function frame(now) {
     if (hasVideo && videoTime !== null && Number.isFinite(video.duration)) {
       if (Math.abs(video.currentTime-videoTime) > .15) setVideoTime(videoTime);
       video.playbackRate = Number($('rate').value);
-      if (video.paused && !video.ended) video.play().catch(() => { setPlaying(false); $('message').textContent = 'Pulsa reproducir en el video para permitir su reproducción.'; });
+      if (video.paused && !video.ended) video.play().catch(() => { setPlaying(false); $('message').textContent = 'Vuelve a pulsar Reproducir en la barra flotante.'; });
     } else if (!video.paused) video.pause();
     $('time').value = t; draw();
     if (t >= Number($('time').max)) setPlaying(false);
@@ -286,14 +416,13 @@ function live(state) {
   $('obs-status').textContent = state.obs.error || (state.obs.connected ? `OBS conectado${state.obs.owned ? ' · grabación de RaceLab' : ' · listo'}` : state.obs.enabled ? 'OBS desconectado · revisa la conexión' : 'Sin conectar · sólo telemetría');
   if (state.error) $('message').textContent = state.error;
   const packet = state.packet;
-  $('live-state').textContent = connected ? packet?.active ? 'LIVE' : 'Juego inactivo' : 'Sin señal reciente';
-  if (packet) {
-    $('live-car').textContent = `${state.carName || 'Vehículo #'+packet.carOrdinal} · clase ${packet.carClass} · PI ${packet.carPI}`;
-    $('live-speed').textContent = packet.speed.toFixed(0); $('live-rpm').textContent = packet.rpm.toFixed(0);
-    $('live-gear').textContent = packet.gear === 0 ? 'R' : packet.gear;
-    $('live-throttle').value = packet.throttle; $('live-brake').value = packet.brake;
-    $('throttle-value').textContent = packet.throttle.toFixed(0)+'%'; $('brake-value').textContent = packet.brake.toFixed(0)+'%';
+  if (packet && packet.timestamp !== lastLiveStamp) {
+    lastLiveStamp = packet.timestamp;
+    const now = performance.now()/1000;
+    liveHistory.push({...packet, d:packet.distance, liveTime:now});
+    liveHistory = liveHistory.filter(row => now-row.liveTime <= 20);
   }
+  if (!session) draw();
   if (revision !== state.revision) {
     const changed = revision !== null; revision = state.revision;
     list().catch(() => {});
@@ -304,4 +433,6 @@ const events = new EventSource('/events');
 events.onmessage = event => { try { live(JSON.parse(event.data)); } catch (e) { $('message').textContent = 'Error de actualización: '+e.message; } };
 events.onerror = () => { $('status').textContent = 'Servidor desconectado · reconectando…'; };
 list().catch(e => { $('message').textContent = e.message; });
+const resizeObserver = new ResizeObserver(() => requestAnimationFrame(draw));
+resizeObserver.observe($('map')); resizeObserver.observe($('telemetry-scroll'));
 draw();

@@ -2,47 +2,66 @@
 <html lang="es">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RaceLab</title><link rel="stylesheet" href="style.css"></head>
 <body>
-<header><strong>RACE<span>LAB</span></strong><small>FH6 · ANÁLISIS LOCAL</small><output id="status">Conectando…</output></header>
-<main>
-  <aside>
-    <div class="section-head"><h2>Tu garaje de sesiones</h2><button id="refresh" title="Actualizar sesiones">↻</button></div>
-    <label class="switch"><input id="auto" type="checkbox" checked> Detectar carreras automáticamente</label>
-    <div id="capture-state" class="capture-state" aria-live="polite">Listo para la próxima carrera</div>
-    <button id="stop">■ Finalizar y guardar</button>
-    <button id="open-active" hidden>Abrir sesión en curso</button>
-    <details><summary>Grabación manual</summary><input id="name" placeholder="Nombre opcional"><button id="record">● Iniciar sesión manual</button></details>
-    <p id="message" role="status"></p>
-    <details class="obs-settings" open>
-      <summary>Conexión con OBS</summary>
-      <p id="obs-status">Sin conectar · sólo telemetría</p>
-      <label>Puerto WebSocket <input id="obs-port" type="number" min="1" max="65535" value="4455"></label>
-      <label>Contraseña <input id="obs-password" type="password" autocomplete="off" placeholder="Contraseña de OBS"></label>
-      <button id="obs-connect">Conectar OBS</button><button id="obs-disable">Sólo telemetría</button>
-      <small>OBS → Herramientas → Ajustes del servidor WebSocket. La contraseña se conserva sólo en memoria.</small>
-    </details>
-    <div id="sessions"></div>
-    <h3>Vueltas superpuestas</h3><label>Vuelta de referencia <select id="reference" aria-label="Vuelta de referencia"></select></label>
-    <div id="laps">Selecciona una sesión.</div>
-  </aside>
-  <section>
-    <article class="live-panel">
-      <div class="section-head"><h3>EN VIVO</h3><span id="live-state">Esperando el juego</span></div>
-      <div id="live-car">Vehículo pendiente</div>
-      <div class="live-values"><div><b id="live-speed">—</b><small>km/h</small></div><div><b id="live-rpm">—</b><small>RPM</small></div><div><b id="live-gear">—</b><small>MARCHA</small></div></div>
-      <div class="pedals"><label>Acelerador <meter id="live-throttle" min="0" max="100" value="0"></meter><output id="throttle-value">—</output></label><label>Freno <meter id="live-brake" min="0" max="100" value="0"></meter><output id="brake-value">—</output></label></div>
-    </article>
-    <div class="toolbar"><h1 id="title">Tu próxima sesión, bajo la lupa.</h1><label class="button">Abrir video local<input id="file" type="file" accept="video/mp4,video/webm,video/x-matroska,.mkv" hidden></label></div>
-    <p id="session-info" class="hint">Las carreras se guardan por vehículo. El mapa usa únicamente tus posiciones reales.</p>
-    <div class="panels">
-      <article><h3>VIDEO DE SESIÓN</h3><video id="video" controls preload="metadata"></video><p id="video-status">Conecta OBS antes de correr para asociar el video automáticamente.</p></article>
-      <article><h3>TRAZADAS · X / Z <button id="fit">Encuadrar</button></h3><canvas id="map" aria-label="Trazadas de las vueltas"></canvas><p>Rueda: zoom · arrastrar: mover · marcador por distancia</p></article>
+<header class="app-header">
+  <button id="menu-toggle" class="icon-button" aria-label="Abrir menú" aria-controls="session-menu" aria-expanded="false"><span aria-hidden="true">☰</span></button>
+  <strong>RACE<span>LAB</span></strong><small class="app-subtitle">TU SESIÓN, EN DETALLE</small>
+  <output id="status">Conectando…</output>
+</header>
+<div id="menu-backdrop" hidden></div>
+<aside id="session-menu" role="dialog" aria-modal="true" aria-labelledby="menu-title" hidden>
+  <div class="section-head drawer-heading"><div><span class="eyebrow">RACELAB</span><h2 id="menu-title">Sesiones y configuración</h2></div><button id="menu-close" class="icon-button" aria-label="Cerrar menú">✕</button></div>
+  <label class="switch"><input id="auto" type="checkbox" checked> Detectar carreras automáticamente</label>
+  <div id="capture-state" class="capture-state" aria-live="polite">Listo para la próxima carrera</div>
+  <button id="stop" class="full-width">■ Finalizar y guardar</button>
+  <button id="open-active" class="full-width" hidden>Abrir sesión en curso</button>
+  <details><summary>Grabación manual</summary><input id="name" placeholder="Nombre opcional"><button id="record">● Iniciar sesión manual</button></details>
+  <details class="obs-settings">
+    <summary>Conexión con OBS</summary>
+    <p id="obs-status">Sin conectar · sólo telemetría</p>
+    <label>Puerto WebSocket <input id="obs-port" type="number" min="1" max="65535" value="4455"></label>
+    <label>Contraseña <input id="obs-password" type="password" autocomplete="off" placeholder="Contraseña de OBS"></label>
+    <button id="obs-connect">Conectar OBS</button><button id="obs-disable">Sólo telemetría</button>
+    <small>OBS → Herramientas → Ajustes del servidor WebSocket. La contraseña se conserva sólo en memoria.</small>
+  </details>
+  <div class="section-head"><h3>SESIONES GUARDADAS</h3><button id="refresh" class="icon-button" title="Actualizar sesiones" aria-label="Actualizar sesiones">↻</button></div>
+  <div id="sessions"></div>
+  <div class="drawer-divider"></div>
+  <h3>VUELTAS SUPERPUESTAS</h3><label>Vuelta de referencia <select id="reference" aria-label="Vuelta de referencia"></select></label>
+  <div id="laps">Selecciona una sesión.</div>
+  <details><summary>Ajuste fino de sincronización</summary><div class="sync"><label>Corrección (s) <input id="offset" type="number" step="0.01" value="0"></label><button id="align">Alinear fotograma actual con cursor</button><button id="save">Guardar corrección</button><small>La asociación automática usa referencias de OBS por cada tramo entre pausas.</small></div></details>
+  <p id="sync-status" class="hint"></p>
+</aside>
+<main id="workspace" class="workspace">
+  <div class="workspace-heading">
+    <div class="session-heading"><span class="eyebrow">ANÁLISIS DE SESIÓN</span><h1 id="title">Tu próxima sesión, bajo la lupa.</h1><p id="session-info" class="hint">Abre una sesión desde el menú para analizarla.</p></div>
+    <label class="button import-button">Abrir video local<input id="file" type="file" accept="video/mp4,video/webm,video/x-matroska,.mkv" hidden></label>
+  </div>
+  <div class="analysis-layout">
+    <div class="visual-column">
+      <article class="video-panel">
+        <div class="panel-heading"><h2>Video de sesión</h2><span class="panel-tag">PREVIEW</span></div>
+        <div class="video-stage"><video id="video" playsinline disablepictureinpicture preload="metadata" aria-label="Video de la sesión; controles en la barra flotante"></video><div id="video-empty"><span aria-hidden="true">▷</span><p>Tu carrera empieza aquí</p><small>Selecciona una sesión con video desde el menú.</small></div></div>
+        <p id="video-status" class="panel-note">Conecta OBS desde el menú para asociar el video automáticamente.</p>
+      </article>
+      <article class="map-panel">
+        <div class="panel-heading"><h2>Recorrido</h2><div class="map-tools"><span id="metrics" class="panel-tag"></span><button id="fit">Encuadrar</button></div></div>
+        <canvas id="map" aria-label="Trazadas de las vueltas"></canvas>
+        <div class="map-footer"><div id="lap-legend"></div><span>Rueda: zoom · arrastra para mover</span></div>
+      </article>
     </div>
-    <div class="transport"><button id="play">▶ Reproducir</button><select id="rate" aria-label="Velocidad de reproducción"><option>0.5</option><option selected>1</option><option>2</option></select><input aria-label="Tiempo de sesión" id="time" type="range" min="0" max="0" step="0.001" value="0"><output id="clock">0.00 s</output></div>
-    <p id="sync-status" class="hint"></p>
-    <details><summary>Ajuste fino de sincronización</summary><div class="sync"><label>Corrección (s) <input id="offset" type="number" step="0.01" value="0"></label><button id="align">Alinear fotograma actual con cursor</button><button id="save">Guardar corrección</button><small>La asociación automática usa referencias de OBS por cada tramo entre pausas.</small></div></details>
-    <article><h3>COMPARACIÓN POR DISTANCIA <span id="metrics"></span></h3><canvas id="charts" aria-label="Gráficas por distancia"></canvas><p>Arrastra sobre las gráficas: video, mapa y cursor se mueven juntos en la vuelta de referencia.</p></article>
-    <p class="hint">Las pausas no suman tiempo de análisis. Si el juego queda en silencio al terminar, la sesión queda pausada hasta confirmar la salida o pulsar Finalizar. Rebobinado no soportado.</p>
-  </section>
+    <section class="telemetry-column" aria-label="Telemetría por parámetro">
+      <div class="telemetry-heading"><div><span class="eyebrow">DATOS DE CONDUCCIÓN</span><h2>Telemetría</h2></div><button id="show-live" hidden>Volver a LIVE</button><span id="live-state" class="source-badge">LIVE</span></div>
+      <div class="telemetry-context"><span id="live-car">Esperando el vehículo</span><small id="telemetry-axis">Últimos 20 segundos</small></div>
+      <div id="telemetry-scroll" tabindex="0" aria-label="Parámetros de telemetría; desplazar para ver más"><div id="telemetry-rows"></div><p class="telemetry-note">Arrastra cualquier gráfica para mover video y recorrido en la vuelta de referencia.</p></div>
+    </section>
+  </div>
 </main>
+<div id="message" role="status" hidden></div>
+<nav id="player" class="transport" aria-label="Reproductor de la sesión">
+  <button id="skip-back" class="skip-button" aria-label="Retroceder cinco segundos">−5s</button><button id="play" class="play-button">▶ Reproducir</button><button id="skip-forward" class="skip-button" aria-label="Avanzar cinco segundos">+5s</button>
+  <div class="timeline-control"><div class="timeline-times"><output id="clock">0.00 s</output><span id="duration">0.00 s</span></div><input aria-label="Tiempo de sesión" id="time" type="range" min="0" max="0" step="0.001" value="0"></div>
+  <select id="rate" aria-label="Velocidad de reproducción"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+  <button id="mute" class="icon-button" aria-label="Silenciar video" aria-pressed="false">♪</button><input id="volume" aria-label="Volumen del video" type="range" min="0" max="1" step="0.05" value="1">
+</nav>
 <script src="timeline.js"></script><script src="app.js"></script>
 </body></html>

@@ -70,7 +70,8 @@ No hay reconocimiento visual de resultados ni rebobinado soportado en esta entre
 
 ## Analizar
 
-Abre una sesión guardada. Se carga automáticamente el video asociado si sigue en su
+Abre el menú hamburguesa y selecciona una sesión guardada. El menú se superpone sin
+desplazar el área de análisis. Se carga automáticamente el video asociado si sigue en su
 ruta original y el navegador admite su codec. Las sesiones antiguas del MVP siguen
 abriéndose y permiten seleccionar MP4 y ajustar el desfase como antes.
 Si existe video pero faltan referencias de sincronización, se puede reproducir por
@@ -78,8 +79,12 @@ separado y se muestra un aviso; no se inventa una relación con la telemetría.
 
 Marca vueltas y elige una de referencia. Arrastra sobre las gráficas para moverte por
 distancia en esa vuelta: el video y el marcador de su trazada saltan al instante.
-Los marcadores de las otras vueltas se comparan a la misma distancia. El deslizador
-de tiempo y los controles del video también mueven el cursor. Rueda/arrastre sobre el
+Los marcadores de las otras vueltas se comparan a la misma distancia. La vista de escritorio
+se divide en dos columnas 2:1: video y recorrido apilados a la izquierda, parámetros
+individuales con desplazamiento independiente a la derecha. La telemetría observada
+corresponde al cursor de la sesión; Volver a LIVE muestra los paquetes actuales del juego.
+El video no tiene controles internos: usa la barra flotante para reproducir, pausar,
+deslizar el tiempo, saltar cinco segundos, ajustar velocidad, volumen o silencio. Rueda/arrastre sobre el
 mapa: zoom/pan; Encuadrar restablece la vista. No se incluye imagen del mapa de Forza.
 
 La grabación manual permite capturar también manejo libre. Desactivar la detección
