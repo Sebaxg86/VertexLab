@@ -41,17 +41,34 @@
         <h2 class="sr-only">Video de sesión</h2>
         <div class="video-stage"><video id="video" playsinline disablepictureinpicture preload="metadata" aria-label="Video de la sesión; controles en la barra flotante"></video><div id="video-empty"><span aria-hidden="true">▷</span><p>Tu carrera empieza aquí</p><small>Selecciona una sesión con video desde el menú.</small></div></div>
       </article>
+      <section id="instant-dashboard" class="instant-dashboard" aria-label="Indicadores del instante observado">
+        <div class="instant-heading"><h2>Al volante</h2><span id="instant-source">En vivo</span><small id="instant-note">Esperando datos de conducción</small></div>
+        <div class="instrument-grid">
+          <article class="instrument steering-instrument"><h3>DIRECCIÓN</h3>
+            <div class="wheel-display"><svg id="steering-icon" viewBox="0 0 120 120" role="img" aria-label="Entrada de dirección"><path d="M60 4v7" stroke="#6d8199" stroke-width="3"/><g id="steering-wheel"><circle cx="60" cy="60" r="43" fill="none" stroke="currentColor" stroke-width="9"/><path d="M20 51 49 61M100 51 71 61M60 73v29" stroke="currentColor" stroke-width="8" stroke-linecap="round"/><circle cx="60" cy="62" r="14" fill="#152333" stroke="currentColor" stroke-width="3"/><path d="M54 17h12" stroke="#59e2ba" stroke-width="5" stroke-linecap="round"/></g></svg><output id="steering-value">—</output></div>
+            <div class="input-meter"><span>ACEL</span><div><i id="instant-throttle"></i></div><output id="instant-throttle-value">—</output></div>
+            <div class="input-meter brake-input"><span>FRENO</span><div><i id="instant-brake"></i></div><output id="instant-brake-value">—</output></div>
+          </article>
+          <article class="instrument g-instrument"><h3>FUERZAS G</h3>
+            <div class="g-display"><svg viewBox="0 0 140 140" role="img" aria-label="Aceleración lateral y longitudinal, escala de dos G"><circle cx="70" cy="70" r="55" class="g-ring"/><circle cx="70" cy="70" r="27.5" class="g-ring"/><path d="M15 70h110M70 15v110" class="g-axis"/><text x="76" y="21">2G</text><text x="76" y="48">1G</text><circle id="g-point" cx="70" cy="70" r="5"/></svg><output id="g-total">—</output></div>
+            <div class="g-values"><span>Lateral <b id="g-lateral">—</b></span><span>Longitudinal <b id="g-longitudinal">—</b></span></div>
+          </article>
+          <article class="instrument tire-instrument"><div class="section-head"><h3>NEUMÁTICOS</h3><small>°C · slip combinado</small></div><div id="tire-grid" class="tire-grid"></div><small class="tire-key"><span></span>Slip &gt; 1: exceso de deslizamiento</small></article>
+        </div>
+      </section>
+    </div>
+    <div class="right-column">
+    <section class="telemetry-column" aria-label="Telemetría por parámetro">
+      <div class="telemetry-heading"><div><span class="eyebrow">DATOS DE CONDUCCIÓN</span><h2>Telemetría</h2></div><button id="show-live" hidden>Volver a LIVE</button><span id="live-state" class="source-badge">LIVE</span></div>
+      <div class="telemetry-context"><span id="live-car">Esperando el vehículo</span><small id="telemetry-axis">Últimos 20 segundos</small></div>
+      <div id="telemetry-scroll" tabindex="0" aria-label="Parámetros de telemetría; desplazar para ver más"><div id="telemetry-rows"></div><p class="telemetry-note">Arrastra cualquier gráfica para mover video y recorrido en la vuelta de referencia.</p></div>
+    </section>
       <article class="map-panel">
         <div class="panel-heading"><h2>Recorrido</h2><div class="map-tools"><span id="metrics" class="panel-tag"></span><button id="fit">Encuadrar</button></div></div>
         <canvas id="map" aria-label="Trazadas de las vueltas"></canvas>
         <div class="map-footer"><div id="lap-legend"></div><span>Rueda: zoom · arrastra para mover</span></div>
       </article>
     </div>
-    <section class="telemetry-column" aria-label="Telemetría por parámetro">
-      <div class="telemetry-heading"><div><span class="eyebrow">DATOS DE CONDUCCIÓN</span><h2>Telemetría</h2></div><button id="show-live" hidden>Volver a LIVE</button><span id="live-state" class="source-badge">LIVE</span></div>
-      <div class="telemetry-context"><span id="live-car">Esperando el vehículo</span><small id="telemetry-axis">Últimos 20 segundos</small></div>
-      <div id="telemetry-scroll" tabindex="0" aria-label="Parámetros de telemetría; desplazar para ver más"><div id="telemetry-rows"></div><p class="telemetry-note">Arrastra cualquier gráfica para mover video y recorrido en la vuelta de referencia.</p></div>
-    </section>
   </div>
 </main>
 <div id="message" role="status" hidden></div>
@@ -61,5 +78,5 @@
   <select id="rate" aria-label="Velocidad de reproducción"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
   <button id="mute" class="icon-button" aria-label="Silenciar video" aria-pressed="false">♪</button><input id="volume" aria-label="Volumen del video" type="range" min="0" max="1" step="0.05" value="1">
 </nav>
-<script src="timeline.js"></script><script src="app.js"></script>
+<script src="timeline.js"></script><script src="instruments.js"></script><script src="app.js"></script>
 </body></html>

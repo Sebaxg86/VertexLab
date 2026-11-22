@@ -19,6 +19,13 @@ const metricDefs = [
   {key:'y', name:'Altura', unit:'m', decimals:1},
   {key:'z', name:'Posición Z', unit:'m', decimals:1}
 ];
+const tireLabels = ['Del. izq.', 'Del. der.', 'Tras. izq.', 'Tras. der.'];
+for (let index=0; index<4; index++) {
+  const tile = document.createElement('div');
+  tile.className = 'tire-tile'; tile.id = 'tire-' + index;
+  tile.innerHTML = `<svg viewBox="0 0 30 50" aria-hidden="true"><rect x="5" y="3" width="20" height="44" rx="7" class="tire-body"/><path d="m10 7 10 6-10 6 10 6-10 6 10 6-10 6" class="tire-tread"/></svg><div class="tire-info"><span>${tireLabels[index]}</span><output id="tire-temp-${index}">—</output><small id="tire-slip-${index}">Sin datos</small><div class="slip-meter"><i id="tire-slip-bar-${index}"></i><em></em></div></div>`;
+  $('tire-grid').append(tile);
+}
 for (const [index, metric] of metricDefs.entries()) {
   const card = document.createElement('article');
   card.className = 'metric-card';
@@ -303,7 +310,38 @@ function draw() {
     map.fillStyle = '#8997aa'; map.font = '12px Segoe UI'; map.fillText('Abre una sesión para ver su recorrido.', 20, h/2);
   }
   drawMetrics(sample, laps);
+  const liveRecent = latest?.lastPacket && Date.now()/1000-latest.lastPacket < 2;
+  drawInstruments(session ? sample : liveRecent && latest?.packet?.active ? latest.packet : null);
   if (session && hasVideo && !videoOnly() && toVideo(t) === null) $('clock').textContent += ' · sin video';
+}
+function drawInstruments(sample) {
+  const measured = RaceInstruments.values(sample);
+  $('instant-source').textContent = session ? 'Sesión · ' + t.toFixed(2) + ' s' : sample ? 'LIVE' : 'En espera';
+  const missing = measured.steer === null || measured.lateral === null || measured.longitudinal === null || measured.tires.some(tire => tire.temp === null || tire.slip === null);
+  $('instant-note').textContent = missing ? session ? 'Estos datos no se guardaban en sesiones anteriores.' : 'Esperando datos de conducción' : 'Valores del instante observado';
+  $('steering-icon').classList.toggle('no-reading', measured.steer === null);
+  $('steering-wheel').style.transform = `rotate(${(measured.steer ?? 0)*135}deg)`;
+  $('steering-value').textContent = measured.steer === null ? 'Sin datos' : Math.abs(measured.steer)<.01 ? 'Centrado · 0%' : `${measured.steer<0?'Izq.':'Der.'} · ${Math.round(Math.abs(measured.steer)*100)}%`;
+  $('steering-icon').setAttribute('aria-label', 'Entrada de dirección: ' + $('steering-value').textContent + '. El giro del icono es ilustrativo.');
+  for (const key of ['throttle','brake']) {
+    const value = sample?.[key];
+    $('instant-'+key).style.transform = `scaleX(${Number.isFinite(value)?Math.max(0,Math.min(1,value/100)):0})`;
+    $('instant-'+key+'-value').textContent = Number.isFinite(value) ? value.toFixed(0)+'%' : '—';
+  }
+  $('g-lateral').textContent = measured.lateral === null ? '—' : measured.lateral.toFixed(2)+' G';
+  $('g-longitudinal').textContent = measured.longitudinal === null ? '—' : measured.longitudinal.toFixed(2)+' G';
+  $('g-total').textContent = measured.total === null ? 'Sin datos' : measured.total.toFixed(2)+' G';
+  $('g-point').style.opacity = measured.total === null ? 0 : 1;
+  const size = Math.max(2, measured.total || 0);
+  $('g-point').style.transform = `translate(${(measured.lateral || 0)/size*55}px,${-(measured.longitudinal || 0)/size*55}px)`;
+  for (const [index, tire] of measured.tires.entries()) {
+    const hue = tire.temp === null ? 210 : Math.max(0,Math.min(210,210-(tire.temp-40)/100*210));
+    $('tire-'+index).style.setProperty('--tire-color', tire.temp === null ? '#526174' : `hsl(${hue} 75% 65%)`);
+    $('tire-'+index).dataset.slipping = tire.slip !== null && tire.slip>1 ? 'true' : 'false';
+    $('tire-temp-'+index).textContent = tire.temp === null ? '—' : tire.temp.toFixed(0)+'°C';
+    $('tire-slip-'+index).textContent = tire.slip === null ? 'Sin datos de slip' : `Slip ${tire.slip.toFixed(2)}${tire.slip>1?' · exceso':''}`;
+    $('tire-slip-bar-'+index).style.transform = `scaleX(${tire.slip === null?0:Math.min(1,tire.slip/2)})`;
+  }
 }
 function updateTelemetryContext() {
   const connected = latest?.lastPacket && Date.now()/1000 - latest.lastPacket < 2;

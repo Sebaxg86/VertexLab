@@ -69,6 +69,18 @@ class FakeOBS:
 
 
 class DecoderTests(unittest.TestCase):
+    def test_instrument_offsets_signed_steer_g_inputs_and_four_tires(self):
+        data = packet()
+        struct.pack_into('<b',data,320,-127)
+        struct.pack_into('<fff',data,20,9.80665,-2,-4.903325)
+        struct.pack_into('<ffff',data,268,32,212,122,176)
+        struct.pack_into('<ffff',data,180,.2,-1.5,.6,2)
+        row = decode(data)
+        self.assertEqual(row['steer'],-127)
+        self.assertAlmostEqual(row['accelX'],9.80665,places=5)
+        self.assertEqual(row['tireTempsC'],[0,100,50,80])
+        self.assertAlmostEqual(row['tireSlipCombined'][1],-1.5)
+
     def test_layout(self):
         row = decode(packet())
         self.assertEqual((row['x'], row['z'], row['speed'], row['lap'], row['lapTime'], row['raceTime']), (10,30,90,2,12,12))
@@ -318,6 +330,8 @@ class HTTPTests(unittest.TestCase):
         sid = sessions[0]['id']
         with self.request('/api/sessions/'+sid) as response: data = json.load(response)
         self.assertEqual(len(data['laps'][0]['rows']),3)
+        self.assertIn('tireTempsC',data['laps'][0]['rows'][0])
+        self.assertIn('steer',data['laps'][0]['rows'][0])
         self.assertEqual(data['meta']['videoPath'],str(video))
         with self.request('/api/sync/'+sid,{'offset':2.5}) as response: self.assertEqual(json.load(response)['offset'],2.5)
         with self.request('/api/video/'+sid,headers={'Range':'bytes=2-5'}) as response:

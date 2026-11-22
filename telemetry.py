@@ -20,6 +20,12 @@ def decode(data):
                 carClass=struct.unpack_from('<i', data, 216)[0],
                 carPI=struct.unpack_from('<i', data, 220)[0],
                 rpm=f(16), gear=data[319],
+                steer=struct.unpack_from('<b', data, 320)[0],
+                accelX=f(20), accelY=f(24), accelZ=f(28),
+                tireTempsC=[(f(268+i*4)-32)*5/9 for i in range(4)],
+                tireSlipCombined=[f(180+i*4) for i in range(4)],
+                tireSlipRatio=[f(84+i*4) for i in range(4)],
+                suspension=[f(68+i*4) for i in range(4)],
                 throttle=data[315]/255*100, brake=data[316]/255*100)
 
 def analyze(rows):

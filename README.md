@@ -80,8 +80,9 @@ separado y se muestra un aviso; no se inventa una relación con la telemetría.
 Marca vueltas y elige una de referencia. Arrastra sobre las gráficas para moverte por
 distancia en esa vuelta: el video y el marcador de su trazada saltan al instante.
 Los marcadores de las otras vueltas se comparan a la misma distancia. La vista de escritorio
-se divide en dos columnas 2:1: video y recorrido apilados a la izquierda, parámetros
-individuales con desplazamiento independiente a la derecha. La telemetría observada
+mantiene el reparto 60/40: video e indicadores instantáneos a la izquierda; la zona
+derecha se divide por mitades entre gráficas desplazables y recorrido de altura completa.
+La telemetría observada
 corresponde al cursor de la sesión; Volver a LIVE muestra los paquetes actuales del juego.
 El video no tiene controles internos: usa la barra flotante para reproducir, pausar,
 deslizar el tiempo, saltar cinco segundos, ajustar velocidad, volumen o silencio. Rueda/arrastre sobre el
@@ -112,6 +113,28 @@ un tiempo oficial ni reconoce circuitos. Las sesiones completas se cargan en mem
 el MVP está pensado para sesiones cortas. Los archivos de video no se copian.
 No hay datos de demostración en el producto. Respaldar `data/` y los videos por separado.
 
+## Indicadores del instante observado
+
+Debajo del video se muestran dirección, pedales, fuerzas G y cuatro neumáticos. Se
+actualizan con el mismo paquete del cursor usado para el video y las gráficas; en LIVE
+usan únicamente los paquetes actuales de conducción. Las transiciones suaves son visuales,
+no generan muestras nuevas. Las sesiones previas a esta función carecen de los campos
+adicionales: muestran Sin datos, sin reconstruirlos ni sustituirlos por datos LIVE.
+
+Dirección es la entrada firmada `Steer` normalizada a porcentaje; el giro del icono es
+ilustrativo y no representa grados físicos del volante. Las G laterales/longitudinales
+se calculan de AccelerationX/Z divididas entre 9.80665, con derecha/adelante positivos;
+la cifra combinada es la magnitud en el plano X/Z. El diagrama limita el punto al borde
+de 2G, conservando las cifras reales incluso si se supera ese rango.
+
+Temperatura: cuatro lecturas convertidas de Fahrenheit a Celsius, con gradiente visual
+de 40 a 140 °C (sin afirmar un rango óptimo universal). Deslizamiento: magnitud de
+TireCombinedSlip por rueda, con aviso para >1. No es porcentaje de agarre, coeficiente
+de fricción, desgaste ni presión del neumático. El decodificador también conserva
+slip longitudinal y suspensión normalizada para análisis posterior. El diseño se inspira
+en los indicadores revisados de fh6-tel; los gráficos y componentes se implementaron
+de forma independiente.
+
 ## Arquitectura y verificación
 
 `telemetry.py`: decodificador FH6 de 324 bytes little endian.
@@ -123,6 +146,7 @@ No hay datos de demostración en el producto. Respaldar `data/` y los videos por
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 node --test tests/timeline.test.cjs
+node --test tests/instruments.test.cjs
 node --check public/app.js
 ```
 
