@@ -15,6 +15,11 @@ def decode(data):
                 x=f(244), y=f(248), z=f(252), speed=f(256)*3.6,
                 distance=f(292), lapTime=f(304), raceTime=f(308),
                 lap=struct.unpack_from('<H', data, 312)[0],
+                racePosition=data[314],
+                carOrdinal=struct.unpack_from('<i', data, 212)[0],
+                carClass=struct.unpack_from('<i', data, 216)[0],
+                carPI=struct.unpack_from('<i', data, 220)[0],
+                rpm=f(16), gear=data[319],
                 throttle=data[315]/255*100, brake=data[316]/255*100)
 
 def analyze(rows):
@@ -27,7 +32,7 @@ def analyze(rows):
         row = dict(row)
         step = math.hypot(row['x']-previous['x'], row['z']-previous['z']) if previous else 0
         # Gaps and teleports break the polyline and do not add fictitious distance.
-        row['gap'] = bool(previous and (row['t']-previous['t'] > 1 or step > 100))
+        row['gap'] = bool(previous and (row.get('breakBefore') or row['t']-previous['t'] > 1 or step > 100))
         row['d'] = (previous['d'] if previous else 0) + (step if not row['gap'] else 0)
         lap['rows'].append(row)
     for i, lap in enumerate(laps):

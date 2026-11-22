@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import json
 import socket
 import struct
@@ -6,67 +8,318 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.error
 import urllib.request
 from pathlib import Path
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-import server
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from obs_control import OBS
+from recorder import Recorder
+from server import Runtime, ThreadingHTTPServer, handler_for
 from telemetry import decode, analyze
 
-def packet():
-    b=bytearray(324)
-    struct.pack_into('<iI',b,0,1,12345)
-    struct.pack_into('<fff',b,244,10,20,30)
-    struct.pack_into('<f',b,256,25)
-    struct.pack_into('<fff',b,300,60,5,125)
-    struct.pack_into('<H',b,312,2)
-    b[315]=255
-    b[316]=128
-    return b
 
-class Tests(unittest.TestCase):
+def packet(active=True, event=True, race_time=12, lap_time=12, stamp=12345, car=1009):
+    data = bytearray(324)
+    struct.pack_into('<iI', data, 0, int(active), stamp)
+    struct.pack_into('<iii', data, 212, car, 3, 800)
+    struct.pack_into('<fff', data, 244, 10, 20, 30)
+    struct.pack_into('<f', data, 256, 25)
+    struct.pack_into('<fff', data, 300, 60, lap_time if event else 0, race_time if event else 0)
+    struct.pack_into('<H', data, 312, 2 if event else 0)
+    data[314] = 1 if event else 0
+    data[315], data[316] = 255, 128
+    return data
+
+
+class FakeOBS:
+    def __init__(self):
+        self.owned = False
+        self.enabled = True
+        self.calls = []
+        self.wall = 100
+        self.duration = 0
+        self.path = None
+
+    def status(self):
+        return dict(enabled=True, connected=True, owned=self.owned, error=None, port=4455)
+
+    def anchor(self):
+        return dict(wall=self.wall, video=self.duration, uncertainty=.01, active=True, paused=False)
+
+    def start(self):
+        self.calls.append('start'); self.owned = True
+        return self.anchor()
+
+    def pause(self):
+        if self.owned: self.calls.append('pause')
+
+    def resume(self):
+        self.calls.append('resume')
+        return self.anchor()
+
+    def stop(self):
+        if self.owned:
+            self.calls.append('stop'); self.owned = False
+            return self.path
+
+    def disconnect(self):
+        pass
+
+
+class DecoderTests(unittest.TestCase):
     def test_layout(self):
-        r=decode(packet())
-        self.assertEqual((r['x'],r['z'],r['speed'],r['lap'],r['lapTime'],r['raceTime']),(10,30,90,2,5,125))
-        self.assertEqual(r['throttle'],100)
-        self.assertAlmostEqual(r['brake'],128/255*100)
+        row = decode(packet())
+        self.assertEqual((row['x'], row['z'], row['speed'], row['lap'], row['lapTime'], row['raceTime']), (10,30,90,2,12,12))
+        self.assertEqual((row['carOrdinal'],row['carClass'],row['carPI'],row['racePosition']), (1009,3,800,1))
+        self.assertEqual(row['throttle'],100)
+        self.assertAlmostEqual(row['brake'],128/255*100)
         with self.assertRaises(ValueError): decode(bytes(323))
-        b=packet();struct.pack_into('<f',b,244,float('nan'))
-        with self.assertRaises(ValueError): decode(b)
+        data = packet(); struct.pack_into('<f',data,244,float('nan'))
+        with self.assertRaises(ValueError): decode(data)
 
-    def test_distance_and_gap(self):
-        rows=[]
-        for i,(x,z,t,lap) in enumerate([(0,0,0,0),(3,4,.1,0),(500,4,2,0),(0,0,3,1),(3,4,3.1,1),(0,0,4,2)]):
-            rows.append(dict(decode(packet()),x=x,z=z,t=t,lap=lap,timestamp=i))
-        laps=analyze(rows)
+    def test_distance_and_pause_break(self):
+        rows = [dict(decode(packet()),x=x,z=z,t=t,lap=lap,timestamp=i,breakBefore=cut)
+                for i,(x,z,t,lap,cut) in enumerate([(0,0,0,0,False),(3,4,.1,0,False),
+                    (4,5,.2,0,True),(0,0,3,1,False),(3,4,3.1,1,False),(0,0,4,2,False)])]
+        laps = analyze(rows)
         self.assertEqual(laps[0]['rows'][1]['d'],5)
         self.assertEqual(laps[0]['rows'][2]['d'],5)
         self.assertTrue(laps[0]['rows'][2]['gap'])
         self.assertFalse(laps[1]['partial'])
 
-    def test_udp_record_reload_sync(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            server.DATA=Path(tmp)
-            http=server.ThreadingHTTPServer(('127.0.0.1',0),server.Handler)
-            threading.Thread(target=http.serve_forever,daemon=True).start()
-            probe=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);probe.bind(('127.0.0.1',0));port=probe.getsockname()[1];probe.close()
-            threading.Thread(target=server.receive,args=('127.0.0.1',port),daemon=True).start()
-            base=f'http://127.0.0.1:{http.server_port}/api/'
-            def request(route,body=None):
-                req=urllib.request.Request(base+route,data=json.dumps(body).encode() if body is not None else None,headers={'Content-Type':'application/json'})
-                with urllib.request.urlopen(req) as r:return json.load(r)
-            try:
-                sid=request('start',{'name':'SYNTHETIC TEST ONLY'})['id']
-                sender=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-                for _ in range(3):sender.sendto(packet(),('127.0.0.1',port));time.sleep(.02)
-                sender.sendto(b'bad',('127.0.0.1',port));sender.close()
-                time.sleep(.1)
-                request('stop',{})
-                data=request('sessions/'+sid)
-                self.assertEqual(len(data['laps'][0]['rows']),3)
-                self.assertGreaterEqual(request('status')['invalid'],1)
-                request('sync/'+sid,{'offset':2.5})
-                self.assertEqual(request('sessions/'+sid)['meta']['offset'],2.5)
-                self.assertEqual(len(request('sessions')),1)
-            finally:http.shutdown();http.server_close()
 
-if __name__=='__main__': unittest.main()
+class RecorderTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.obs = FakeOBS()
+        self.rec = Recorder(self.tmp.name,self.obs)
+
+    def tearDown(self):
+        self.rec.finish('test-cleanup')
+        self.tmp.cleanup()
+
+    def feed(self, wall, **kwargs):
+        self.rec.heartbeat(wall)
+        self.rec.feed(decode(packet(**kwargs)),wall)
+
+    def rows(self, sid):
+        return [json.loads(line) for line in (Path(self.tmp.name)/(sid+'.jsonl')).read_text().splitlines()]
+
+    def test_free_roam_never_opens_even_first_packet(self):
+        for wall in [100,101,102]: self.feed(wall,event=False)
+        self.assertIsNone(self.rec.meta)
+        self.assertEqual(self.obs.calls,[])
+
+    def test_long_pause_resume_same_file_excludes_pause_and_records_obs_segments(self):
+        self.feed(100)
+        sid = self.rec.meta['id']
+        self.feed(100.1)
+        self.rec.heartbeat(100.8)
+        self.rec.heartbeat(800)
+        self.assertEqual(self.rec.meta['id'],sid)
+        self.assertEqual(self.rec.mode,'paused')
+        self.assertEqual(len(self.rows(sid)),2)
+        self.obs.wall, self.obs.duration = 800, .8
+        self.feed(800)
+        self.feed(800.1)
+        self.assertEqual(self.obs.calls,['start','pause','resume'])
+        self.assertAlmostEqual(self.rec.t,.2)
+        rows = self.rows(sid)
+        self.assertTrue(rows[2]['breakBefore'])
+        self.assertAlmostEqual(rows[3]['videoTime'],.9)
+        self.assertEqual(len(self.rec.meta['syncSegments']),2)
+
+    def test_inactive_packets_pause_but_do_not_end(self):
+        self.feed(100)
+        for wall in [101,105,200]: self.feed(wall,active=False,event=False)
+        self.assertIsNotNone(self.rec.meta)
+        self.assertEqual(self.rec.mode,'paused')
+
+    def test_free_roam_confirms_end_and_start_next_race(self):
+        self.feed(100)
+        sid = self.rec.meta['id']
+        self.feed(101,event=False); self.feed(103,event=False)
+        self.assertIsNone(self.rec.meta)
+        meta = json.loads((Path(self.tmp.name)/(sid+'.json')).read_text())
+        self.assertEqual(meta['events'][-1]['reason'],'returned-to-free-roam')
+        self.assertIn('Mitsubishi',meta['name'])
+        self.obs.wall = 104
+        self.feed(104,race_time=0,lap_time=.1)
+        self.assertNotEqual(self.rec.meta['id'],sid)
+
+    def test_new_clock_or_vehicle_splits_attempt(self):
+        self.feed(100,race_time=20)
+        first = self.rec.meta['id']
+        self.obs.wall = 101
+        self.feed(101,race_time=.1)
+        self.assertNotEqual(self.rec.meta['id'],first)
+        second = self.rec.meta['id']
+        self.feed(101.1,car=1006)
+        self.assertNotEqual(self.rec.meta['id'],second)
+
+    def test_manual_stop_does_not_immediately_auto_restart(self):
+        self.feed(100)
+        self.rec.finish()
+        self.feed(101)
+        self.assertIsNone(self.rec.meta)
+        self.feed(102,event=False)
+        self.feed(103)
+        self.assertIsNotNone(self.rec.meta)
+
+    def test_obs_failure_keeps_telemetry_and_marks_sync_error(self):
+        self.obs.start = lambda: (_ for _ in ()).throw(ValueError('OBS ocupado'))
+        self.feed(100)
+        self.assertEqual(self.rec.meta['syncState'],'error')
+        self.assertEqual(len(self.rows(self.rec.meta['id'])),1)
+        self.assertIsNone(self.rows(self.rec.meta['id'])[0]['videoTime'])
+
+    def test_video_start_latency_leaves_uncovered_telemetry(self):
+        self.obs.wall = 100.2
+        self.feed(100)
+        sid = self.rec.meta['id']
+        self.feed(100.3)
+        rows = self.rows(sid)
+        self.assertIsNone(rows[0]['videoTime'])
+        self.assertAlmostEqual(rows[1]['videoTime'],.1)
+
+    def test_manual_session_records_free_roam(self):
+        sid = self.rec.begin(100, name='Prueba manual', manual=True)
+        self.feed(100.1,event=False)
+        self.assertEqual(len(self.rows(sid)),1)
+
+    def test_lap_clock_without_race_position_opens_time_trial(self):
+        data = packet(); data[314] = 0
+        self.rec.feed(decode(data),100)
+        self.assertIsNotNone(self.rec.meta)
+
+    def test_failed_stop_retains_ownership_and_can_retry(self):
+        self.feed(100)
+        sid = self.rec.meta['id']
+        stop = self.obs.stop
+        self.obs.stop = lambda: (_ for _ in ()).throw(ValueError('Error de OBS'))
+        self.rec.finish()
+        with self.assertRaisesRegex(ValueError,'pendiente'):
+            self.rec.begin(101)
+        self.obs.stop = stop
+        self.obs.path = 'recovered.mp4'
+        self.rec.finish()
+        meta = json.loads((Path(self.tmp.name)/(sid+'.json')).read_text())
+        self.assertEqual(meta['videoPath'],'recovered.mp4')
+
+
+class FakeWebSocket:
+    def __init__(self, active=False, reject_pause=False):
+        self.responses = [dict(op=0,d=dict(authentication=dict(salt='salt',challenge='challenge')))]
+        self.sent = []
+        self.active = active
+        self.paused = False
+        self.reject_pause = reject_pause
+
+    def send(self, payload):
+        item = json.loads(payload); self.sent.append(item)
+        if item['op'] == 1:
+            self.responses.append(dict(op=2,d=dict(negotiatedRpcVersion=1)))
+        elif item['op'] == 6:
+            name = item['d']['requestType']
+            if name == 'StartRecord': self.active = True
+            if name == 'StopRecord': self.active = False
+            if name == 'PauseRecord' and not self.reject_pause: self.paused = True
+            if name == 'ResumeRecord': self.paused = False
+            data = dict(outputActive=self.active,outputPaused=self.paused,outputDuration=1500,outputPath='test.mp4')
+            self.responses.append(dict(op=7,d=dict(requestId=item['d']['requestId'],requestStatus=dict(result=True),responseData=data)))
+
+    def recv(self): return json.dumps(self.responses.pop(0))
+    def close(self): pass
+
+
+class OBSProtocolTests(unittest.TestCase):
+    def connect(self, fake):
+        obs = OBS()
+        with patch('websocket.create_connection', return_value=fake): obs.connect(4455,'password')
+        return obs
+
+    def test_authentication_start_pause_resume_stop(self):
+        fake = FakeWebSocket(); obs = self.connect(fake)
+        secret = base64.b64encode(hashlib.sha256(b'passwordsalt').digest()).decode()
+        expected = base64.b64encode(hashlib.sha256((secret+'challenge').encode()).digest()).decode()
+        self.assertEqual(fake.sent[0]['d']['authentication'],expected)
+        self.assertEqual(obs.start()['video'],1.5)
+        obs.pause(); obs.resume()
+        self.assertEqual(obs.stop(),'test.mp4')
+        self.assertFalse(obs.owned)
+
+    def test_existing_recording_is_never_controlled(self):
+        fake = FakeWebSocket(active=True); obs = self.connect(fake)
+        with self.assertRaisesRegex(ValueError,'ya graba'): obs.start()
+        obs.pause(); obs.resume(); obs.stop()
+        names = [m['d']['requestType'] for m in fake.sent if m['op']==6]
+        self.assertEqual(names,['GetRecordStatus','GetRecordStatus'])
+
+    def test_unconfirmed_pause_is_error(self):
+        obs = self.connect(FakeWebSocket(reject_pause=True)); obs.start()
+        with self.assertRaisesRegex(ValueError,'no confirmó la pausa'): obs.pause()
+
+
+class HTTPTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.runtime = Runtime(self.tmp.name,FakeOBS())
+        self.http = ThreadingHTTPServer(('127.0.0.1',0),handler_for(self.runtime))
+        self.http.daemon_threads = True
+        threading.Thread(target=self.http.serve_forever,daemon=True).start()
+        self.base = f'http://127.0.0.1:{self.http.server_port}'
+
+    def tearDown(self):
+        self.runtime.close(); self.http.shutdown(); self.http.server_close(); self.tmp.cleanup()
+
+    def request(self, route, body=None, headers=None):
+        req = urllib.request.Request(self.base+route,data=json.dumps(body).encode() if body is not None else None,
+                                     headers=headers or {'Content-Type':'application/json'})
+        return urllib.request.urlopen(req,timeout=5)
+
+    def test_udp_auto_record_reload_and_video_range(self):
+        video = Path(self.tmp.name)/'synthetic-test.mp4'
+        video.write_bytes(b'0123456789')
+        self.runtime.recorder.obs.path = str(video)
+        thread = threading.Thread(target=self.runtime.listen,args=('127.0.0.1',0),daemon=True); thread.start()
+        deadline = time.monotonic()+2
+        while (not self.runtime.sock or self.runtime.sock.getsockname()[1] == 0) and time.monotonic()<deadline: time.sleep(.01)
+        port = self.runtime.sock.getsockname()[1]
+        with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as sender:
+            for _ in range(3): sender.sendto(packet(),('127.0.0.1',port)); time.sleep(.02)
+            sender.sendto(b'bad',('127.0.0.1',port))
+        time.sleep(.05)
+        with self.request('/api/stop',{}) as response: self.assertTrue(json.load(response)['ok'])
+        with self.request('/api/sessions') as response: sessions = json.load(response)
+        self.assertEqual(len(sessions),1)
+        sid = sessions[0]['id']
+        with self.request('/api/sessions/'+sid) as response: data = json.load(response)
+        self.assertEqual(len(data['laps'][0]['rows']),3)
+        self.assertEqual(data['meta']['videoPath'],str(video))
+        with self.request('/api/sync/'+sid,{'offset':2.5}) as response: self.assertEqual(json.load(response)['offset'],2.5)
+        with self.request('/api/video/'+sid,headers={'Range':'bytes=2-5'}) as response:
+            self.assertEqual(response.status,206); self.assertEqual(response.read(),b'2345')
+        with self.request('/api/status') as response: self.assertEqual(json.load(response)['invalid'],1)
+
+    def test_sse_reports_live_without_recording(self):
+        self.runtime.ingest(packet(event=False))
+        self.runtime.pending.join()
+        with self.request('/events') as response:
+            event = response.readline().decode()
+            state = json.loads(event[6:])
+        self.assertEqual(state['mode'],'armed')
+        self.assertEqual(state['packet']['speed'],90)
+        self.assertIsNone(state['recording'])
+
+    def test_cross_origin_and_invalid_host_rejected(self):
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self.request('/api/stop',{},headers={'Origin':'http://attacker.example'})
+        self.assertEqual(caught.exception.code,403)
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self.request('/api/status',headers={'Host':'attacker.example'})
+        self.assertEqual(caught.exception.code,403)
+
+
+if __name__ == '__main__': unittest.main()
