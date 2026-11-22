@@ -4,7 +4,9 @@
 <body>
 <header class="app-header">
   <button id="menu-toggle" class="icon-button" aria-label="Abrir menú" aria-controls="session-menu" aria-expanded="false"><span aria-hidden="true">☰</span></button>
-  <strong>RACE<span>LAB</span></strong><small class="app-subtitle">TU SESIÓN, EN DETALLE</small>
+  <strong>RACE<span>LAB</span></strong>
+  <div class="session-heading"><span class="eyebrow">ANÁLISIS DE SESIÓN</span><h1 id="title">Tu próxima sesión, bajo la lupa.</h1><p id="session-info" class="hint">Abre una sesión desde el menú para analizarla.</p></div>
+  <label class="button import-button">Abrir video local<input id="file" type="file" accept="video/mp4,video/webm,video/x-matroska,.mkv" hidden></label>
   <output id="status">Conectando…</output>
 </header>
 <div id="menu-backdrop" hidden></div>
@@ -30,18 +32,14 @@
   <div id="laps">Selecciona una sesión.</div>
   <details><summary>Ajuste fino de sincronización</summary><div class="sync"><label>Corrección (s) <input id="offset" type="number" step="0.01" value="0"></label><button id="align">Alinear fotograma actual con cursor</button><button id="save">Guardar corrección</button><small>La asociación automática usa referencias de OBS por cada tramo entre pausas.</small></div></details>
   <p id="sync-status" class="hint"></p>
+  <details><summary>Estado del video</summary><p id="video-status" class="hint">Conecta OBS desde el menú para asociar el video automáticamente.</p></details>
 </aside>
 <main id="workspace" class="workspace">
-  <div class="workspace-heading">
-    <div class="session-heading"><span class="eyebrow">ANÁLISIS DE SESIÓN</span><h1 id="title">Tu próxima sesión, bajo la lupa.</h1><p id="session-info" class="hint">Abre una sesión desde el menú para analizarla.</p></div>
-    <label class="button import-button">Abrir video local<input id="file" type="file" accept="video/mp4,video/webm,video/x-matroska,.mkv" hidden></label>
-  </div>
   <div class="analysis-layout">
     <div class="visual-column">
       <article class="video-panel">
-        <div class="panel-heading"><h2>Video de sesión</h2><span class="panel-tag">PREVIEW</span></div>
+        <h2 class="sr-only">Video de sesión</h2>
         <div class="video-stage"><video id="video" playsinline disablepictureinpicture preload="metadata" aria-label="Video de la sesión; controles en la barra flotante"></video><div id="video-empty"><span aria-hidden="true">▷</span><p>Tu carrera empieza aquí</p><small>Selecciona una sesión con video desde el menú.</small></div></div>
-        <p id="video-status" class="panel-note">Conecta OBS desde el menú para asociar el video automáticamente.</p>
       </article>
       <article class="map-panel">
         <div class="panel-heading"><h2>Recorrido</h2><div class="map-tools"><span id="metrics" class="panel-tag"></span><button id="fit">Encuadrar</button></div></div>
