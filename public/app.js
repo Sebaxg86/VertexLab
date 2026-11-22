@@ -4,7 +4,9 @@ let session = null, selected = new Set(), reference = null, t = 0, playing = fal
 let last = 0, zoom = 1, pan = [0, 0], drag = null, objectUrl = null, hasVideo = false;
 let latest = null, revision = null, pendingSeek = null, chartDragging = false;
 let liveHistory = [], lastLiveStamp = null, legendKey = null, toastTimer;
+let chartRange = null, liveChartSpan = 20;
 const scaleCache = new Map();
+for (let i=0;i<16;i++) { const led=document.createElement('i'); led.style.setProperty('--led-color',i<9?'#59e2ba':i<13?'#ffc66e':'#f77d94'); $('rev-lights').append(led); }
 const metricDefs = [
   {key:'speed', name:'Velocidad', unit:'km/h', decimals:0},
   {key:'rpm', name:'Revoluciones', unit:'RPM', decimals:0},
@@ -96,7 +98,7 @@ async function load(id) {
   setPlaying(false);
   clearVideo();
   session = await api('sessions/' + id);
-  scaleCache.clear(); legendKey = null; $('telemetry-scroll').scrollTop = 0;
+  scaleCache.clear(); chartRange = null; legendKey = null; $('telemetry-scroll').scrollTop = 0;
   selected = new Set(session.laps.map(lap => lap.id));
   reference = session.laps[0]?.id ?? null;
   $('title').textContent = session.meta.name;
@@ -109,6 +111,7 @@ async function load(id) {
     box.type = 'checkbox'; box.checked = true;
     box.onchange = () => {
       box.checked ? selected.add(lap.id) : selected.delete(lap.id);
+      chartRange = null; scaleCache.clear();
       if (!selected.has(reference)) reference = visible()[0]?.id ?? null;
       $('reference').value = String(reference);
       draw();
@@ -315,6 +318,16 @@ function draw() {
   if (session && hasVideo && !videoOnly() && toVideo(t) === null) $('clock').textContent += ' · sin video';
 }
 function drawInstruments(sample) {
+  const rpm = sample?.rpm, gear = sample?.gear, maximum = sample?.engineMaxRpm;
+  const ratio = Number.isFinite(rpm) && maximum>0 ? Math.max(0,Math.min(1,rpm/maximum)) : null;
+  $('instant-gear').textContent = Number.isFinite(gear) ? gear===0?'R':String(gear) : '—';
+  $('instant-rpm').textContent = Number.isFinite(rpm) ? Math.round(rpm).toLocaleString('es-MX') : '—';
+  $('instant-speed').textContent = Number.isFinite(sample?.speed) ? sample.speed.toFixed(0)+' km/h' : '— km/h';
+  $('rpm-fill').style.transform = `scaleX(${ratio ?? 0})`;
+  $('rpm-scale').textContent = ratio === null ? 'Sin escala máxima en esta captura' : `Escala del motor · ${Math.round(maximum).toLocaleString('es-MX')} RPM`;
+  $('rev-lights').classList.toggle('no-reading',ratio===null);
+  [...$('rev-lights').children].forEach((led,index)=>led.classList.toggle('lit',ratio!==null&&ratio >= (index+1)/16));
+  $('instant-gear').dataset.highRpm = ratio !== null && ratio>.95 ? 'true' : 'false';
   const measured = RaceInstruments.values(sample);
   $('instant-source').textContent = session ? 'Sesión · ' + t.toFixed(2) + ' s' : sample ? 'LIVE' : 'En espera';
   const missing = measured.steer === null || measured.lateral === null || measured.longitudinal === null || measured.tires.some(tire => tire.temp === null || tire.slip === null);
@@ -354,7 +367,7 @@ function metricScale(metric, series) {
   const cacheKey = metric.key + ':' + series.map(item => item.id).join(',');
   if (session && scaleCache.has(cacheKey)) return scaleCache.get(cacheKey);
   let min = 0, max = metric.max || 1;
-  if (!metric.max) for (const item of series) for (const row of item.rows) if (Number.isFinite(row[metric.key])) {
+  if (!metric.max) for (const item of series) for (const row of item.rows) if (Number.isFinite(row[metric.key]) && (!session || !chartRange || row.d>=chartRange.start && row.d<=chartRange.end)) {
     min = Math.min(min, row[metric.key]); max = Math.max(max, row[metric.key]);
   }
   const bounds = [min, max];
@@ -365,6 +378,9 @@ function drawMetrics(sample, laps) {
   const series = session ? laps : [{id:0, rows:liveHistory}];
   const observed = session ? sample : latest?.packet ? {...latest.packet, d:latest.packet.distance} : null;
   const maxDistance = Math.max(1, ...laps.map(lap => lap.rows.at(-1)?.d || 0));
+  const range = chartRange || {start:0,end:maxDistance};
+  const span = Math.max(.001,range.end-range.start);
+  $('chart-zoom-label').textContent = (session ? maxDistance/span : 20/liveChartSpan).toFixed(1).replace('.0','')+'×';
   const scrollRect = $('telemetry-scroll').getBoundingClientRect();
   for (const [index, metric] of metricDefs.entries()) {
     const value = observed?.[metric.key];
@@ -376,9 +392,10 @@ function drawMetrics(sample, laps) {
     const [chart, width, height] = canvas(id), [min, max] = metricScale(metric, series);
     const left = 28, right = width - 8, top = 6, bottom = height - 19;
     const end = liveHistory.at(-1)?.liveTime || 0;
-    const point = row => [session ? left + row.d/maxDistance*(right-left) : left + (row.liveTime - (end-20))/20*(right-left), bottom - (row[metric.key]-min)/(max-min || 1)*(bottom-top)];
+    const point = row => [session ? left + (row.d-range.start)/span*(right-left) : left + (row.liveTime - (end-liveChartSpan))/liveChartSpan*(right-left), bottom - (row[metric.key]-min)/(max-min || 1)*(bottom-top)];
     chart.font = '9px Segoe UI'; chart.fillStyle = '#7489a2'; chart.fillText(max.toFixed(0), 0, top+6); chart.fillText(min.toFixed(0), 0, bottom);
     chart.strokeStyle = '#26354a'; chart.lineWidth = 1; chart.beginPath(); chart.moveTo(left, bottom); chart.lineTo(right, bottom); chart.stroke();
+    chart.save(); chart.beginPath(); chart.rect(left,top,right-left,bottom-top); chart.clip();
     for (const item of series) {
       chart.strokeStyle = session ? colors[item.id % colors.length] : colors[0]; chart.lineWidth = 1.4; chart.beginPath();
       let previous = null;
@@ -391,9 +408,10 @@ function drawMetrics(sample, laps) {
       }
       chart.stroke();
     }
-    if (sample) { const x = left + sample.d/maxDistance*(right-left); chart.strokeStyle = '#e3fff0aa'; chart.beginPath(); chart.moveTo(x, top); chart.lineTo(x, bottom); chart.stroke(); }
-    chart.fillStyle = '#7489a2'; chart.fillText(session ? '0 m' : '−20 s', left, height-3);
-    chart.textAlign = 'right'; chart.fillText(session ? maxDistance.toFixed(0)+' m' : 'Ahora', right, height-3); chart.textAlign = 'left';
+    if (sample) { const x = left + (sample.d-range.start)/span*(right-left); chart.strokeStyle = '#e3fff0aa'; chart.beginPath(); chart.moveTo(x, top); chart.lineTo(x, bottom); chart.stroke(); }
+    chart.restore();
+    chart.fillStyle = '#7489a2'; chart.fillText(session ? range.start.toFixed(0)+' m' : '−'+liveChartSpan.toFixed(1)+' s', left, height-3);
+    chart.textAlign = 'right'; chart.fillText(session ? range.end.toFixed(0)+' m' : 'Ahora', right, height-3); chart.textAlign = 'left';
   }
 }
 function chartSeek(event) {
@@ -402,16 +420,49 @@ function chartSeek(event) {
   if (!lap?.rows.length) return;
   const rect = event.currentTarget.getBoundingClientRect();
   const max = Math.max(1, ...visible().map(item => item.rows.at(-1)?.d || 0));
-  const distance = Math.max(0, Math.min(1, (event.clientX-rect.left-28)/(rect.width-36))) * max;
+  const range = chartRange || {start:0,end:max};
+  const distance = range.start + Math.max(0, Math.min(1, (event.clientX-rect.left-28)/(rect.width-36))) * (range.end-range.start);
   seek(nearest(lap.rows, 'd', distance).t);
 }
 for (const element of $('telemetry-rows').querySelectorAll('canvas')) {
   element.onpointerdown = event => { if (!session) return; chartDragging = true; element.setPointerCapture(event.pointerId); chartSeek(event); };
   element.onpointermove = event => { if (chartDragging) chartSeek(event); };
   element.onpointerup = element.onpointercancel = () => { chartDragging = false; };
+  element.addEventListener('wheel',event=>{
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    const max=Math.max(1,...visible().map(lap=>lap.rows.at(-1)?.d||0));
+    const range=chartRange||{start:0,end:max}, rect=element.getBoundingClientRect();
+    const fraction=Math.max(0,Math.min(1,(event.clientX-rect.left-28)/(rect.width-36)));
+    zoomCharts(Math.exp(-event.deltaY*.002),range.start+fraction*(range.end-range.start));
+  },{passive:false});
 }
+function zoomCharts(factor,anchor) {
+  if (!session) liveChartSpan=Math.max(.5,Math.min(20,liveChartSpan/factor));
+  else {
+    const max=Math.max(1,...visible().map(lap=>lap.rows.at(-1)?.d||0));
+    const lap=session.laps.find(lap=>lap.rows.length&&t>=lap.rows[0].t&&t<=lap.rows.at(-1).t);
+    const sample=lap?nearest(lap.rows,'t',t):null;
+    const current=chartRange||{start:0,end:max};
+    const target=anchor ?? sample?.d ?? (current.start+current.end)/2;
+    // Toolbar zoom recenters on the analysis cursor even if it left the previous window.
+    const initial=anchor===undefined ? {start:Math.max(0,Math.min(max-(current.end-current.start),target-(current.end-current.start)/2)),end:0} : current;
+    if (anchor===undefined) initial.end=initial.start+current.end-current.start;
+    chartRange=RaceView.zoomRange(initial,[0,max],target,factor);
+  }
+  scaleCache.clear(); draw();
+}
+$('chart-zoom-in').onclick=()=>zoomCharts(2);
+$('chart-zoom-out').onclick=()=>zoomCharts(.5);
+$('chart-zoom-reset').onclick=()=>{chartRange=null;liveChartSpan=20;scaleCache.clear();draw();};
 $('telemetry-scroll').onscroll = () => requestAnimationFrame(draw);
-$('map').onwheel = event => { event.preventDefault(); zoom = Math.max(.2, Math.min(30, zoom*Math.exp(-event.deltaY*.001))); draw(); };
+$('map').addEventListener('wheel',event=>{
+  event.preventDefault();
+  const next=Math.max(.2,Math.min(30,zoom*Math.exp(-event.deltaY*.001)));
+  const rect=$('map').getBoundingClientRect();
+  pan=RaceView.anchoredPan(pan,[event.clientX-rect.left,event.clientY-rect.top],[rect.width/2,rect.height/2],next/zoom);
+  zoom=next; draw();
+},{passive:false});
 $('map').onpointerdown = event => { drag = [event.clientX, event.clientY]; $('map').setPointerCapture(event.pointerId); };
 $('map').onpointermove = event => { if (drag) { pan[0] += event.clientX-drag[0]; pan[1] += event.clientY-drag[1]; drag = [event.clientX, event.clientY]; draw(); } };
 $('map').onpointerup = $('map').onpointercancel = () => { drag = null; };

@@ -19,7 +19,7 @@ def decode(data):
                 carOrdinal=struct.unpack_from('<i', data, 212)[0],
                 carClass=struct.unpack_from('<i', data, 216)[0],
                 carPI=struct.unpack_from('<i', data, 220)[0],
-                rpm=f(16), gear=data[319],
+                rpm=f(16), engineMaxRpm=f(8), gear=data[319],
                 steer=struct.unpack_from('<b', data, 320)[0],
                 accelX=f(20), accelY=f(24), accelZ=f(28),
                 tireTempsC=[(f(268+i*4)-32)*5/9 for i in range(4)],

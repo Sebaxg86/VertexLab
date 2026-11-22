@@ -87,6 +87,12 @@ corresponde al cursor de la sesión; Volver a LIVE muestra los paquetes actuales
 El video no tiene controles internos: usa la barra flotante para reproducir, pausar,
 deslizar el tiempo, saltar cinco segundos, ajustar velocidad, volumen o silencio. Rueda/arrastre sobre el
 mapa: zoom/pan; Encuadrar restablece la vista. No se incluye imagen del mapa de Forza.
+En el recorrido, la rueda mantiene fijo el punto bajo el mouse. Los botones +/− de
+las gráficas amplían todas a la vez alrededor del cursor de análisis; Ver todo restaura
+la distancia completa. Ctrl + rueda sobre una gráfica amplía alrededor del puntero.
+El zoom horizontal es compartido y las escalas verticales se ajustan a la zona observada;
+arrastrar una gráfica sigue buscando el instante correcto dentro de esa zona. En LIVE,
+los botones cambian la ventana reciente de 20 hasta 0.5 segundos.
 
 La grabación manual permite capturar también manejo libre. Desactivar la detección
 automática evita abrir nuevas sesiones; no descarta ni cierra la que ya está abierta.
@@ -115,13 +121,16 @@ No hay datos de demostración en el producto. Respaldar `data/` y los videos por
 
 ## Indicadores del instante observado
 
-Debajo del video se muestran dirección, pedales, fuerzas G y cuatro neumáticos. Se
+Debajo del video se muestran marcha, RPM, dirección, pedales, fuerzas G y cuatro neumáticos. Se
 actualizan con el mismo paquete del cursor usado para el video y las gráficas; en LIVE
 usan únicamente los paquetes actuales de conducción. Las transiciones suaves son visuales,
 no generan muestras nuevas. Las sesiones previas a esta función carecen de los campos
 adicionales: muestran Sin datos, sin reconstruirlos ni sustituirlos por datos LIVE.
 
 Dirección es la entrada firmada `Steer` normalizada a porcentaje; el giro del icono es
+ilustrativo. Las luces y la barra de RPM usan EngineMaxRpm del juego como escala,
+sin afirmar un régimen óptimo de cambio de marcha. Capturas antiguas sin ese campo
+muestran la cifra de RPM y la marcha, pero no inventan una escala máxima. El giro del volante es
 ilustrativo y no representa grados físicos del volante. Las G laterales/longitudinales
 se calculan de AccelerationX/Z divididas entre 9.80665, con derecha/adelante positivos;
 la cifra combinada es la magnitud en el plano X/Z. El diagrama limita el punto al borde
@@ -147,6 +156,7 @@ de forma independiente.
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 node --test tests/timeline.test.cjs
 node --test tests/instruments.test.cjs
+node --test tests/view-math.test.cjs
 node --check public/app.js
 ```
 
