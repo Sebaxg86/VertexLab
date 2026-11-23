@@ -66,7 +66,7 @@
     $('video-empty').querySelector('small').textContent='Abre una sesión .vrtx. El archivo se procesa aquí y no se sube a ningún servidor.';
     $('video-empty').append(button);
     $('delete-session').onclick=action(async()=>{if(!session)return;const id=session.meta.id;clearVideo();await request('delete/'+id,{});openLiveView();await list();$('message').textContent='Sesión cerrada. Tu archivo original no se ha eliminado.';});
-    if('serviceWorker' in navigator&&isSecureContext)navigator.serviceWorker.register(new URL('sw.js',document.baseURI)).catch(()=>{});
+    if('serviceWorker' in navigator&&isSecureContext)navigator.serviceWorker.register(new URL('sw.js',document.baseURI),{updateViaCache:'none'}).catch(()=>{});
     setupLibraryUI();decorate();
     initialize().then(()=>list()).catch(error=>{$('message').textContent='Biblioteca no disponible: '+error.message;});
   }

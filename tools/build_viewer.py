@@ -50,7 +50,7 @@ for size in (192, 512):
 files = sorted(p.name for p in OUT.iterdir() if p.is_file() and p.name != 'sw.js' and not p.name.startswith('.'))
 revision = hashlib.sha256(b''.join((OUT / name).read_bytes() for name in files)).hexdigest()[:16]
 worker = """const CACHE='vertexlab-viewer-REVISION',FILES=PRECACHE;
-self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES.map(name=>new URL(name,self.registration.scope).href)))));
+self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES.map(name=>new Request(new URL(name,self.registration.scope).href,{cache:'reload'}))))));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('vertexlab-viewer-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{const url=new URL(event.request.url);if(event.request.method!=='GET'||url.origin!==self.location.origin)return;
 if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match(new URL('index.html',self.registration.scope).href)));return;}
