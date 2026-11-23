@@ -82,7 +82,7 @@ async function list() {
 }
 
 function clearVideo() {
-  $('video').pause();
+  $('video').pause(); $('compare-video').pause(); $('compare-video').removeAttribute('src'); $('compare-video').load();
   $('video').removeAttribute('src');
   $('video').load();
   if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -101,28 +101,8 @@ async function load(id) {
   $('title').textContent = session.meta.name;
   $('offset').value = session.meta.offset || 0;
   $('session-info').textContent = `Clase ${session.meta.carClass ?? '—'} · PI ${session.meta.carPI ?? '—'} · ${session.laps.reduce((n, l) => n + l.rows.length, 0)} muestras${session.meta.ended ? '' : ' · Usa Actualizar para recargar una sesión abierta'}`;
-  $('laps').replaceChildren();
-  $('reference').replaceChildren();
-  for (const lap of session.laps) {
-    const label = document.createElement('label'), box = document.createElement('input');
-    box.type = 'checkbox'; box.checked = true;
-    box.onchange = () => {
-      box.checked ? selected.add(lap.id) : selected.delete(lap.id);
-      chartRange = null; scaleCache.clear();
-      if (!selected.has(reference)) reference = visible()[0]?.id ?? null;
-      $('reference').value = String(reference);
-      draw();
-    };
-    label.style.color = colors[lap.id % colors.length];
-    label.append(box, ` Vuelta ${lap.number} · ${lap.partial ? 'parcial / con cortes' : 'completa'}`);
-    $('laps').append(label);
-    const option = document.createElement('option');
-    option.value = lap.id; option.textContent = `Vuelta ${lap.number}`;
-    $('reference').append(option);
-  }
-  $('reference').value = String(reference);
-  $('time').max = Math.max(0, ...session.laps.map(lap => lap.rows.at(-1)?.t || 0));
-  $('duration').textContent = Number($('time').max).toFixed(2) + ' s';
+  allMode=true; allRows=RaceAnalysis.sessionRows(session.laps); videoChoices=[];
+  renderCarBadges(); renderAnalysisMenu(); refreshTransport();
   $('show-live').hidden = false;
   t = 0; zoom = 1; pan = [0, 0];
   if (session.meta.videoPath) {
@@ -138,19 +118,11 @@ async function load(id) {
     : session.meta.syncState === 'recovered' ? 'Sincronización recuperada del registro real de OBS; alineación estimada.'
     : session.meta.syncState === 'error' ? 'Hubo un error de OBS. Revisa la grabación; la sincronización puede estar incompleta.' : 'Sin referencias automáticas de OBS.';
   if (videoOnly()) $('sync-status').textContent = 'El video está disponible, pero no tiene referencias de sincronización. Puedes reproducirlo por separado; las gráficas no moverán el video.';
-  seek(0);
+  renderVideoControls(); seek(0);
   await list();
 }
 
 $('refresh').onclick = action(async () => { if (session) await load(session.meta.id); else await list(); });
-$('reference').onchange = () => {
-  reference = Number($('reference').value);
-  if (!selected.has(reference)) {
-    selected.add(reference);
-    $('laps').querySelectorAll('input')[reference].checked = true;
-  }
-  draw();
-};
 $('auto').onchange = action(async () => { await api('auto', {enabled: $('auto').checked}); });
 $('record').onclick = action(async () => { await api('start', {name: $('name').value}); await list(); });
 $('stop').onclick = action(async () => {
@@ -180,7 +152,7 @@ $('file').onchange = () => {
 $('video').onloadedmetadata = () => {
   $('video-empty').hidden = true;
   if (videoOnly()) { $('time').max = $('video').duration; $('duration').textContent = $('video').duration.toFixed(2) + ' s'; }
-  seek(t);
+  renderVideoControls(); seek(t);
 };
 $('video').onerror = () => {
   setPlaying(false);
@@ -202,13 +174,14 @@ $('show-live').onclick = () => {
   setPlaying(false); clearVideo(); session = null; selected.clear(); reference = null;
   $('title').textContent = 'Telemetría en vivo'; $('session-info').textContent = 'Los valores corresponden a los paquetes actuales del juego.';
   $('time').max = 0; $('time').value = 0; t = 0; $('duration').textContent = '0.00 s';
-  $('show-live').hidden = true; $('reference').replaceChildren(); $('laps').textContent = 'Selecciona una sesión.';
+  $('show-live').hidden = true; $('reference').replaceChildren(); allRows=[];allMode=true;videoChoices=[];$('analysis-nav').hidden=true;$('video-pane-b').hidden=true;$('video-options-button').hidden=true;$('video-split').classList.remove('two-videos');
+  $('video-options').hidden=true;$('video-options-button').setAttribute('aria-expanded','false');
   $('sync-status').textContent = ''; $('video-status').textContent = 'Abre una sesión desde el menú para analizar su video.';
   scaleCache.clear(); legendKey = null; draw();
 };
 
 function currentMeta() { return {...session?.meta, offset: Number($('offset').value) || 0}; }
-function videoOnly() { return hasVideo && session?.meta.version === 2 && !session.meta.syncSegments?.length; }
+function videoOnly() { return allMode && hasVideo && session?.meta.version === 2 && !session.meta.syncSegments?.length; }
 function toVideo(time) { return session ? RaceTimeline.toVideo(currentMeta(), time) : null; }
 function setVideoTime(value) {
   if (!Number.isFinite(value) || !Number.isFinite($('video').duration)) return;
@@ -216,21 +189,24 @@ function setVideoTime(value) {
   $('video').currentTime = pendingSeek;
 }
 function seek(value) {
-  t = Math.max(0, Math.min(Number($('time').max), value));
-  $('time').value = t;
-  const videoTime = videoOnly() ? t : toVideo(t);
-  if (hasVideo && videoTime !== null) setVideoTime(videoTime);
-  draw();
+  if(videoOnly()){
+    t=Math.max(0,Math.min(Number.isFinite($('video').duration)?$('video').duration:0,value));
+    setVideoTime(t);$('time').value=t;draw();return;
+  }
+  const bounds=playbackBounds();
+  t=Math.max(bounds.start,Math.min(bounds.end,value));
+  refreshTransport();syncVideoPanes(true);draw();
 }
 function setPlaying(value) {
   playing = value;
   $('play').textContent = playing ? 'Ⅱ Pausar' : '▶ Reproducir';
-  if (!value) $('video').pause();
+  if (!value) { $('video').pause(); $('compare-video').pause(); }
 }
-$('time').oninput = () => seek(Number($('time').value));
+$('time').oninput = () => seek(playbackBounds().start+Number($('time').value));
 $('offset').onchange = () => seek(t);
 $('align').onclick = () => {
   if (!hasVideo || !session) return;
+  if(!allMode){$('message').textContent='Ajusta la sincronización desde Todo el recorrido.';return;}
   const mapped = toVideo(t);
   if (mapped === null) { $('message').textContent = 'Este punto no tiene referencia de video.'; return; }
   $('offset').value = ((Number($('offset').value) || 0) + $('video').currentTime - mapped).toFixed(3);
@@ -243,27 +219,12 @@ $('save').onclick = action(async () => {
 });
 $('play').onclick = () => {
   if (!session) return;
-  if (t >= Number($('time').max)) seek(0);
+  const bounds=playbackBounds();
+  if(t>=bounds.end)seek(bounds.start);
   setPlaying(!playing);
-  if (playing && hasVideo && Number.isFinite($('video').duration)) {
-    $('video').play().catch(() => { setPlaying(false); $('message').textContent = 'No se pudo reproducir el video. Vuelve a pulsar Reproducir en la barra.'; });
-  }
+  syncVideoPanes(true);
 };
 $('rate').onchange = () => { $('video').playbackRate = Number($('rate').value); };
-$('video').addEventListener('seeking', () => {
-  if (pendingSeek !== null && Math.abs($('video').currentTime - pendingSeek) < .05) { pendingSeek = null; return; }
-  pendingSeek = null;
-  if (!session) return;
-  const value = RaceTimeline.fromVideo(currentMeta(), $('video').currentTime);
-  if (value !== null) { t = Math.max(0, Math.min(Number($('time').max), value)); $('time').value = t; draw(); }
-});
-$('video').addEventListener('play', () => { if (session) setPlaying(true); });
-$('video').addEventListener('pause', () => {
-  // Internal pauses cover missing footage; native controls otherwise pause everything.
-  if ((toVideo(t) !== null || videoOnly()) && !$('video').ended) { playing = false; $('play').textContent = '▶ Reproducir'; }
-});
-$('video').addEventListener('ended', () => setPlaying(false));
-
 function canvas(id) {
   const element = $(id), rect = element.getBoundingClientRect(), ratio = devicePixelRatio || 1;
   if (element.width !== Math.round(rect.width * ratio) || element.height !== Math.round(rect.height * ratio)) {
@@ -282,21 +243,20 @@ function nearest(rows, key, value) {
   return rows[lo];
 }
 function draw() {
-  const laps = visible(), rows = laps.flatMap(lap => lap.rows);
-  const current = session?.laps.find(lap => lap.rows.length && t >= lap.rows[0].t && t <= lap.rows.at(-1).t);
-  const sample = current ? nearest(current.rows, 't', t) : null;
+  const laps=session?analysisSeries():[], rows=laps.flatMap(lap=>lap.rows);
+  const sample=observedSample();
   if (playing && sample && chartRange) {
-    const full = Math.max(1,...laps.map(lap=>lap.rows.at(-1)?.d||0));
-    const next = RaceView.followRange(chartRange,[0,full],sample.d);
+    const full=analysisExtent();
+    const next=RaceView.followRange(chartRange,[0,full],analysisX(sample));
     if (Math.abs(next.start-chartRange.start)>.001) { chartRange=next; scaleCache.clear(); }
   }
-  $('clock').textContent = t.toFixed(2) + ' s';
+  $('clock').textContent = RaceAnalysis.clock(t-playbackBounds().start);
   $('metrics').textContent = sample ? `${sample.speed.toFixed(0)} km/h · ${sample.d.toFixed(0)} m` : '';
   updateTelemetryContext();
-  const nextLegend = laps.map(lap => lap.id).join(',');
+  const nextLegend=(allMode?'all:':'laps:')+laps.map(lap=>lap.id).join(',');
   if (legendKey !== nextLegend) {
     legendKey = nextLegend; $('lap-legend').replaceChildren();
-    for (const lap of laps) { const label = document.createElement('span'), dot = document.createElement('i'); dot.style.background = colors[lap.id % colors.length]; label.append(dot, `Vuelta ${lap.number}`); $('lap-legend').append(label); }
+    for (const lap of laps) { const label = document.createElement('span'), dot = document.createElement('i'); dot.style.background = colors[lap.id % colors.length]; label.append(dot, allMode?'Todo el recorrido':lapLabel(lap)); $('lap-legend').append(label); }
   }
   const [map, w, h] = canvas('map');
   if (rows.length) {
@@ -308,7 +268,7 @@ function draw() {
       map.strokeStyle = colors[lap.id % colors.length]; map.lineWidth = 2; map.beginPath();
       lap.rows.forEach((row, i) => { i === 0 || row.gap ? map.moveTo(...point(row)) : map.lineTo(...point(row)); });
       map.stroke();
-      const row = sample ? nearest(lap.rows, 'd', sample.d) : null;
+      const row=sample?(allMode?nearest(lap.rows,'t',t):nearest(lap.rows,'d',sample.d)):null;
       if (row && sample.d <= lap.rows.at(-1).d) { map.fillStyle = map.strokeStyle; map.beginPath(); map.arc(...point(row), 5, 0, Math.PI*2); map.fill(); }
     }
   } else {
@@ -362,13 +322,13 @@ function drawInstruments(sample) {
   }
 }
 function updateTelemetryContext() {
-  $('telemetry-scroll').setAttribute('aria-label',session ? 'Gráficas por distancia del instante observado' : 'Gráficas en vivo de los últimos veinte segundos');
+  $('telemetry-scroll').setAttribute('aria-label',session ? allMode?'Gráficas por tiempo del instante observado':'Gráficas por distancia del instante observado' : 'Gráficas en vivo de los últimos veinte segundos');
 }
 function metricScale(metric, series) {
   const cacheKey = metric.key + ':' + series.map(item => item.id).join(',');
   if (session && scaleCache.has(cacheKey)) return scaleCache.get(cacheKey);
   let min = 0, max = metric.max || 1;
-  if (!metric.max) for (const item of series) for (const row of item.rows) if (Number.isFinite(row[metric.key]) && (!session || !chartRange || row.d>=chartRange.start && row.d<=chartRange.end)) {
+  if (!metric.max) for (const item of series) for (const row of item.rows) if (Number.isFinite(row[metric.key]) && (!session || !chartRange || analysisX(row)>=chartRange.start && analysisX(row)<=chartRange.end)) {
     min = Math.min(min, row[metric.key]); max = Math.max(max, row[metric.key]);
   }
   const bounds = [min, max];
@@ -376,9 +336,9 @@ function metricScale(metric, series) {
   return bounds;
 }
 function drawMetrics(sample, laps) {
-  const series = session ? laps : [{id:0, rows:liveHistory}];
+  const series = session ? analysisSeries() : [{id:0, rows:liveHistory}];
   const observed = session ? sample : latest?.packet ? {...latest.packet, d:latest.packet.distance} : null;
-  const maxDistance = Math.max(1, ...laps.map(lap => lap.rows.at(-1)?.d || 0));
+  const maxDistance=analysisExtent();
   const range = chartRange || {start:0,end:maxDistance};
   const span = Math.max(.001,range.end-range.start);
   $('chart-zoom-label').textContent = (session ? maxDistance/span : 20/liveChartSpan).toFixed(1).replace('.0','')+'×';
@@ -388,7 +348,7 @@ function drawMetrics(sample, laps) {
   $('chart-pan').disabled = available < .001;
   $('chart-pan').value = available > .001 ? Math.round(Math.max(0,Math.min(1,start/available))*1000) : 0;
   $('chart-pan').style.setProperty('--window-width',Math.min(100,shown/full*100)+'%');
-  const rangeLabel = session ? `Tramo visible: ${range.start.toFixed(0)} a ${range.end.toFixed(0)} metros` : `Tramo visible: hace ${(liveChartOffset+liveChartSpan).toFixed(1)} a ${liveChartOffset.toFixed(1)} segundos`;
+  const rangeLabel = session ? allMode?`Tramo visible: ${RaceAnalysis.clock(range.start)} a ${RaceAnalysis.clock(range.end)}`:`Tramo visible: ${range.start.toFixed(0)} a ${range.end.toFixed(0)} metros` : `Tramo visible: hace ${(liveChartOffset+liveChartSpan).toFixed(1)} a ${liveChartOffset.toFixed(1)} segundos`;
   $('chart-pan').setAttribute('aria-valuetext',rangeLabel);
   $('chart-pan').title = available < .001 ? 'Acerca las gráficas para desplazarlas' : rangeLabel;
   const scrollRect = $('telemetry-scroll').getBoundingClientRect();
@@ -400,12 +360,12 @@ function drawMetrics(sample, laps) {
     if (duration) $('value-' + metric.key).nextElementSibling.textContent=duration.unit;
     const id = index === 0 ? 'charts' : 'chart-' + metric.key, element = $(id), rect = element.getBoundingClientRect();
     element.classList.toggle('live-chart', !session);
-    element.setAttribute('aria-label', metric.name + (session ? ' por distancia' : ' en vivo'));
+    element.setAttribute('aria-label', metric.name + (session ? allMode?' por tiempo':' por distancia' : ' en vivo'));
     if (rect.bottom < scrollRect.top || rect.top > scrollRect.bottom) continue;
     const [chart, width, height] = canvas(id), [min, max] = metricScale(metric, series);
     const left = metric.divisor?58:28, right = width - 8, top = 6, bottom = height - 19;
     const end = (liveHistory.at(-1)?.liveTime || 0)-liveChartOffset;
-    const point = row => [session ? left + (row.d-range.start)/span*(right-left) : left + (row.liveTime - (end-liveChartSpan))/liveChartSpan*(right-left), bottom - (row[metric.key]-min)/(max-min || 1)*(bottom-top)];
+    const point = row => [session ? left + (analysisX(row)-range.start)/span*(right-left) : left + (row.liveTime - (end-liveChartSpan))/liveChartSpan*(right-left), bottom - (row[metric.key]-min)/(max-min || 1)*(bottom-top)];
     const axisValue=value=>{if(!metric.divisor)return value.toFixed(0);const d=RaceInstruments.duration(value);return d.text+' '+d.unit;};
     chart.font = '9px Segoe UI'; chart.fillStyle = '#7489a2'; chart.fillText(axisValue(max), 0, top+6); chart.fillText(axisValue(min), 0, bottom);
     chart.strokeStyle = '#26354a'; chart.lineWidth = 1; chart.beginPath(); chart.moveTo(left, bottom); chart.lineTo(right, bottom); chart.stroke();
@@ -422,22 +382,22 @@ function drawMetrics(sample, laps) {
       }
       chart.stroke();
     }
-    if (sample) { const x = left + (sample.d-range.start)/span*(right-left); chart.strokeStyle = '#e3fff0aa'; chart.beginPath(); chart.moveTo(x, top); chart.lineTo(x, bottom); chart.stroke(); }
+    if (sample) { const x = left + (analysisX(sample)-range.start)/span*(right-left); chart.strokeStyle = '#e3fff0aa'; chart.beginPath(); chart.moveTo(x, top); chart.lineTo(x, bottom); chart.stroke(); }
     chart.restore();
-    chart.fillStyle = '#7489a2'; chart.fillText(session ? range.start.toFixed(0)+' m' : '−'+(liveChartSpan+liveChartOffset).toFixed(1)+' s', left, height-3);
-    chart.textAlign = 'right'; chart.fillText(session ? range.end.toFixed(0)+' m' : liveChartOffset<.01?'Ahora':'−'+liveChartOffset.toFixed(1)+' s', right, height-3); chart.textAlign = 'left';
+    chart.fillStyle = '#7489a2'; chart.fillText(session ? allMode?RaceAnalysis.clock(range.start):range.start.toFixed(0)+' m' : '−'+(liveChartSpan+liveChartOffset).toFixed(1)+' s', left, height-3);
+    chart.textAlign = 'right'; chart.fillText(session ? allMode?RaceAnalysis.clock(range.end):range.end.toFixed(0)+' m' : liveChartOffset<.01?'Ahora':'−'+liveChartOffset.toFixed(1)+' s', right, height-3); chart.textAlign = 'left';
   }
 }
 function chartSeek(event) {
   if (!session) return;
   const lap = session?.laps.find(item => item.id === reference);
-  if (!lap?.rows.length) return;
+  if (!allMode&&!lap?.rows.length) return;
   const rect = event.currentTarget.getBoundingClientRect();
-  const max = Math.max(1, ...visible().map(item => item.rows.at(-1)?.d || 0));
+  const max=analysisExtent();
   const range = chartRange || {start:0,end:max};
   const left=['lapTime','raceTime'].includes(event.currentTarget.dataset.key)?58:28;
   const distance = range.start + Math.max(0, Math.min(1, (event.clientX-rect.left-left)/(rect.width-left-8))) * (range.end-range.start);
-  seek(nearest(lap.rows, 'd', distance).t);
+  if(allMode)seek(distance);else seek(nearest(lap.rows,'d',distance).t);
 }
 for (const element of $('telemetry-rows').querySelectorAll('canvas')) {
   element.onpointerdown = event => { if (!session) return; chartDragging = true; element.setPointerCapture(event.pointerId); chartSeek(event); };
@@ -446,7 +406,7 @@ for (const element of $('telemetry-rows').querySelectorAll('canvas')) {
   element.addEventListener('wheel',event=>{
     if (!event.ctrlKey) return;
     event.preventDefault();
-    const max=Math.max(1,...visible().map(lap=>lap.rows.at(-1)?.d||0));
+    const max=analysisExtent();
     const range=chartRange||{start:0,end:max}, rect=element.getBoundingClientRect();
     const left=['lapTime','raceTime'].includes(element.dataset.key)?58:28;
     const fraction=Math.max(0,Math.min(1,(event.clientX-rect.left-left)/(rect.width-left-8)));
@@ -456,11 +416,10 @@ for (const element of $('telemetry-rows').querySelectorAll('canvas')) {
 function zoomCharts(factor,anchor) {
   if (!session) { liveChartSpan=Math.max(.5,Math.min(20,liveChartSpan/factor)); liveChartOffset=Math.min(liveChartOffset,20-liveChartSpan); }
   else {
-    const max=Math.max(1,...visible().map(lap=>lap.rows.at(-1)?.d||0));
-    const lap=session.laps.find(lap=>lap.rows.length&&t>=lap.rows[0].t&&t<=lap.rows.at(-1).t);
-    const sample=lap?nearest(lap.rows,'t',t):null;
+    const max=analysisExtent();
+    const sample=observedSample();
     const current=chartRange||{start:0,end:max};
-    const target=anchor ?? sample?.d ?? (current.start+current.end)/2;
+    const target=anchor ?? (sample?analysisX(sample):null) ?? (current.start+current.end)/2;
     // Toolbar zoom recenters on the analysis cursor even if it left the previous window.
     const initial=anchor===undefined ? {start:Math.max(0,Math.min(max-(current.end-current.start),target-(current.end-current.start)/2)),end:0} : current;
     if (anchor===undefined) initial.end=initial.start+current.end-current.start;
@@ -474,7 +433,7 @@ $('chart-zoom-reset').onclick=()=>{chartRange=null;liveChartSpan=20;liveChartOff
 $('chart-pan').oninput=()=>{
   const fraction=Number($('chart-pan').value)/1000;
   if (session) {
-    const full=Math.max(1,...visible().map(lap=>lap.rows.at(-1)?.d||0));
+    const full=analysisExtent();
     const span=chartRange?chartRange.end-chartRange.start:full;
     const start=fraction*Math.max(0,full-span);
     chartRange={start,end:start+span};
@@ -505,15 +464,10 @@ function frame(now) {
       $('clock').textContent = video.currentTime.toFixed(2) + ' s · video sin sincronizar';
     }
   } else if (playing && session) {
-    t = Math.min(Number($('time').max), t + Math.min((now-last)/1000, .1)*Number($('rate').value));
-    const videoTime = toVideo(t), video = $('video');
-    if (hasVideo && videoTime !== null && Number.isFinite(video.duration)) {
-      if (Math.abs(video.currentTime-videoTime) > .15) setVideoTime(videoTime);
-      video.playbackRate = Number($('rate').value);
-      if (video.paused && !video.ended) video.play().catch(() => { setPlaying(false); $('message').textContent = 'Vuelve a pulsar Reproducir en la barra flotante.'; });
-    } else if (!video.paused) video.pause();
-    $('time').value = t; draw();
-    if (t >= Number($('time').max)) setPlaying(false);
+    const bounds=playbackBounds(),dt=Math.min((now-last)/1000,.1);
+    t=Math.min(bounds.end,t+dt*Number($('rate').value));
+    syncVideoPanes(false,dt);refreshTransport();draw();
+    if(t>=bounds.end)setPlaying(false);
   }
   last = now; requestAnimationFrame(frame);
 }
@@ -553,5 +507,6 @@ events.onmessage = event => { try { live(JSON.parse(event.data)); } catch (e) { 
 events.onerror = () => { $('status').textContent = 'Servidor desconectado · reconectando…'; };
 list().catch(e => { $('message').textContent = e.message; });
 const resizeObserver = new ResizeObserver(() => requestAnimationFrame(draw));
+setupAnalysisUI();
 resizeObserver.observe($('map')); resizeObserver.observe($('telemetry-scroll'));
 draw();

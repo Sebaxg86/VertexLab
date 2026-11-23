@@ -192,3 +192,21 @@ Fuentes: [formato oficial de FH6](https://support.forza.net/hc/en-us/articles/51
 [protocolo OBS](https://github.com/obsproject/obs-websocket/blob/master/docs/generated/protocol.md).
 Únicamente se reutilizó el catálogo de vehículos de fh6-tel con su licencia MIT;
 ver `THIRD_PARTY_NOTICES.md`. La implementación de RaceLab es independiente.
+
+## Selección de recorrido y vueltas
+
+El header incluye «Todo el recorrido» fijo y una lista horizontal de vueltas con
+sus tiempos registrados. Las capturas incompletas se identifican como parciales.
+En Todo, las gráficas usan el tiempo de sesión: se recorre la grabación completa
+sin superponer vueltas. En una vuelta, el reproductor queda limitado a su tramo.
+Puedes marcar varias vueltas para comparar las gráficas y trazadas por distancia;
+volver a pulsar una vuelta la desmarca, y quitar la última vuelve a Todo.
+
+Se muestran como máximo dos videos, en columnas. Desde «Videos» eliges cuáles de
+las vueltas marcadas ver y cuál es la referencia del reloj y de los indicadores.
+La comparación alinea los videos por distancia sobre esa referencia, utilizando
+las referencias de sincronización existentes de OBS. El audio sale del primero.
+Si falta cobertura en una vuelta o video, se indica y se pausa ese panel, sin
+extrapolar imágenes. Los archivos grabados y sus referencias no se modifican.
+
+Verificación adicional: `node --test tests/analysis-model.test.cjs`.

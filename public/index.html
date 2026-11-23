@@ -6,6 +6,7 @@
   <button id="menu-toggle" class="icon-button" aria-label="Abrir menú" aria-controls="session-menu" aria-expanded="false"><span aria-hidden="true">☰</span></button>
   <strong>RACE<span>LAB</span></strong>
   <div class="session-heading"><span class="eyebrow">ANÁLISIS DE SESIÓN</span><h1 id="title">Tu próxima sesión, bajo la lupa.</h1><p id="session-info" class="hint">Abre una sesión desde el menú para analizarla.</p></div>
+  <nav id="analysis-nav" aria-label="Seleccionar recorrido y vueltas" hidden><button id="all-laps" aria-pressed="true">Todo el recorrido</button><div id="lap-tabs" aria-label="Vueltas de la sesión"></div></nav>
   <label class="button import-button">Abrir video local<input id="file" type="file" accept="video/mp4,video/webm,video/x-matroska,.mkv" hidden></label>
   <output id="status">Conectando…</output>
 </header>
@@ -28,9 +29,6 @@
   </details>
   <div class="section-head"><h3>SESIONES GUARDADAS</h3><button id="refresh" class="icon-button" title="Actualizar sesiones" aria-label="Actualizar sesiones">↻</button></div>
   <div id="sessions"></div>
-  <div class="drawer-divider"></div>
-  <h3>VUELTAS SUPERPUESTAS</h3><label>Vuelta de referencia <select id="reference" aria-label="Vuelta de referencia"></select></label>
-  <div id="laps">Selecciona una sesión.</div>
   <details><summary>Ajuste fino de sincronización</summary><div class="sync"><label>Corrección (s) <input id="offset" type="number" step="0.01" value="0"></label><button id="align">Alinear fotograma actual con cursor</button><button id="save">Guardar corrección</button><small>La asociación automática usa referencias de OBS por cada tramo entre pausas.</small></div></details>
   <p id="sync-status" class="hint"></p>
   <details><summary>Estado del video</summary><p id="video-status" class="hint">Conecta OBS desde el menú para asociar el video automáticamente.</p></details>
@@ -40,7 +38,9 @@
     <div class="visual-column">
       <article class="video-panel">
         <h2 class="sr-only">Video de sesión</h2>
-        <div class="video-stage"><video id="video" playsinline disablepictureinpicture preload="metadata" aria-label="Video de la sesión; controles en la barra flotante"></video><div id="video-empty"><span aria-hidden="true">▷</span><p>Tu carrera empieza aquí</p><small>Selecciona una sesión con video desde el menú.</small></div></div>
+        <div class="video-stage"><div id="video-split"><div class="video-pane" id="video-pane-a"><video id="video" playsinline disablepictureinpicture preload="metadata" aria-label="Primer video de análisis"></video><span id="video-label-a" class="video-label">Todo el recorrido</span><span id="video-warning-a" class="video-warning" hidden></span></div><div class="video-pane" id="video-pane-b" hidden><video id="compare-video" playsinline disablepictureinpicture preload="metadata" muted aria-label="Segundo video de análisis"></video><span id="video-label-b" class="video-label"></span><span id="video-warning-b" class="video-warning" hidden></span></div></div><div id="video-empty"><span aria-hidden="true">▷</span><p>Tu carrera empieza aquí</p><small>Selecciona una sesión con video desde el menú.</small></div></div>
+        <button id="video-options-button" aria-expanded="false" aria-controls="video-options" hidden>Videos ▾</button>
+        <div id="video-options" hidden><label>Video 1<select id="video-choice-a" aria-label="Vuelta del primer video"></select></label><label>Video 2<select id="video-choice-b" aria-label="Vuelta del segundo video"></select></label><label>Vuelta de referencia<select id="reference" aria-label="Vuelta de referencia"></select></label><small id="video-selection-note"></small></div>
       </article>
       <section id="instant-dashboard" class="instant-dashboard" aria-label="Indicadores del instante observado">
         <div class="instant-heading"><h2>Al volante</h2><span id="instant-source">En vivo</span><small id="instant-note">Esperando datos de conducción</small></div>
@@ -80,5 +80,5 @@
   <select id="rate" aria-label="Velocidad de reproducción"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
   <button id="mute" class="icon-button" aria-label="Silenciar video" aria-pressed="false">♪</button><input id="volume" aria-label="Volumen del video" type="range" min="0" max="1" step="0.05" value="1">
 </nav>
-<script src="timeline.js"></script><script src="instruments.js"></script><script src="view-math.js"></script><script src="app.js"></script>
+<script src="timeline.js"></script><script src="instruments.js"></script><script src="view-math.js"></script><script src="analysis-model.js"></script><script src="analysis-ui.js"></script><script src="app.js"></script>
 </body></html>

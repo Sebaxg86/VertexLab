@@ -1,0 +1,12 @@
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const {clock,bounds,sessionRows,atDistance,videoChoices}=require('../public/analysis-model.js');
+const laps=[{id:0,rows:[{t:0,d:0},{t:10,d:100}]},{id:1,rows:[{t:10.02,d:0},{t:22,d:100}]}];
+test('whole session retains session time and accumulates distance without changing saved rows',()=>{const rows=sessionRows(laps);assert.deepEqual(rows.map(r=>r.t),[0,10,10.02,22]);assert.deepEqual(rows.map(r=>r.d),[0,100,100,200]);assert.equal(rows[3].lapDistance,100);assert.equal(laps[1].rows[0].d,0);});
+test('lap bounds constrain playback to recorded portion',()=>{assert.deepEqual(bounds(laps[1]),{start:10.02,end:22});assert.deepEqual(bounds(undefined),{start:0,end:0});});
+test('comparison maps equal distance to different session video times',()=>{assert.equal(atDistance(laps[0],50),5);assert.equal(atDistance(laps[1],50),16.009999999999998);assert.equal(atDistance(laps[1],-1),null);assert.equal(atDistance(laps[1],101),null);});
+test('comparison never interpolates missing coverage',()=>{assert.equal(atDistance({rows:[{t:0,d:0},{t:10,d:100,breakBefore:true}]},50),null);assert.equal(atDistance({rows:[{t:0,d:0},{t:10,d:100,gap:true}]},50),null);});
+test('fifteen comparisons retain at most two stable valid video choices',()=>{const selected=new Set(Array.from({length:15},(_,i)=>i));assert.deepEqual(videoChoices(selected,[7,12]),[7,12]);selected.delete(7);assert.deepEqual(videoChoices(selected,[7,12]),[12,0]);assert.deepEqual(videoChoices(new Set([3]),[7,12]),[3]);});
+test('lap clock handles millisecond rollover',()=>{assert.equal(clock(59.9996),'1:00.000');assert.equal(clock(106.589),'1:46.589');});
+const {sampleAtTime}=require('../public/analysis-model.js');
+test('smooth distance clocks keep measured readings and refuse telemetry gaps',()=>{const rows=[{t:10,d:0,speed:20},{t:12,d:100,speed:80}];const sample=sampleAtTime(rows,10.5);assert.equal(sample.d,25);assert.equal(sample.t,10.5);assert.equal(sample.speed,20);assert.equal(sampleAtTime(rows,9),null);assert.equal(sampleAtTime([{t:0,d:0},{t:1,d:10,gap:true}],.5),null);});
