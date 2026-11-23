@@ -1,3 +1,13 @@
+const headerBrands=new Map();
+function renderHeaderBrand(){
+  const container=$('header-brand'),brand=session?headerBrands.get(session.meta.carOrdinal):null;
+  if(!brand?.logo){container.hidden=true;container.replaceChildren();return;}
+  if(container.dataset.logo===brand.logo&&container.firstElementChild){container.hidden=false;return;}
+  container.replaceChildren();container.dataset.logo=brand.logo;
+  const logo=document.createElement('img');logo.src=brand.logo;logo.alt=brand.name;logo.width=30;logo.height=30;
+  if(brand.logo.endsWith('.svg'))logo.className='brand-vector';
+  logo.onerror=()=>{container.hidden=true;};container.append(logo);container.hidden=false;
+}
 /* The LIVE clock is based on packet arrival, never on saved session data. */
 (function(root){
   function connection(state,now,stream=true,receivedAt){
@@ -47,7 +57,7 @@ function setViewLayout(isLive){
   $('instant-dashboard').setAttribute('aria-label',isLive?'Instrumentos LIVE en tiempo real':'Indicadores del instante observado');
   if(isLive)$('live-dashboard-host').append($('instant-dashboard'));
   else{document.querySelector('.visual-column').append($('instant-dashboard'));$('view-eyebrow').textContent='ANÁLISIS DE SESIÓN';}
-  updateLiveView();
+  updateLiveView();renderHeaderBrand();
 }
 function openLiveView(){
   clearAnalysisHover();preferredMapLap=null;
@@ -64,6 +74,7 @@ function renderPickerSessions(items){
   $('picker-count').textContent=items.length;
   if(!items.length){const empty=document.createElement('p');empty.className='picker-empty';empty.textContent='Tus carreras aparecerán aquí cuando se guarden.';container.append(empty);}
   for(const item of items){
+    headerBrands.set(item.carOrdinal,item.brand);
     const button=document.createElement('button');button.className='picker-session';
     button.setAttribute('aria-current',session?.meta.id===item.id?'page':'false');
     const preview=document.createElement('span');preview.className='picker-route';
@@ -91,7 +102,7 @@ function renderPickerSessions(items){
     button.onclick=action(async()=>{button.disabled=true;try{await load(item.id);setSessionPicker(false);setMenu(false);}finally{button.disabled=false;}});
     container.append(button);
   }
-  container.scrollTop=scroll;
+  container.scrollTop=scroll;renderHeaderBrand();
 }
 function setupViewUI(){
   $('session-trigger').onclick=()=>setSessionPicker($('session-trigger').getAttribute('aria-expanded')!=='true');
