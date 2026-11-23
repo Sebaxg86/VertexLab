@@ -1,13 +1,14 @@
 import argparse
 import json
 import mimetypes
+import os
 import queue
 import re
 import socket
 import threading
 import time
 from pathlib import Path
-from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer as BaseHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
 from obs_control import OBS
@@ -17,6 +18,16 @@ from telemetry import decode, analyze
 ROOT = Path(__file__).resolve().parent
 
 
+class ThreadingHTTPServer(BaseHTTPServer):
+    # Windows address reuse can let two RaceLab processes share the HTTP port.
+    allow_reuse_address = os.name != 'nt'
+
+    def server_bind(self):
+        if os.name == 'nt':
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+
 class Runtime:
     def __init__(self, data, obs=None):
         self.data = Path(data)
@@ -24,6 +35,7 @@ class Runtime:
         self.lock = threading.RLock()
         self.live_lock = threading.Lock()
         self.live = dict(packet=None, packets=0, invalid=0, dropped=0, lastPacket=None, udpError=None)
+        self.last_packet_monotonic = None
         self.pending = queue.Queue(maxsize=20000)
         self.closed = threading.Event()
         self.worker = threading.Thread(target=self.run, daemon=True)
@@ -35,6 +47,8 @@ class Runtime:
             result = self.recorder.status()
         with self.live_lock:
             result.update(self.live)
+            result['packetAge'] = max(0, time.monotonic()-self.last_packet_monotonic) if self.last_packet_monotonic is not None else None
+        result['telemetryVersion'] = 2
         if result['packet']:
             result['carName'] = car_name(result['packet']['carOrdinal'])
         return result
@@ -139,6 +153,7 @@ class Runtime:
             return
         with self.live_lock:
             self.live.update(packet=row, lastPacket=time.time())
+            self.last_packet_monotonic = time.monotonic()
             self.live['packets'] += 1
         try:
             self.pending.put_nowait(('packet',row,wall))
@@ -148,6 +163,8 @@ class Runtime:
 
     def listen(self, host, port):
         self.sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        if os.name == 'nt':
+            self.sock.setsockopt(socket.SOL_SOCKET,socket.SO_EXCLUSIVEADDRUSE,1)
         self.sock.setsockopt(socket.SOL_SOCKET,socket.SO_RCVBUF,1024*1024)
         self.sock.settimeout(.2)
         try:

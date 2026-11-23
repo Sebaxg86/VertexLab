@@ -220,9 +220,14 @@ LIVE abre un tablero dedicado para el segundo monitor: marcha, velocidad y luces
 al centro, y dirección, fuerzas G y neumáticos debajo. Puedes abrir directamente
 `http://127.0.0.1:8765/#live` en otra ventana. Recargar conserva la vista elegida.
 
-El indicador verde respira mientras llegan paquetes recientes de Forza. Tras dos
-segundos sin datos, o al perder la conexión al servidor, cambia a OFF LIVE y limpia
-los indicadores; no conserva lecturas viejas como si fueran actuales. Los paquetes
+El indicador verde respira mientras llegan paquetes recientes de Forza. Las lecturas se limpian tras dos segundos sin datos. El estado LIVE tolera
+cortes UDP de hasta cinco segundos y reconexiones breves del visor antes de pasar
+a OFF LIVE; no conserva lecturas viejas como si fueran actuales. La antigüedad
+del paquete usa un reloj monotónico del servidor y el tiempo transcurrido local,
+sin comparar el reloj del navegador con el de Windows. Los paquetes
 de pausa o menú mantienen la conexión e indican ese estado, sin mostrar conducción
 activa. Guardar automáticamente una carrera no saca al usuario de LIVE. El selector
 admite Escape, teclado y movimiento reducido del sistema.
+
+Los cambios de Python requieren reiniciar el servidor, además de recargar el visor.
+En Windows los puertos HTTP/UDP son exclusivos para evitar instancias superpuestas.

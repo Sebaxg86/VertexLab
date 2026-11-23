@@ -238,7 +238,7 @@ function nearest(rows, key, value) {
   return rows[lo];
 }
 function draw() {
-  if(!session){drawInstruments(RaceConnection.connection(latest,Date.now()/1000,streamConnected).active?latest.packet:null);return;}
+  if(!session){drawInstruments(liveConnection().active?latest.packet:null);return;}
   const laps=session?analysisSeries():[], rows=laps.flatMap(lap=>lap.rows);
   const sample=observedSample();
   if (playing && sample && chartRange) {
@@ -271,7 +271,7 @@ function draw() {
     map.fillStyle = '#8997aa'; map.font = '12px Segoe UI'; map.fillText('Abre una sesión para ver su recorrido.', 20, h/2);
   }
   drawMetrics(sample, laps);
-  const liveRecent = RaceConnection.connection(latest,Date.now()/1000,streamConnected).active;
+  const liveRecent = liveConnection().active;
   drawInstruments(session ? sample : liveRecent && latest?.packet?.active ? latest.packet : null);
   if (session && hasVideo && !videoOnly() && toVideo(t) === null) $('clock').textContent += ' · sin video';
 }
@@ -470,8 +470,8 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 function live(state) {
-  latest = state;streamConnected=true;updateLiveView();
-  const connected = state.lastPacket && Date.now()/1000-state.lastPacket < 2;
+  latest = state;streamConnected=true;liveReceivedAt=Number.isFinite(state.packetAge)?performance.now()/1000:Date.now()/1000;updateLiveView();
+  const connected = liveConnection().online;
   $('status').textContent = state.udpError ? 'Error UDP: '+state.udpError : `UDP ${connected ? 'activo' : 'en espera'} · ${state.packets} paquetes · ${state.invalid} rechazados · ${state.dropped} perdidos en cola`;
   $('auto').checked = state.auto;
   $('capture-state').dataset.mode = state.mode;

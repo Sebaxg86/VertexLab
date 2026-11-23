@@ -314,6 +314,29 @@ class HTTPTests(unittest.TestCase):
                                      headers=headers or {'Content-Type':'application/json'})
         return urllib.request.urlopen(req,timeout=5)
 
+    def test_status_exposes_current_instruments_and_monotonic_packet_age(self):
+        raw = packet(event=False)
+        struct.pack_into('<b', raw, 320, -64)
+        struct.pack_into('<fff', raw, 20, 3.0, 0.0, -4.0)
+        struct.pack_into('<ffff', raw, 268, 176, 194, 212, 158)
+        self.runtime.ingest(raw)
+        with self.request('/api/status') as response:
+            status = json.load(response)
+        self.assertEqual(status['telemetryVersion'], 2)
+        self.assertGreaterEqual(status['packetAge'], 0)
+        self.assertLess(status['packetAge'], 1)
+        self.assertEqual(status['packet']['steer'], -64)
+        self.assertEqual(status['packet']['accelX'], 3)
+        self.assertEqual(status['packet']['accelZ'], -4)
+        self.assertEqual(status['packet']['tireTempsC'], [80, 90, 100, 70])
+        with patch('server.time.time', return_value=0):
+            self.assertLess(self.runtime.status()['packetAge'], 1)
+
+    @unittest.skipUnless(sys.platform == 'win32', 'Windows exclusive listener')
+    def test_second_server_cannot_share_http_port(self):
+        with self.assertRaises(OSError):
+            ThreadingHTTPServer(self.http.server_address, handler_for(self.runtime))
+
     def test_udp_auto_record_reload_and_video_range(self):
         video = Path(self.tmp.name)/'synthetic-test.mp4'
         video.write_bytes(b'0123456789')

@@ -1,14 +1,17 @@
 /* The LIVE clock is based on packet arrival, never on saved session data. */
 (function(root){
-  function connection(state,now,stream=true){
-    const age=now-(state?.lastPacket??-Infinity);
-    const online=!!(stream&&state?.packet&&!state.udpError&&age>=0&&age<2);
-    return {online,active:online&&!!state.packet.active,label:online?'LIVE':'OFF LIVE',detail:!stream?'Servidor desconectado · reconectando…':state?.udpError?'No se pudo abrir el receptor UDP':online?state.packet.active?'Recibiendo telemetría en tiempo real':'Forza conectado · juego en pausa o menú':'Sin señal de Forza · esperando Data Out'};
+  function connection(state,now,stream=true,receivedAt){
+    const elapsed=Number.isFinite(receivedAt)?Math.max(0,now-receivedAt):Infinity;
+    const age=Number.isFinite(state?.packetAge)?state.packetAge+(Number.isFinite(elapsed)?elapsed:0):Math.max(0,now-(state?.lastPacket??-Infinity));
+    const online=!!((stream||elapsed<2)&&state?.packet&&!state.udpError&&age<5);
+    const fresh=age<2;
+    return {online,active:online&&fresh&&!!state.packet.active,label:online?'LIVE':'OFF LIVE',detail:!stream?'Servidor desconectado · reconectando…':state?.udpError?'No se pudo abrir el receptor UDP':online?!fresh?'Señal interrumpida · esperando nuevos datos':state.packet.active?'Recibiendo telemetría en tiempo real':'Forza conectado · juego en pausa o menú':'Sin señal de Forza · esperando Data Out'};
   }
   root.RaceConnection={connection};
   if(typeof module!=='undefined')module.exports=root.RaceConnection;
 })(globalThis);
-let pickerTimer,streamConnected=false;
+let pickerTimer,streamConnected=false,liveReceivedAt=null;
+function liveConnection(){return RaceConnection.connection(latest,Number.isFinite(latest?.packetAge)?performance.now()/1000:Date.now()/1000,streamConnected,liveReceivedAt);}
 function setViewText(id,value){if($(id).textContent!==value)$(id).textContent=value;}
 function setSessionPicker(open,restoreFocus=false){
   clearTimeout(pickerTimer);
@@ -20,7 +23,7 @@ function setSessionPicker(open,restoreFocus=false){
   if(restoreFocus)$('session-trigger').focus();
 }
 function updateLiveView(){
-  const state=RaceConnection.connection(latest,Date.now()/1000,streamConnected);
+  const state=liveConnection();
   document.body.dataset.liveConnected=String(state.online);
   setViewText('picker-live-status',state.online?'Conectado':'Sin señal');
   $('picker-live').setAttribute('aria-current',session?'false':'page');
