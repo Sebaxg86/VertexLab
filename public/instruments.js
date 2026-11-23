@@ -36,8 +36,8 @@
     let started=same?previous.started:null;
     if(!animate||!valid)started=null;
     else if(same&&finite(previous.gear)&&previous.gear!==gear)started=now;
-    const elapsed=started===null?150:Math.max(0,now-started),active=!!animate&&valid&&elapsed<150;
-    const progress=active?1-Math.pow(1-elapsed/150,3):1;
+    const elapsed=started===null?220:Math.max(0,now-started),active=!!animate&&valid&&elapsed<220;
+    const progress=active?1-Math.pow(1-elapsed/220,3):1;
     return {context,gear:valid?gear:null,started:active?started:null,active,ratio:valid?ratio*progress:ratio};
   }
   root.RaceInstruments = {values,duration,rpmReference,revLights,revSweep};
