@@ -31,6 +31,11 @@
     const best=Math.min(...complete.map(lap=>lap.time));
     return complete.filter(lap=>Math.abs(lap.time-best)<.0005).map(lap=>lap.id);
   }
-  root.RaceAnalysis={clock,bounds,sessionRows,atDistance,videoChoices,sampleAtTime,fastestLapIds};
+  function lapSummary(laps){
+    const rows=laps.filter(lap=>lap.rows.length).map(lap=>({id:lap.id,number:lap.number,partial:!!lap.partial,time:lap.partial?bounds(lap).end-bounds(lap).start:lap.rows.reduce((max,row)=>Math.max(max,Number.isFinite(row.lapTime)?row.lapTime:0),0)}));
+    const best=Math.min(...rows.filter(row=>!row.partial&&row.time>0).map(row=>row.time));
+    return rows.map(row=>({...row,best:!row.partial&&row.time>0&&Math.abs(row.time-best)<.0005,delta:!row.partial&&row.time>0&&Number.isFinite(best)?Math.max(0,row.time-best):null}));
+  }
+  root.RaceAnalysis={clock,bounds,sessionRows,atDistance,videoChoices,sampleAtTime,fastestLapIds,lapSummary};
   if(typeof module!=='undefined')module.exports=root.RaceAnalysis;
 })(globalThis);

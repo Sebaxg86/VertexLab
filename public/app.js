@@ -23,6 +23,8 @@ for (let index=0; index<4; index++) {
   const tile = document.createElement('div');
   tile.className = 'tire-tile'; tile.id = 'tire-' + index;
   tile.innerHTML = `<svg viewBox="0 0 36 64" aria-hidden="true" class="racing-tire"><rect x="3" y="2" width="30" height="60" rx="9" class="tire-body"/><path d="M8 7v50M28 7v50" class="tire-shoulder"/><path d="M14 4v56M22 4v56" class="tire-groove"/><path d="m4 12 9-5m-9 17 9-5m-9 17 9-5m-9 17 9-5m10-36 9 5m-9 7 9 5m-9 7 9 5m-9 7 9 5" class="tire-tread"/><path d="M16 12h4M16 22h4M16 32h4M16 42h4M16 52h4" class="tire-sipes"/></svg><div class="tire-info"><span>${tireLabels[index]}</span><output id="tire-temp-${index}">—</output><small id="tire-slip-${index}">Sin datos</small><div class="slip-meter"><i id="tire-slip-bar-${index}"></i><em></em></div></div>`;
+  tile.querySelector('.tire-info>span').dataset.short=['DI','DD','TI','TD'][index];
+  tile.querySelector('.tire-info>span').title=tireLabels[index];
   $('tire-grid').append(tile);
 }
 for (const [index, metric] of metricDefs.entries()) {
@@ -286,6 +288,22 @@ function paint() {
   frameRects=null;
   $('workspace').dataset.renderMs=(performance.now()-renderStarted).toFixed(2);
 }
+let lapSummarySource=null;
+function renderLapSummary(){
+  const source=session?.laps||null;
+  if(lapSummarySource===source&&$('lap-summary').childElementCount)return;
+  lapSummarySource=source;
+  const list=$('lap-summary');list.replaceChildren();
+  const rows=RaceAnalysis.lapSummary(source||[]);
+  if(!rows.length){const empty=document.createElement('li');empty.className='lap-summary-empty';empty.textContent=session?'Sin vueltas registradas':'Abre una sesión para ver sus vueltas';list.append(empty);return;}
+  for(const row of rows){
+    const item=document.createElement('li');item.className='lap-summary-item';item.classList.toggle('is-best',row.best);
+    const label=document.createElement('span');label.className='lap-summary-label';label.textContent=lapLabel(row);
+    const time=document.createElement('strong');time.textContent=RaceAnalysis.clock(row.time);
+    const delta=document.createElement('small');delta.textContent=row.partial?'Parcial':row.best?'MEJOR VUELTA':row.delta===null?'Sin referencia':'+'+row.delta.toFixed(3)+' s';
+    item.append(label,time,delta);list.append(item);
+  }
+}
 function drawInstruments(sample) {
   const rpm = sample?.rpm, gear = sample?.gear;
   const {ratio,maximum,engine} = RaceInstruments.rpmReference(sample,session?sessionRpmPeak:liveRpmPeak);
@@ -303,10 +321,7 @@ function drawInstruments(sample) {
   $('rev-lights').setAttribute('title',`Aviso de cambio estimado al 88% · ${maximum?Math.round(maximum*.88).toLocaleString('es-MX'):'—'} RPM · luces de las orillas al centro`);
   [...$('rev-lights').children].forEach((led,index)=>{led.classList.toggle('lit',lights.lit[index]);led.style.setProperty('--led-strength',lights.levels[index]);});
   $('instant-gear').dataset.highRpm = engine && ratio !== null && ratio>.95 ? 'true' : 'false';
-  const impact=Number.isFinite(sample?.smashableVelDiff)&&Number.isFinite(sample?.smashableMass);
-  $('impact-panel').dataset.impact=impact&&sample.smashableVelDiff>0?'true':'false';
-  $('impact-delta').textContent=impact?sample.smashableVelDiff.toFixed(2)+' m/s':'Sin datos';
-  $('impact-mass').textContent=impact?sample.smashableMass.toFixed(0)+' kg':'—';
+  renderLapSummary();
   const measured = RaceInstruments.values(sample);
   textValue('instant-source',session ? 'Sesión · ' + t.toFixed(2) + ' s' : sample ? 'LIVE' : 'En espera');
   const missing = measured.steer === null || measured.lateral === null || measured.longitudinal === null || measured.tires.some(tire => tire.temp === null || tire.slip === null);
