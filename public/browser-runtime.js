@@ -1,6 +1,7 @@
 /* In-memory storage adapter for the static viewer. Session files never leave the device. */
 (function(root){
   const enabled=document.body.dataset.mode==='viewer',sessions=new Map();let catalog=null;let initialized;
+  const mobileApple=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   const saved=new Map();
   async function initialize(){return initialized??=(async()=>{for(const record of await VertexLibrary.records())saved.set(record.id,record);})();}
   async function catalogs(){
@@ -8,7 +9,7 @@
     return catalog;
   }
   function get(id){const item=sessions.get(id);if(!item)throw Error('Vuelve a abrir el archivo .vrtx en este dispositivo');return item;}
-  function release(item){if(item?.url)URL.revokeObjectURL(item.url);chartLayers.clear();mapLayer=null;mapSegments=[];chartSegments.clear();RaceRender.mapData([]);}
+  function release(item){if(item?.url?.startsWith('blob:'))URL.revokeObjectURL(item.url);if(item)navigator.serviceWorker?.controller?.postMessage({type:'vertex-media-release',id:item.meta.id});chartLayers.clear();mapLayer=null;mapSegments=[];chartSegments.clear();RaceRender.mapData([]);}
   async function open(file,progress,{id:existingId,persist=true}={}){
     if(!enabled)throw Error('Visor no disponible');
     const [cars,brands]=await catalogs();
@@ -42,6 +43,7 @@
     await initialize();
     if(path==='sessions'){const result=new Map([...saved].map(([id,item])=>[id,{...item.meta,preview:item.preview}]));for(const [id,item] of sessions)result.set(id,{...item.meta,preview:item.preview});return [...result.values()];}
     const [action,id]=path.split('/');
+    if(action==='sessions'){for(const [otherId,other] of sessions){if(otherId!==id&&saved.has(otherId)){release(other);sessions.delete(otherId);}}}
     if(action==='sessions'&&!sessions.has(id)&&saved.has(id)){const record=saved.get(id);await open(await VertexLibrary.file(record),progress=>{document.querySelector('.session-loading-card>span').textContent=progress.phase+' · '+progress.percent+'%';},{id,persist:false});Object.assign(get(id).meta,record.meta);}
     const item=get(id);
     if(action==='sessions')return {meta:{...item.meta},laps:item.laps};
@@ -49,6 +51,17 @@
     if(action==='delete'){release(item);sessions.delete(id);return {ok:true};}
     if(action==='sync'){item.meta.offset=Number(body.offset)||0;return {ok:true};}
     throw Error('Esta función requiere VertexLab Capture en la PC');
+  }
+  async function prepareVideo(id){
+    const item=get(id);if(!item.video||item.url)return;
+    if(!$('library-range-video')?.checked)return;
+    if(saved.has(id)){const record=saved.get(id);record.video=item.video;await VertexLibrary.update(record);}
+    const registration=await navigator.serviceWorker?.ready;
+    const controller=navigator.serviceWorker?.controller;
+    if(!controller||!registration)throw Error('Cierra VertexLab y vuelve a abrirlo para activar el reproductor local actualizado.');
+    const channel=new MessageChannel();
+    await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{channel.port1.close();reject(Error('El reproductor local necesita actualizarse. Cierra todas las ventanas de VertexLab y vuelve a abrirlo.'));},4000);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data.ok?resolve():reject(Error('No se pudo preparar el video local'));};controller.postMessage({type:'vertex-media',id,video:item.video,size:item.file.size},[channel.port2]);});
+    item.url=new URL('__vertex_media/'+id+'/video',registration.scope).href;
   }
   function videoURL(id){const item=get(id);if(!item.video)return null;if(!item.url)item.url=URL.createObjectURL(item.file.slice(item.video.offset,item.video.offset+item.video.size,item.video.type));return item.url;}
   function original(id){return get(id).file;}
@@ -69,11 +82,16 @@
     $('video-empty').append(button);
     $('delete-session').onclick=action(async()=>{if(!session)return;const id=session.meta.id;clearVideo();await request('delete/'+id,{});openLiveView();await list();$('message').textContent='Sesión cerrada. Tu archivo original no se ha eliminado.';});
     if('serviceWorker' in navigator&&isSecureContext)navigator.serviceWorker.register(new URL('sw.js',document.baseURI),{updateViaCache:'none'}).catch(()=>{});
+    navigator.serviceWorker?.addEventListener('message',async event=>{
+      if(event.data?.type!=='vertex-media-range'||!event.ports[0])return;
+      const port=event.ports[0];
+      try{const {id,start,end}=event.data,file=get(id).file;if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<=start||end>file.size||end-start>256*1024)throw Error('Invalid local media range');const reader=new FileReader();const buffer=await new Promise((resolve,reject)=>{reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error||Error('Local media read failed'));reader.readAsArrayBuffer(file.slice(start,end));});port.postMessage({buffer},[buffer]);}catch(error){port.postMessage({error:error.message});}finally{port.close();}
+    });
     setupLibraryUI();decorate();
     initialize().then(()=>list()).catch(error=>{$('message').textContent='Biblioteca no disponible: '+error.message;});
   }
   function setupLibraryUI(){
-    const settings=document.createElement('dialog');settings.id='library-settings';settings.innerHTML=`<h2>BIBLIOTECA DEL DISPOSITIVO</h2><p>Elige dónde guardar las próximas sesiones. Las anteriores conservan su ubicación.</p><label class="switch"><input id="library-save" type="checkbox" checked> Guardar las sesiones que abra en este dispositivo</label><output id="library-location">Almacenamiento privado de VertexLab</output><div class="dialog-actions"><button id="library-folder">Elegir carpeta</button><button id="library-private">Usar almacenamiento de VertexLab</button></div><p id="library-help"></p><button id="library-persist">Proteger almacenamiento sin conexión</button><p id="library-storage-status" role="status"></p><button id="library-close">Listo</button>`;document.body.append(settings);
+    const settings=document.createElement('dialog');settings.id='library-settings';settings.innerHTML=`<h2>BIBLIOTECA DEL DISPOSITIVO</h2><p>Elige dónde guardar las próximas sesiones. Las anteriores conservan su ubicación.</p><label class="switch"><input id="library-save" type="checkbox" checked> Guardar las sesiones que abra en este dispositivo</label><label class="switch"><input id="library-range-video" type="checkbox"> Reproducir video por fragmentos locales</label><label class="switch"><input id="library-two-videos" type="checkbox"> Permitir dos videos simultáneos (más memoria)</label><small>Los cambios de reproducción se aplican al reabrir la sesión.</small><output id="library-location">Almacenamiento privado de VertexLab</output><div class="dialog-actions"><button id="library-folder">Elegir carpeta</button><button id="library-private">Usar almacenamiento de VertexLab</button></div><p id="library-help"></p><button id="library-persist">Proteger almacenamiento sin conexión</button><p id="library-storage-status" role="status"></p><button id="library-close">Listo</button>`;document.body.append(settings);
     const openSettings=document.createElement('button');openSettings.className='library-settings-button icon-button';openSettings.textContent='⚙';openSettings.setAttribute('aria-label','Almacenamiento de sesiones');document.querySelector('.app-header').append(openSettings);
     const showStatus=async()=>{const folder=await VertexLibrary.setting('directory');$('library-location').textContent=folder?'Carpeta: '+folder.name:'Almacenamiento privado de VertexLab';const estimate=await navigator.storage?.estimate?.();$('library-storage-status').textContent=estimate?.quota?`${(estimate.usage/1024**3).toFixed(2)} GB usados · ${(estimate.quota/1024**3).toFixed(1)} GB de cuota del sitio`:'';};
     openSettings.onclick=()=>{settings.showModal();showStatus().catch(error=>$('library-storage-status').textContent=error.message);};$('library-close').onclick=()=>settings.close();
@@ -81,6 +99,7 @@
     $('library-help').textContent=root.showDirectoryPicker?'La carpeta elegida guarda archivos .vrtx organizados por identificador.':'Este navegador no permite elegir una carpeta. Las sesiones se organizan dentro de VertexLab. Conserva el .vrtx original en Archivos como respaldo.';
     $('library-folder').onclick=async()=>{try{const folder=await root.showDirectoryPicker({id:'vertexlab-sessions',mode:'readwrite'});await VertexLibrary.setting('directory',folder);await showStatus();}catch(error){if(error.name!=='AbortError')$('library-storage-status').textContent=error.message;}};
     $('library-private').onclick=action(async()=>{await VertexLibrary.setting('directory',null);await showStatus();});
+    for(const [id,fallback] of [['library-range-video',mobileApple],['library-two-videos',!mobileApple]]){$(id).checked=fallback;VertexLibrary.setting(id).then(value=>{if(typeof value==='boolean')$(id).checked=value;}).catch(()=>{});$(id).onchange=action(async()=>VertexLibrary.setting(id,$(id).checked));}
     $('library-save').onchange=action(async()=>VertexLibrary.setting('save',$('library-save').checked));
     VertexLibrary.setting('save').then(value=>{$('library-save').checked=value!==false;}).catch(()=>{$('library-save').checked=false;});
     $('library-persist').onclick=action(async()=>{$('library-storage-status').textContent=await navigator.storage?.persist?.()?'El navegador ha concedido almacenamiento persistente.':'El navegador no concedió persistencia. Conserva tus archivos originales.';});
@@ -90,5 +109,5 @@
     const position=()=>{if(media.matches)$('workspace').prepend(video);else placeholder.after(video);};media.addEventListener('change',position);position();
     new ResizeObserver(()=>{document.body.style.setProperty('--viewer-header-height',document.querySelector('.app-header').getBoundingClientRect().height+'px');}).observe(document.querySelector('.app-header'));
   }
-  root.VertexBrowser={enabled,open,request,videoURL,original,decorate,setup};
+  root.VertexBrowser={enabled,mobileApple,singleVideo:()=>!$('library-two-videos')?.checked,prepareVideo,open,request,videoURL,original,decorate,setup};
 })(globalThis);

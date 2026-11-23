@@ -103,7 +103,8 @@ async function loadSession(id) {
   if (session.meta.videoPath) {
     hasVideo = true;
     $('video-empty').hidden = true;
-    $('video').src = globalThis.VertexBrowser?.enabled?VertexBrowser.videoURL(id):'/api/video/'+id;
+    if(globalThis.VertexBrowser?.enabled){try{await VertexBrowser.prepareVideo(id);$('video').src=VertexBrowser.videoURL(id);}catch(error){hasVideo=false;$('video-warning-a').hidden=false;$('video-warning-a').textContent=error.message;}}
+    else $('video').src='/api/video/'+id;
     $('video-status').textContent = 'Video asociado por OBS. Si tu navegador no admite el formato, remultiplexa a MP4 H.264 y ábrelo con «Abrir video local».';
   } else {
     $('video-status').textContent = 'Sin video asociado. Puedes abrir uno local; las sesiones antiguas admiten ajuste manual.';
@@ -150,8 +151,8 @@ $('video').onloadedmetadata = () => {
   renderVideoControls(); seek(t);
 };
 $('video').onerror = () => {
-  setPlaying(false);
-  $('video-status').textContent = 'No se pudo abrir el video. Comprueba que existe y que usa un codec compatible (por ejemplo, MP4 H.264).';
+  const message=VertexPlayback.message(null,$('video'));
+  $('video-status').textContent=message;$('video-warning-a').hidden=false;$('video-warning-a').textContent=message;$('message').textContent=message;
 };
 $('skip-back').onclick = () => seek(t - 5);
 $('skip-forward').onclick = () => seek(t + 5);
@@ -515,7 +516,7 @@ function frame(now) {
     const video = $('video');
     if (Number.isFinite(video.duration)) {
       if (video.ended) setPlaying(false);
-      else if (video.paused) video.play().catch(() => { setPlaying(false); $('message').textContent = 'Vuelve a pulsar Reproducir en la barra flotante.'; });
+      else VertexPlayback.play(video,error=>{setPlaying(false);$('message').textContent=VertexPlayback.message(error,video);});
       t = video.currentTime; $('time').value = t;
       $('clock').textContent = video.currentTime.toFixed(2) + ' s · video sin sincronizar';
     }

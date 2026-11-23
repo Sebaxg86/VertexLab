@@ -49,10 +49,14 @@ for size in (192, 512):
     icons=[dict(src=f'icon-{size}.png',sizes=f'{size}x{size}',type='image/png',purpose='any maskable') for size in (192,512)]),ensure_ascii=False),encoding='utf-8')
 files = sorted(p.name for p in OUT.iterdir() if p.is_file() and p.name != 'sw.js' and not p.name.startswith('.'))
 revision = hashlib.sha256(b''.join((OUT / name).read_bytes() for name in files)).hexdigest()[:16]
-worker = """const CACHE='vertexlab-viewer-REVISION',FILES=PRECACHE;
+worker = """importScripts('media-service-worker.js');
+const CACHE='vertexlab-viewer-REVISION',FILES=PRECACHE;
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES.map(name=>new Request(new URL(name,self.registration.scope).href,{cache:'reload'}))))));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('vertexlab-viewer-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
-self.addEventListener('fetch',event=>{const url=new URL(event.request.url);if(event.request.method!=='GET'||url.origin!==self.location.origin)return;
+self.addEventListener('fetch',event=>{const url=new URL(event.request.url);if(url.origin!==self.location.origin)return;
+const mediaPath=new URL('__vertex_media/',self.registration.scope).pathname;
+if(url.pathname.startsWith(mediaPath)){const id=url.pathname.slice(mediaPath.length).split('/')[0];event.respondWith(/^[a-f0-9]{32}$/.test(id)&&['GET','HEAD'].includes(event.request.method)?localVideoResponse(event.request,id,event.clientId):Promise.resolve(new Response(null,{status:404})));return;}
+if(event.request.method!=='GET')return;
 if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match(new URL('index.html',self.registration.scope).href)));return;}
 event.respondWith(caches.open(CACHE).then(async cache=>(await cache.match(event.request))||fetch(event.request)));});
 """.replace('REVISION',revision).replace('PRECACHE',json.dumps(files))

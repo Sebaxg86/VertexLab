@@ -1,7 +1,8 @@
 (function(root){
   function clock(seconds){const ms=Math.max(0,Math.round(seconds*1000));return `${Math.floor(ms/60000)}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}.${String(ms%1000).padStart(3,'0')}`;}
   function bounds(lap){return {start:lap?.rows[0]?.t||0,end:lap?.rows.at(-1)?.t||0};}
-  function sessionRows(laps){let offset=0;return laps.flatMap(lap=>{const rows=lap.rows.map(row=>({...row,lapId:lap.id,lapDistance:row.d,d:offset+row.d}));offset+=lap.rows.at(-1)?.d||0;return rows;});}
+  function sessionRows(laps){let offset=0;return laps.flatMap(lap=>{const rows=lap.rows.map(row=>({source:row,t:row.t,speed:row.speed,rpm:row.rpm,throttle:row.throttle,brake:row.brake,lapTime:row.lapTime,raceTime:row.raceTime,gap:row.gap,breakBefore:row.breakBefore,lapId:lap.id,lapDistance:row.d,d:offset+row.d}));offset+=lap.rows.at(-1)?.d||0;return rows;});}
+  function instrumentSample(sample){return sample?.source?{...sample.source,t:sample.t,d:sample.d,lapId:sample.lapId,lapDistance:sample.lapDistance}:sample;}
   function atDistance(lap,distance){
     const rows=lap?.rows||[];
     if(!rows.length||distance<rows[0].d||distance>rows.at(-1).d)return null;
@@ -44,6 +45,6 @@
     timeSeriesCache.set(rows,series);return series;
   }
   function lapTimeline(laps,total){return laps.filter(lap=>lap.rows.length).map(lap=>{const b=bounds(lap);return {id:lap.id,number:lap.number,partial:!!lap.partial,start:Math.max(0,b.start),end:Math.min(total,b.end)};}).filter(lap=>lap.end>lap.start);}
-  root.RaceAnalysis={clock,bounds,sessionRows,atDistance,videoChoices,sampleAtTime,fastestLapIds,lapSummary,timeSeries,lapTimeline};
+  root.RaceAnalysis={clock,bounds,sessionRows,instrumentSample,atDistance,videoChoices,sampleAtTime,fastestLapIds,lapSummary,timeSeries,lapTimeline};
   if(typeof module!=='undefined')module.exports=root.RaceAnalysis;
 })(globalThis);

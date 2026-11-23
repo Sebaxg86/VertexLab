@@ -19,3 +19,11 @@ test('informational lap summaries compare complete laps to best and label partia
 
 test('whole-session colour series retain lap identity, boundary continuity and cached geometry',()=>{const {timeSeries}=require('../public/analysis-model.js');const rows=[{t:0,lapId:0,d:0},{t:1,lapId:0,d:10},{t:2,lapId:2,d:20},{t:3,lapId:2,d:30},{t:4,lapId:5,d:40,gap:true}];const series=timeSeries(rows);assert.deepEqual(series.map(s=>s.id),[0,2,5]);assert.equal(series[1].rows[0],rows[1]);assert.equal(series[1].rows[1],rows[2]);assert.deepEqual(series[2].rows,[rows[4]]);assert.equal(timeSeries(rows),series);assert.equal(rows.length,5);});
 test('transport colour segments use actual session time and retain unrecorded gaps',()=>{const {lapTimeline}=require('../public/analysis-model.js');const segments=lapTimeline([{id:2,number:2,partial:false,rows:[{t:10},{t:50}]},{id:5,number:5,partial:true,rows:[{t:55},{t:80}]}],75);assert.deepEqual(segments,[{id:2,number:2,partial:false,start:10,end:50},{id:5,number:5,partial:true,start:55,end:75}]);assert.deepEqual(lapTimeline([],0),[]);});
+
+test('session overview shares heavy telemetry arrays while preserving instrument readings',()=>{
+ const model=require('../public/analysis-model.js'),temps=[80,81,82,83],slip=[.1,.2,.3,.4];
+ const original={t:0,d:0,rpm:6000,speed:100,throttle:80,brake:0,tireTemp:temps,tireSlipRatio:slip,steer:45};
+ const rows=model.sessionRows([{id:0,rows:[original,{...original,t:1,d:100}]}]);
+ assert.equal(rows[0].source,original);assert.equal(Object.hasOwn(rows[0],'tireTemp'),false);
+ const sample=model.instrumentSample(model.sampleAtTime(rows,.5));assert.equal(sample.tireTemp,temps);assert.equal(sample.tireSlipRatio,slip);assert.equal(sample.steer,45);assert.equal(sample.d,50);assert.equal(sample.rpm,6000);
+});

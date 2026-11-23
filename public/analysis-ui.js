@@ -8,7 +8,7 @@ function playbackBounds(){return allMode?{start:0,end:allRows.at(-1)?.t||0}:Race
 function observedSample(){
   if(!session)return null;
   const rows=allMode?allRows:session.laps.find(lap=>lap.id===reference)?.rows||[];
-  return RaceAnalysis.sampleAtTime(rows,t);
+  return RaceAnalysis.instrumentSample(RaceAnalysis.sampleAtTime(rows,t));
 }
 function refreshTransport(){const b=playbackBounds();$('time').max=Math.max(0,b.end-b.start);$('time').value=Math.max(0,t-b.start);$('duration').textContent=RaceAnalysis.clock(b.end-b.start);renderLapTimeline();}
 function renderCarBadges(){
@@ -67,11 +67,11 @@ function renderVideoControls(){
     for(const lap of laps){const option=document.createElement('option');option.value=lap.id;option.textContent=lapLabel(lap);select.append(option);}
     select.value=value===undefined?'':String(value);
   }
-  const split=!allMode&&videoChoices.length>1;
+  const split=!allMode&&videoChoices.length>1&&!globalThis.VertexBrowser?.singleVideo?.();
   $('video-split').classList.toggle('two-videos',split);$('video-pane-b').hidden=!split;
   const src=hasVideo?$('video').getAttribute('src'):null;
   if(split&&src&&$('compare-video').getAttribute('src')!==src)$('compare-video').src=src;
-  if(!split)$('compare-video').pause();
+  if(!split){$('compare-video').pause();if($('compare-video').hasAttribute('src')){$('compare-video').removeAttribute('src');$('compare-video').load();}}
   $('video-label-a').textContent=allMode?'Todo el recorrido':lapLabel(session.laps.find(lap=>lap.id===videoChoices[0]));
   $('video-label-b').textContent=split?lapLabel(session.laps.find(lap=>lap.id===videoChoices[1])):'';
   $('video-selection-note').textContent=selected.size>2?'Se comparan todas las vueltas marcadas. Elige aquí los dos videos.':'Videos alineados por distancia · audio del primero';
@@ -80,9 +80,10 @@ function renderVideoControls(){
 function syncVideoPanes(force=false,dt=0){
   if(!session||!hasVideo)return;
   const sample=observedSample();
-  const choices=allMode?[null]:videoChoices;
+  const choices=allMode?[null]:globalThis.VertexBrowser?.singleVideo?.()?videoChoices.slice(0,1):videoChoices;
   choices.forEach((lapId,index)=>{
     const video=index?$('compare-video'):$('video'),warning=$(index?'video-warning-b':'video-warning-a');
+    if(video.error){warning.hidden=false;warning.textContent=VertexPlayback.message(null,video);return;}
     const lap=lapId===null?null:session.laps.find(lap=>lap.id===lapId);
     const targetTime=allMode||lapId===reference?t:sample?RaceAnalysis.atDistance(lap,sample.d):null;
     const target=targetTime===null?null:RaceTimeline.toVideo(currentMeta(),targetTime);
@@ -90,13 +91,13 @@ function syncVideoPanes(force=false,dt=0){
     warning.hidden=available;
     warning.textContent=targetTime===null?'Sin cobertura a esta distancia':target===null?'Sin video sincronizado en este tramo':Number.isFinite(video.duration)?'Fuera del video grabado':'Cargando video…';
     if(!available){video.pause();videoTargets.delete(index);return;}
-    if(force||Math.abs(video.currentTime-target)>.12)video.currentTime=Math.max(0,Math.min(video.duration,target));
+    if(force||(!video.seeking&&Math.abs(video.currentTime-target)>(globalThis.VertexBrowser?.mobileApple ? .35 : .12)))video.currentTime=Math.max(0,Math.min(video.duration,target));
     const previous=videoTargets.get(index);
     if(playing){
       let rate=Number($('rate').value);
       if(!allMode&&previous!==undefined&&dt>0)rate=Math.max(.25,Math.min(4,(target-previous)/dt));
       video.playbackRate=rate;
-      if(video.paused)video.play().catch(()=>{setPlaying(false);$('message').textContent='No se pudo reproducir el video. Pulsa Reproducir de nuevo.';});
+      VertexPlayback.play(video,error=>{if(error.name==='NotAllowedError')setPlaying(false);warning.hidden=false;warning.textContent=VertexPlayback.message(error,video);$('message').textContent=warning.textContent;});
     }else video.pause();
     videoTargets.set(index,target);
   });
@@ -123,7 +124,7 @@ function setupAnalysisUI(){
   };
   $('compare-video').muted=true;
   $('compare-video').onloadedmetadata=()=>syncVideoPanes(true);
-  $('compare-video').onerror=()=>{$('video-warning-b').hidden=false;$('video-warning-b').textContent='No se pudo abrir el segundo video';};
+  $('compare-video').onerror=()=>{$('video-warning-b').hidden=false;$('video-warning-b').textContent=VertexPlayback.message(null,$('compare-video'));};
 }
 
 let lapTimelineKey=null,lapTimelineSegments=[];

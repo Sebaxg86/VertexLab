@@ -7,7 +7,7 @@
   const records=()=>transaction('sessions','readonly',s=>s.getAll());
   const update=record=>transaction('sessions','readwrite',s=>s.put(record));
   async function save(file,item,progress){
-    const destination=await setting('directory'),record={id:item.meta.id,meta:item.meta,preview:item.preview,name:file.name,size:file.size};
+    const destination=await setting('directory'),record={id:item.meta.id,meta:item.meta,video:item.video,preview:item.preview,name:file.name,size:file.size};
     const estimate=await navigator.storage?.estimate?.();if(!destination&&estimate?.quota&&estimate.quota-estimate.usage<file.size*1.1)throw Error('No hay espacio suficiente para guardar esta sesión. Elige una carpeta o ábrela temporalmente.');
     let handle,writable;
     try{
@@ -27,5 +27,5 @@
     const blob=await (await directory.getFileHandle(record.filename)).getFile();return new File([blob],record.name,{lastModified:blob.lastModified});
   }
   async function forget(id){await transaction('sessions','readwrite',s=>s.delete(id));}
-  root.VertexLibrary={setting,records,save,file,update,forget};
+  root.VertexLibrary={setting,records,record:id=>transaction('sessions','readonly',s=>s.get(id)),save,file,update,forget};
 })(globalThis);

@@ -335,3 +335,16 @@ El lector de paquetes usa lecturas por rangos y `FileReaderSync` en el Worker cu
 
 
 Para errores de lectura de archivos grandes en el Worker de Safari, el visor reintenta automáticamente con un puente de lectura: el hilo principal lee rangos pequeños con FileReader y transfiere los bloques al Worker, donde siguen verificándose y analizándose. No se carga el archivo completo en RAM. Se verificaron posiciones superiores a 2 GiB y la lectura integral de un paquete a través del puente. Caso reportado pendiente de confirmar en hardware: iOS 26, app web instalada desde Safari y paquete local de 2.8 GB.
+
+
+### Reproducción local en iPhone y memoria
+
+En iPhone/iPad el visor activa por defecto **Reproducir video por fragmentos locales** y desactiva **Permitir dos videos simultáneos**. Ambas opciones están en Almacenamiento de sesiones y se aplican al reabrir la sesión. La comparación de telemetría conserva todas las vueltas. El segundo decodificador no carga una fuente mientras está desactivado.
+
+El video se sirve mediante una ruta virtual `__vertex_media/<id>/video` interceptada por el Service Worker: no se envía a GitHub ni a ningún servidor. Responde a GET/HEAD y rangos HTTP con 206/416 y tamaños exactos. Lee bloques de hasta 256 KiB con FileReader en la página y transfiere solo esos bloques al Service Worker, sin clonar el archivo grande ni crear un Blob de video para el decodificador. Si se reinicia el Service Worker, recupera los metadatos de la biblioteca y vuelve a pedir los bloques a la pestaña que reproduce. Las sesiones temporales requieren reabrirse si el Service Worker pierde su registro. Es necesario cerrar y reabrir todas las ventanas al actualizar desde una versión sin esta ruta.
+
+El reproductor mantiene una sola petición play pendiente por video, ignora AbortError de búsquedas interrumpidas y diferencia fallos de permisos, contenedor y decodificación. Un error de video no bloquea la exploración de telemetría. Los MP4 H.264/AAC siguen siendo el formato recomendado; esto no recodifica archivos incompatibles.
+
+La vista Todo el recorrido comparte las muestras originales para los instrumentos y conserva únicamente una proyección de los campos de las gráficas, evitando duplicar todos los datos de cada muestra. Al cambiar entre sesiones guardadas libera la anterior de la memoria; no modifica sus archivos.
+
+Validación: pruebas de rangos por encima de 2 GiB, cortes exactos del ZIP, HEAD/206/416, cancelación, recuperación del Service Worker y control de play; prueba en navegador de reproducción desde la ruta local. Sigue pendiente confirmar el comportamiento y la memoria con el iPhone físico y su sesión local de 2.8 GB.
