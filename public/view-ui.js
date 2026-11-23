@@ -37,7 +37,11 @@ function updateLiveView(){
 }
 function setViewLayout(isLive){
   document.body.classList.toggle('live-view',isLive);
-  $('manual-controls').hidden=!isLive;document.querySelector('.settings-wrap').hidden=!isLive;
+  $('manual-controls').hidden=!isLive;document.querySelector('.settings-wrap').hidden=false;
+  $('live-settings').hidden=!isLive;$('analysis-settings').hidden=isLive;
+  $('settings-title').textContent=isLive?'CONTROL DE CAPTURA':'SESIÓN / ANÁLISIS';
+  $('settings-panel').setAttribute('aria-label',isLive?'Configuración de LIVE':'Configuración de la sesión');
+  $('settings-toggle').setAttribute('aria-label',isLive?'Configuración de LIVE':'Configuración de la sesión');
   setMenu(false);setHeaderDrop('record-name-menu','record-name-trigger',false);
   $('workspace').hidden=isLive;$('live-workspace').hidden=!isLive;$('player').hidden=isLive;
   $('instant-dashboard').setAttribute('aria-label',isLive?'Instrumentos LIVE en tiempo real':'Indicadores del instante observado');
@@ -46,6 +50,7 @@ function setViewLayout(isLive){
   updateLiveView();
 }
 function openLiveView(){
+  clearAnalysisHover();preferredMapLap=null;
   setPlaying(false);clearVideo();session=null;selected.clear();reference=null;t=0;
   allRows=[];allMode=true;videoChoices=[];chartRange=null;scaleCache.clear();legendKey=null;
   $('analysis-nav').hidden=true;$('video-options').hidden=true;
@@ -81,6 +86,7 @@ function renderPickerSessions(items){
     title.textContent=knownCar?item.carName:item.name;
     if(knownCar&&item.name!==item.carName){const label=document.createElement('span');label.className='picker-custom-name';label.textContent=item.name;text.append(label);}
     date.textContent=new Date(item.created*1000).toLocaleString()+(item.version===2&&!item.ended?' · En curso':'');
+    if(item.featured){const star=document.createElement('span');star.className='session-star';star.textContent='★';star.setAttribute('aria-label','Sesión destacada');title.append(star);}
     text.prepend(title);text.append(date);button.append(preview,brand,text);
     button.onclick=action(async()=>{button.disabled=true;try{await load(item.id);setSessionPicker(false);setMenu(false);}finally{button.disabled=false;}});
     container.append(button);

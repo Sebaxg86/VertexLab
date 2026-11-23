@@ -43,7 +43,7 @@ function renderAnalysisMenu(){
   $('analysis-nav').hidden=!session;
 }
 function applyAnalysisSelection(resetTime=true){
-  setPlaying(false);
+  setPlaying(false);clearAnalysisHover();preferredMapLap=null;
   if(!allMode&&!selected.size)allMode=true;
   if(allMode){selected=new Set(session.laps.map(lap=>lap.id));reference=session.laps[0]?.id??null;}
   else if(!selected.has(reference))reference=[...selected][0];

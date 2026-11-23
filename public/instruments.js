@@ -24,8 +24,8 @@
   function revLights(ratio, gear, speed, wasShifting=false) {
     const valid = finite(ratio);
     // The reported engine maximum can exceed the full-throttle limiter.
-    // Enter at 90%; release below 88% to avoid flickering around the threshold.
-    const shift = valid && ratio>=(wasShifting ? .88 : .90) && gear>0 && speed>15;
+    // Enter at 88%; release below 86% to avoid flickering around the threshold.
+    const shift = valid && ratio>=(wasShifting ? .86 : .88) && gear>0 && speed>15;
     return {shift,lit:Array.from({length:16},(_,i)=>valid && (shift || ratio>=(Math.min(i,15-i)+1)/8))};
   }
   root.RaceInstruments = {values,duration,rpmReference,revLights};

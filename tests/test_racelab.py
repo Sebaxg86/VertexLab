@@ -398,6 +398,67 @@ class HTTPTests(unittest.TestCase):
         with self.assertRaises(OSError):
             ThreadingHTTPServer(self.http.server_address, handler_for(self.runtime))
 
+    def _saved_fixture(self, sid='a'*32, video=None):
+        root = Path(self.tmp.name)
+        meta = dict(id=sid,name='QA saved session',created=1,ended=2,version=2,carOrdinal=1009,videoPath=str(video) if video else None,offset=.125,syncSegments=[dict(tStart=0,tEnd=10,videoStart=.4)])
+        (root/(sid+'.json')).write_text(json.dumps(meta),encoding='utf-8')
+        (root/(sid+'.jsonl')).write_text('',encoding='utf-8')
+        return meta
+
+    def test_featured_flag_persists_without_changing_sync_or_recording(self):
+        meta = self._saved_fixture()
+        with self.request('/api/feature/'+meta['id'],{'featured':True}) as response:
+            self.assertTrue(json.load(response)['featured'])
+        stored=self.runtime.read_session(meta['id'])['meta']
+        self.assertTrue(stored['featured'])
+        self.assertEqual(stored['syncSegments'],meta['syncSegments'])
+        self.assertEqual(stored['offset'],meta['offset'])
+        self.assertTrue(self.runtime.sessions()[0]['featured'])
+        with self.request('/api/feature/'+meta['id'],{'featured':False}) as response:
+            self.assertFalse(json.load(response)['featured'])
+
+    def test_delete_requires_confirmation_and_removes_session_and_video(self):
+        video=Path(self.tmp.name)/'qa-associated.mp4'
+        video.write_bytes(b'isolated synthetic video fixture')
+        meta=self._saved_fixture(video=video)
+        with self.assertRaises(urllib.error.HTTPError):
+            self.request('/api/delete/'+meta['id'],{})
+        self.assertTrue(video.exists())
+        with self.request('/api/delete/'+meta['id'],{'confirm':True}) as response:
+            self.assertTrue(json.load(response)['ok'])
+        self.assertFalse(video.exists())
+        self.assertFalse((Path(self.tmp.name)/(meta['id']+'.json')).exists())
+        self.assertFalse((Path(self.tmp.name)/(meta['id']+'.jsonl')).exists())
+
+    def test_delete_rejects_non_video_target_and_preserves_locked_video(self):
+        target=Path(self.tmp.name)/'qa-not-a-video.txt';target.write_text('keep')
+        meta=self._saved_fixture(video=target)
+        with self.assertRaises(urllib.error.HTTPError):
+            self.request('/api/delete/'+meta['id'],{'confirm':True})
+        self.assertTrue(target.exists())
+        video=Path(self.tmp.name)/'qa-locked.mp4';video.write_bytes(b'locked fixture')
+        self._saved_fixture(video=video)
+        with patch('pathlib.Path.unlink',side_effect=PermissionError('fixture lock')):
+            with self.assertRaises(urllib.error.HTTPError):
+                self.request('/api/delete/'+meta['id'],{'confirm':True})
+        self.assertTrue(video.exists())
+        self.assertTrue((Path(self.tmp.name)/(meta['id']+'.json')).exists())
+
+    def test_delete_refuses_active_session_and_shared_video(self):
+        self.runtime.command('start',{'name':'QA active'})
+        sid=self.runtime.recorder.meta['id']
+        with self.assertRaises(urllib.error.HTTPError):
+            self.request('/api/delete/'+sid,{'confirm':True})
+        self.assertIsNotNone(self.runtime.recorder.meta)
+        self.runtime.command('stop',{})
+        video=Path(self.tmp.name)/'qa-shared.mp4';video.write_bytes(b'shared fixture')
+        meta=self._saved_fixture(video=video)
+        self._saved_fixture('b'*32,video)
+        with self.assertRaises(urllib.error.HTTPError):
+            self.request('/api/delete/'+meta['id'],{'confirm':True})
+        self.assertTrue(video.exists())
+        self.assertTrue((Path(self.tmp.name)/(meta['id']+'.json')).exists())
+
     def test_udp_auto_record_reload_and_video_range(self):
         video = Path(self.tmp.name)/'synthetic-test.mp4'
         video.write_bytes(b'0123456789')

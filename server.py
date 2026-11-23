@@ -118,6 +118,41 @@ class Runtime:
                 raise ValueError('Finaliza la grabación antes de desconectar OBS')
             r.obs.enabled = False
             r.obs.disconnect()
+        elif name.startswith('feature/') or name.startswith('delete/'):
+            path = self.session_path(name.split('/')[-1])
+            meta = json.loads(path.read_text(encoding='utf-8'))
+            if name.startswith('feature/'):
+                meta['featured'] = bool(body.get('featured'))
+                if r.meta and r.meta['id'] == meta['id']:
+                    r.meta['featured'] = meta['featured']
+                path.write_text(json.dumps(meta,ensure_ascii=False),encoding='utf-8')
+                return dict(featured=meta['featured'])
+            if body.get('confirm') is not True:
+                raise ValueError('Confirma la eliminación de la sesión y su video')
+            if r.meta and r.meta['id'] == meta['id']:
+                raise ValueError('Finaliza la grabación antes de eliminarla')
+            video = Path(meta['videoPath']).resolve() if meta.get('videoPath') else None
+            if video:
+                if video.suffix.lower() not in ('.mp4','.mkv','.mov','.webm','.flv','.ts','.m4v'):
+                    raise ValueError('El archivo asociado no es un video reconocido')
+                for other in self.data.glob('*.json'):
+                    if other == path:
+                        continue
+                    shared = json.loads(other.read_text(encoding='utf-8')).get('videoPath')
+                    if shared and Path(shared).resolve() == video:
+                        raise ValueError('Otra sesión utiliza este video; no se puede eliminar junto con esta sesión')
+            try:
+                # Delete video first: an OBS/browser file lock must leave the session intact.
+                if video:
+                    video.unlink(missing_ok=True)
+                path.with_suffix('.jsonl').unlink(missing_ok=True)
+                path.unlink()
+            except OSError as error:
+                raise ValueError('No se pudo eliminar. Cierra el video en otros programas e inténtalo de nuevo.') from error
+            self.preview_cache.pop(meta['id'],None)
+            if r.last_saved == meta['id']:
+                r.last_saved = None
+            return dict(ok=True)
         elif name.startswith('sync/'):
             path = self.session_path(name.split('/')[-1])
             meta = json.loads(path.read_text(encoding='utf-8'))

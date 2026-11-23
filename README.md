@@ -85,14 +85,14 @@ derecha se divide en dos filas de igual altura: gráficas desplazables arriba y 
 La telemetría observada
 corresponde al cursor de la sesión; LIVE muestra los paquetes actuales del juego.
 El acceso a LIVE está fijo arriba en el selector de sesiones. La columna de gráficas tiene un
-encabezado compacto y tres filas visibles: velocidad, RPM, acelerador, freno, tiempos
+encabezado compacto y dos filas visibles: velocidad, RPM, acelerador, freno, tiempos
 y distancia se recorren verticalmente. Los tiempos de vuelta y carrera se muestran
 como segundos con tres decimales por debajo de un minuto (`45.123 s`) y minutos
 decimales a partir de 60 segundos (`1.234 min`), manteniendo segundos
 en los datos originales y en la sincronización. Posición X/Y/Z, marcha y posición
 de carrera no se muestran como gráficas; la marcha permanece en el panel del motor.
 El desplazamiento vertical encaja en los límites de cada fila; al terminar el gesto
-quedan tres gráficas completas. La velocidad tiene un indicador destacado junto al motor.
+quedan dos gráficas completas. La velocidad tiene un indicador destacado junto al motor.
 El video no tiene controles internos: usa la barra flotante para reproducir, pausar,
 deslizar el tiempo, saltar cinco segundos, ajustar velocidad, volumen o silencio. Rueda/arrastre sobre el
 mapa: zoom/pan; Encuadrar restablece la vista. No se incluye imagen del mapa de Forza.
@@ -148,7 +148,7 @@ sin afirmar un régimen óptimo de cambio de marcha. Capturas antiguas sin ese c
 muestran la cifra de RPM y la marcha, y las luces usan el pico realmente medido en la
 sesión como referencia visual explícita (no se considera límite del motor ni régimen
 óptimo de cambio). En LIVE, ese pico se acumula para el vehículo actual.
-Las luces avanzan por pares desde las orillas al centro. Al alcanzar el 95% de la
+Las luces avanzan por pares desde las orillas al centro. Al alcanzar el 88% de la
 referencia de RPM, en marcha hacia delante y a más de 15 km/h, todas parpadean en azul
 como aviso estimado de cambio (no una orden explícita del juego). Con movimiento
 reducido configurado en el sistema, se iluminan en azul sin parpadear.
@@ -237,8 +237,8 @@ El selector del header permite cambiar entre LIVE y sesiones guardadas. La
 hamburguesa fue eliminada. LIVE incluye un desplegable para nombrar sesiones,
 REC y guardar, y un engranaje a la derecha con OBS y detección automática.
 Guardar manualmente mantiene LIVE abierto; la sesión aparece en el selector.
-En análisis solo aparecen los iconos de reproducción y las vueltas, sin ajustes
-de captura. BEST identifica la vuelta completa más rápida, incluyendo empates;
+En análisis aparecen reproducción, vueltas y un engranaje propio para destacar
+o borrar la sesión; los ajustes de captura pertenecen a LIVE. BEST identifica la vuelta completa más rápida, incluyendo empates;
 las vueltas parciales no compiten. Las fuentes se incluyen localmente para uso
 sin internet. Los colores, secuencia, umbral y parpadeo de las luces RPM se conservan.
 
@@ -257,3 +257,25 @@ Detección automática: conducción activa y posición de carrera mayor que cero
 tiempo de vuelta mayor que cero. Esto incluye contrarrelojes/Rivales que emitan
 su reloj de vuelta. No hay reconocimiento geográfico de Time Attack en mundo
 abierto ni clasificación por nombre de modo; si no llegan esas señales, usar REC.
+
+
+## Interacción de análisis
+
+El engranaje de análisis permite destacar una sesión (estrella dorada en el
+selector) y borrarla junto con su video. El borrado es permanente y requiere
+confirmación con el nombre y el archivo; se bloquean grabaciones activas y videos
+compartidos con otra sesión. No se borran archivos mediante las pruebas reales:
+las pruebas de eliminación utilizan exclusivamente directorios temporales.
+
+El mapa admite hasta 256×. Mientras se reproduce con zoom, sigue al auto de la
+vuelta de referencia (o al instante actual de Todo). En pausa, la rueda hace zoom
+bajo el puntero y arrastrar desplaza el mapa. Hover resalta una trazada; clic lleva
+video, gráficas e instrumentos a ese punto. La leyenda prioriza una vuelta cuando
+las trazadas coinciden. Pulsar la línea de otra vuelta en mapa o gráfica cambia
+la referencia a esa vuelta sin descartar las otras comparaciones.
+
+Las gráficas muestran dos parámetros completos, con scroll de una fila por paso.
+Pulsar su nombre expande uno a toda la altura; volver a pulsarlo recupera dos.
+En modo expandido, scroll recorre los parámetros individualmente. Hover muestra
+vuelta, tiempo y valor; clic navega al instante exacto con el mapeo OBS existente.
+El aviso azul de RPM se activa al 88% en LIVE y análisis, con salida bajo 86%.
