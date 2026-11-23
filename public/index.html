@@ -41,7 +41,7 @@
           </article>
           <article class="instrument rev-instrument" aria-label="Marcha y revoluciones del instante observado"><h3>MOTOR</h3><div id="rev-lights" class="rev-lights" aria-hidden="true"></div><div class="rev-display"><div class="gear-block"><output id="instant-gear">—</output><small>MARCHA</small></div><div class="rpm-block"><output id="instant-rpm">—</output><small>RPM</small><div class="speed-readout"><output id="instant-speed">—</output><small>km/h</small></div></div></div><div class="rpm-track"><i id="rpm-fill"></i></div><small id="rpm-scale">Esperando datos del motor</small></article>
           <article class="instrument tire-instrument"><div class="section-head"><h3>NEUMÁTICOS</h3><small>°C · slip combinado</small></div><div id="tire-grid" class="tire-grid"></div><small class="tire-key"><span></span>Slip &gt; 1: exceso de deslizamiento</small></article>
-          <article class="instrument lap-summary-instrument"><h3>VUELTAS</h3><p class="lap-summary-caption">Diferencia vs. mejor</p><ol id="lap-summary" aria-label="Tiempos y diferencias por vuelta"></ol></article>
+
         </div>
       </section>
     </div>
@@ -51,11 +51,14 @@
       <div class="chart-zoom-tools" role="group" aria-label="Zoom compartido de las gráficas"><span>Zoom al cursor</span><input id="chart-pan" type="range" min="0" max="1000" step="1" value="0" disabled aria-label="Desplazar la zona visible de todas las gráficas"><button id="chart-zoom-out" aria-label="Alejar todas las gráficas">−</button><output id="chart-zoom-label">1×</output><button id="chart-zoom-in" aria-label="Acercar todas las gráficas">+</button><button id="chart-zoom-reset">Ver todo</button></div>
       <div id="telemetry-scroll" tabindex="0" aria-label="Parámetros de telemetría; desplazar para ver más"><div id="telemetry-rows"></div></div>
     </section>
+      <div class="route-and-laps">
       <article class="map-panel">
         <div class="panel-heading"><h2>Recorrido</h2><div class="map-tools"><span id="metrics" class="panel-tag"></span><button id="map-zoom-out" aria-label="Alejar recorrido">−</button><output id="map-zoom-label">1×</output><button id="map-zoom-in" aria-label="Acercar recorrido">+</button><button id="fit">Encuadrar</button></div></div>
         <canvas id="map" aria-label="Trazadas de las vueltas; pasa el puntero y pulsa para ir a un instante"></canvas>
         <div class="map-footer"><div id="lap-legend"></div><span>Rueda: zoom · arrastra para mover</span></div>
       </article>
+          <article class="instrument lap-summary-instrument"><h3>VUELTAS</h3><p class="lap-summary-caption">Diferencia vs. mejor</p><ol id="lap-summary" aria-label="Tiempos y diferencias por vuelta"></ol></article>
+      </div>
     </div>
   </div>
 </main>
