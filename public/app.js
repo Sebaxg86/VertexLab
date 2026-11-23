@@ -234,7 +234,8 @@ function paint() {
     if (Math.abs(next.start-chartRange.start)>.001) { chartRange=next; scaleCache.clear(); }
   }
   $('clock').textContent = RaceAnalysis.clock(t-playbackBounds().start);
-  $('metrics').textContent = sample ? `${sample.speed.toFixed(0)} km/h · ${sample.d.toFixed(0)} m` : '';
+  textValue('map-speed',sample?`${sample.speed.toFixed(0)} km/h`:'— km/h');
+  textValue('map-distance',sample?`${sample.d.toFixed(0)} m`:'— m');
   updateTelemetryContext();
   const legendLaps=visible(),nextLegend=(allMode?'all:':'laps:')+legendLaps.map(lap=>lap.id).join(',');
   if (legendKey !== nextLegend) {
@@ -305,6 +306,9 @@ function renderLapSummary(){
   }
 }
 function drawInstruments(sample) {
+  const observedLap=allMode?sample?.lapId:reference;
+  if(session&&observedLap!==undefined&&observedLap!==null&&$('reference').value!==String(observedLap))$('reference').value=String(observedLap);
+  $('reference').disabled=!session;
   const rpm = sample?.rpm, gear = sample?.gear;
   const {ratio,maximum,engine} = RaceInstruments.rpmReference(sample,session?sessionRpmPeak:liveRpmPeak);
   textValue('instant-gear',Number.isFinite(gear) ? gear===0?'R':String(gear) : '—');

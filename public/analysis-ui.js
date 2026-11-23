@@ -113,7 +113,14 @@ function setupAnalysisUI(){
     else{const chosen=Number(value),other=videoChoices[1-index];videoChoices[index]=chosen;if(other===chosen)videoChoices[1-index]=visible().map(lap=>lap.id).find(id=>id!==chosen);videoChoices=videoChoices.filter(id=>id!==undefined);}
     renderVideoControls();syncVideoPanes(true);
   };
-  $('reference').onchange=()=>{reference=Number($('reference').value);applyAnalysisSelection(true);};
+  $('reference').onchange=()=>{
+    if(!session)return;
+    const id=Number($('reference').value),lap=visible().find(lap=>lap.id===id);
+    if(!lap)return;
+    const sample=observedSample();setPlaying(false);clearAnalysisHover();reference=id;
+    const target=allMode?RaceAnalysis.bounds(lap).start:sample?RaceAnalysis.atDistance(lap,sample.d):null;
+    renderVideoControls();refreshTransport();seek(target??RaceAnalysis.bounds(lap).start);
+  };
   $('compare-video').muted=true;
   $('compare-video').onloadedmetadata=()=>syncVideoPanes(true);
   $('compare-video').onerror=()=>{$('video-warning-b').hidden=false;$('video-warning-b').textContent='No se pudo abrir el segundo video';};
