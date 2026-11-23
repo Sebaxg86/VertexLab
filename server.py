@@ -7,14 +7,18 @@ import re
 import socket
 import threading
 import time
+import tempfile
+import shutil
+import uuid
 from pathlib import Path
 from http.server import ThreadingHTTPServer as BaseHTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 from obs_control import OBS
 from recorder import Recorder, car_name
 from telemetry import decode, analyze
 from session_preview import second_lap_preview
+from portable import export_session, import_session, MAX_ARCHIVE
 
 ROOT = Path(__file__).resolve().parent
 BRANDS = json.loads((ROOT/'car-brands.json').read_text(encoding='utf-8')) if (ROOT/'car-brands.json').exists() else {}
@@ -44,6 +48,7 @@ class Runtime:
         self.worker.start()
         self.sock = None
         self.preview_cache = {}
+        self.portable_exports = {}
 
     def status(self):
         with self.lock:
@@ -87,6 +92,39 @@ class Runtime:
             meta = json.loads(path.read_text(encoding='utf-8'))
             rows = [json.loads(line) for line in path.with_suffix('.jsonl').read_text(encoding='utf-8').splitlines()]
         return dict(meta=meta, laps=analyze(rows))
+
+    def prepare_export(self, sid, view):
+        with self.lock:
+            path = self.session_path(sid)
+            if self.recorder.meta and self.recorder.meta['id'] == sid:
+                raise ValueError('Finaliza la sesión antes de exportar')
+            meta = json.loads(path.read_text(encoding='utf-8'))
+            expired = [key for key, value in self.portable_exports.items() if time.monotonic()-value[2] > 1800]
+            for key in expired:
+                old = self.portable_exports.pop(key)
+                old[0].unlink(missing_ok=True)
+        handle = tempfile.NamedTemporaryFile(prefix='vertexlab-', suffix='.vrtx', delete=False)
+        target = Path(handle.name)
+        handle.close()
+        try:
+            export_session(meta, path.with_suffix('.jsonl'), target, view)
+        except Exception:
+            target.unlink(missing_ok=True)
+            raise
+        token = uuid.uuid4().hex
+        name = re.sub(r'[\x00-\x1f<>:"/\\|?*]', '_', meta['name']).strip()[:100] or 'Sesion'
+        with self.lock:
+            self.portable_exports[token] = (target, name + '.vrtx', time.monotonic())
+        expiry = threading.Timer(1800, self.expire_export, args=(token,))
+        expiry.daemon = True
+        expiry.start()
+        return dict(url='/api/portable/download/' + token, name=name + '.vrtx', bytes=target.stat().st_size)
+
+    def expire_export(self, token):
+        with self.lock:
+            prepared = self.portable_exports.pop(token, None)
+        if prepared:
+            prepared[0].unlink(missing_ok=True)
 
     def command(self, name, body):
         done = threading.Event()
@@ -240,6 +278,9 @@ class Runtime:
             self.sock.close()
         self.worker.join(timeout=3)
         self.recorder.obs.disconnect()
+        for path, _, _ in self.portable_exports.values():
+            path.unlink(missing_ok=True)
+        self.portable_exports.clear()
 
 
 def handler_for(runtime):
@@ -266,6 +307,8 @@ def handler_for(runtime):
                 return self.send({'error':'Host rechazado'},403)
             route = urlparse(self.path).path
             try:
+                if route.startswith('/api/portable/download/'):
+                    return self.portable_download(route.split('/')[-1])
                 if route == '/api/status':
                     return self.send(runtime.status())
                 if route == '/api/sessions':
@@ -347,18 +390,57 @@ def handler_for(runtime):
                     self.wfile.write(chunk)
                     left -= len(chunk)
 
+        def portable_download(self, token):
+            with runtime.lock:
+                prepared = runtime.portable_exports.pop(token, None)
+            if not prepared:
+                return self.send({'error':'La descarga expiró; vuelve a exportar la sesión'},404)
+            path, name, _ = prepared
+            try:
+                self.send_response(200)
+                self.send_header('Content-Type','application/vnd.vertexlab.session+zip')
+                self.send_header('Content-Length',str(path.stat().st_size))
+                self.send_header('Content-Disposition',"attachment; filename=Sesion.vrtx; filename*=UTF-8''"+quote(name))
+                self.send_header('Cache-Control','no-store')
+                self.end_headers()
+                with path.open('rb') as stream:
+                    shutil.copyfileobj(stream, self.wfile, 1024**2)
+            finally:
+                path.unlink(missing_ok=True)
+
+        def portable_import(self):
+            size = int(self.headers.get('Content-Length',0))
+            if size <= 0 or size > MAX_ARCHIVE:
+                self.close_connection = True
+                return self.send({'error':'Tamaño de archivo .vrtx inválido (máximo 256 GiB)'},413)
+            with tempfile.TemporaryFile() as temporary:
+                remaining = size
+                while remaining:
+                    chunk = self.rfile.read(min(remaining,1024**2))
+                    if not chunk:
+                        raise ValueError('Se interrumpió la subida del archivo')
+                    temporary.write(chunk)
+                    remaining -= len(chunk)
+                temporary.seek(0)
+                result = import_session(temporary, runtime.data)
+            self.send(result)
+
         def do_POST(self):
             if not self.valid_host() or self.headers.get('Origin') not in (None,f'http://{self.headers.get("Host")}'):
                 return self.send({'error':'Origen rechazado'},403)
             try:
+                if self.path == '/api/portable/import':
+                    return self.portable_import()
                 size = int(self.headers.get('Content-Length',0))
                 if size < 0 or size > 16384:
                     return self.send({'error':'Petición demasiado grande'},413)
                 body = json.loads(self.rfile.read(size) or b'{}')
                 if not isinstance(body,dict) or not self.path.startswith('/api/'):
                     raise ValueError('Petición inválida')
+                if self.path.startswith('/api/portable/export/'):
+                    return self.send(runtime.prepare_export(self.path.split('/')[-1],body.get('view')))
                 self.send(runtime.command(self.path[5:],body))
-            except (ValueError,KeyError,FileNotFoundError) as e:
+            except (ValueError,KeyError,OSError) as e:
                 self.send({'error':str(e)},400)
     return Handler
 
@@ -373,7 +455,7 @@ if __name__ == '__main__':
     http = ThreadingHTTPServer(('127.0.0.1',args.port),handler_for(runtime))
     http.daemon_threads = True
     threading.Thread(target=runtime.listen,args=(args.udp_host,args.udp_port),daemon=True).start()
-    print(f'RaceLab: http://127.0.0.1:{args.port} | UDP {args.udp_host}:{args.udp_port}',flush=True)
+    print(f'VertexLab: http://127.0.0.1:{args.port} | UDP {args.udp_host}:{args.udp_port}',flush=True)
     try:
         http.serve_forever()
     except KeyboardInterrupt:

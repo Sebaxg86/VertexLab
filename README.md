@@ -1,4 +1,4 @@
-# RaceLab
+# VertexLab
 
 Aplicación web local para FH6: telemetría LIVE, registro automático por vehículo,
 grabación de OBS con pausas y análisis de video, trazadas y entradas por distancia.
@@ -24,18 +24,18 @@ Puedes cambiar puertos: `server.py --udp-port 5302 --port 8766`.
 
 1. Abre OBS y configura una escena con la captura del juego y el audio deseado.
 2. En Herramientas → Ajustes del servidor WebSocket, habilita el servidor con autenticación.
-3. Introduce en RaceLab el puerto (normalmente 4455) y la contraseña. Pulsa Conectar OBS.
+3. Introduce en VertexLab el puerto (normalmente 4455) y la contraseña. Pulsa Conectar OBS.
 4. Usa un modo de grabación de OBS que permita pausar. Si OBS rechaza la pausa,
-   RaceLab lo muestra como error; no simula que la grabación se haya detenido.
+   VertexLab lo muestra como error; no simula que la grabación se haya detenido.
 5. Para reproducción directa en el navegador, usa MP4 con H.264 y audio compatible.
    Si grabas MKV o un codec que el navegador no decodifica, remultiplexa/convierte
    el archivo en OBS y selecciónalo con Abrir video local. Remultiplexar conserva
    el tiempo; recortar o editar el video invalida la asociación temporal original.
 
 La contraseña no se escribe en disco, no se devuelve en la API y no se incluye en
-Git. Reconecta OBS al reiniciar RaceLab; también puedes proporcionar la contraseña
+Git. Reconecta OBS al reiniciar VertexLab; también puedes proporcionar la contraseña
 con `RACELAB_OBS_PASSWORD` en el entorno. OBS debe estar abierto previamente.
-RaceLab controla exclusivamente grabaciones que él mismo inicia. Si OBS ya está
+VertexLab controla exclusivamente grabaciones que él mismo inicia. Si OBS ya está
 grabando, guarda sólo telemetría y muestra el conflicto. No inicia ni detiene streams.
 Las órdenes de OBS se confirman consultando su estado durante un máximo de cinco
 segundos: la respuesta inicial de WebSocket puede llegar antes de que el cambio se
@@ -191,7 +191,7 @@ un frenado antes y después de la pausa y que el menú no suma tiempo de anális
 Fuentes: [formato oficial de FH6](https://support.forza.net/hc/en-us/articles/51744149102611-Forza-Horizon-6-Data-Out-Documentation),
 [protocolo OBS](https://github.com/obsproject/obs-websocket/blob/master/docs/generated/protocol.md).
 Únicamente se reutilizó el catálogo de vehículos de fh6-tel con su licencia MIT;
-ver `THIRD_PARTY_NOTICES.md`. La implementación de RaceLab es independiente.
+ver `THIRD_PARTY_NOTICES.md`. La implementación de VertexLab es independiente.
 
 ## Selección de recorrido y vueltas
 
@@ -291,3 +291,20 @@ El panel Vueltas muestra tiempos guardados y diferencias en segundos respecto a 
 La vuelta de referencia se elige en el selector de Al volante: ofrece todas en Todo el recorrido, y solo las seleccionadas en comparación. En Todo el recorrido salta al inicio de la vuelta y sigue la vuelta reproducida; al comparar conserva la distancia cuando existe cobertura. El menú de videos conserva únicamente la elección de los dos videos. Recorrido muestra velocidad y distancia en tarjetas separadas del mismo tamaño que el instante de sesión.
 
 En Todo el recorrido, las trazas de telemetría y la barra de reproducción comparten los colores de vuelta del mapa. Los segmentos conservan el eje de tiempo de sesión y los cortes de datos originales. Hover en la barra identifica vuelta, duración del tramo registrado (parcial cuando corresponde) e instante de sesión; el arrastre y el clic mantienen la navegación sincronizada. La comparación por distancia conserva su barra habitual.
+
+
+### Sesiones portables .vrtx
+
+VertexLab exporta una sesión finalizada desde el engranaje de análisis → **Exportar sesión .vrtx**. El navegador descarga un único archivo con el video original, todas las muestras de telemetría, la sincronización de OBS (incluidas pausas), la información del vehículo y el estado del análisis. No incluye contraseñas ni configuración de OBS. El video no se recodifica.
+
+En otro equipo que ejecute esta versión de VertexLab, abre el selector de sesiones → **Importar sesión .vrtx**. Se crea una sesión nueva, con video copiado al almacenamiento local y rutas reconstruidas para ese equipo. Importar otra vez no sobrescribe grabaciones. Las sesiones sin video siguen siendo exportables, exclusivamente con sus datos; si existe un video asociado pero falta en disco, la exportación se rechaza para evitar un paquete incompleto.
+
+Se restauran las vueltas seleccionadas, referencia, los dos videos de comparación, instante observado, zoom y ventana de gráficas, vista del mapa, parámetro expandido, posición de las gráficas, velocidad y volumen. La reproducción se abre pausada. El desplazamiento del mapa se guarda proporcionalmente al tamaño de su contenedor para adaptarlo a otra pantalla. Los nombres y emblemas siguen usando el catálogo de la versión instalada.
+
+El formato v1 es un ZIP64 con `manifest.json`, `session.json`, `view.json`, `telemetry.jsonl` y, si existe, `video.<extensión>`. El manifiesto contiene tamaños y SHA-256 de cada componente. Se validan integridad, nombres exactos, versión, espacio libre, muestras y sincronización antes de publicar la sesión. No se extraen rutas del ZIP ni se usan rutas de video suministradas en sus metadatos. El límite del paquete es 256 GiB, con telemetría de hasta 4 GiB. El empaquetado, subida local e importación usan bloques sin cargar el video entero en RAM; la exportación temporal necesita espacio adicional en disco y caduca a los 30 minutos si no se descarga.
+
+Esta fase transporta sesiones: no incluye el programa dentro del archivo, no registra doble clic en Windows y no implementa todavía Google Drive ni un visor para teléfono. La reproducción conserva la compatibilidad del codec original con el navegador del equipo de destino. No convierte formatos ni reduce la calidad para hacerlos compatibles.
+
+La carpeta del repositorio se conserva en su ubicación actual para mantener accesos existentes. El nombre visible es VertexLab. Se admite `VERTEXLAB_OBS_PASSWORD` y, por compatibilidad, `RACELAB_OBS_PASSWORD`.
+
+Las luces de RPM reinician un barrido visual de 150 ms desde cero al detectar cambios de marcha, tanto ascendentes como descendentes, en LIVE y durante reproducción. El destino sigue las RPM reales; los números, telemetría y sincronización no cambian. No se dispara al buscar puntos con la sesión pausada ni al cambiar de vehículo. Se respeta la preferencia de reducir movimiento.

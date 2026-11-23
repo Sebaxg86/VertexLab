@@ -115,7 +115,8 @@ function setupViewUI(){
 }
 
 let loadingSessions=0,loadingExitTimer=null,loadingStarted=0,loadingFocus=null,loadingInert=[];
-function startSessionLoading(){
+function startSessionLoading(title='Cargando sesión',subtitle='Preparando tu análisis'){
+  $('session-loading-title').textContent=title;document.querySelector('.session-loading-card>span').textContent=subtitle;
   const overlay=$('session-loading');clearTimeout(loadingExitTimer);
   if(!loadingSessions&&!loadingInert.length){
     loadingStarted=performance.now();loadingFocus=document.activeElement;

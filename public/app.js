@@ -7,6 +7,8 @@ let liveHistory = [], lastLiveStamp = null, legendKey = null, toastTimer;
 let chartRange = null, liveChartSpan = 20, liveChartOffset = 0;
 let sessionRpmPeak = 0, liveRpmPeak = 0, liveRpmCar = null;
 let shiftMemory = {key:null,active:false};
+let revSweepState=null;
+const revMotion=matchMedia('(prefers-reduced-motion: reduce)');
 const scaleCache = new Map();
 for (let i=0;i<16;i++) { const led=document.createElement('i'),pair=Math.min(i,15-i); led.style.setProperty('--led-color',pair<4?'#59e2ba':pair<6?'#ffc66e':'#f77d94'); $('rev-lights').append(led); }
 const metricDefs = [
@@ -111,6 +113,7 @@ async function loadSession(id) {
     : session.meta.syncState === 'error' ? 'Hubo un error de OBS. Revisa la grabación; la sincronización puede estar incompleta.' : 'Sin referencias automáticas de OBS.';
   if (videoOnly()) $('sync-status').textContent = 'El video está disponible, pero no tiene referencias de sincronización. Puedes reproducirlo por separado; las gráficas no moverán el video.';
   renderVideoControls(); seek(0);
+  restorePortableView(session.meta.portableView);
   await list();
 }
 
@@ -327,7 +330,9 @@ function drawInstruments(sample) {
   $('rev-lights').classList.toggle('no-reading',ratio===null);
   const shiftKey=`${session?session.meta.id:'live:'+liveRpmCar}:${gear}`;
   const keepShift=(!session||playing)&&shiftMemory.key===shiftKey&&shiftMemory.active;
-  const lights=RaceInstruments.revLights(ratio,gear,sample?.speed,keepShift);
+  revSweepState=RaceInstruments.revSweep(revSweepState,{context:session?session.meta.id+':'+playing:'live:'+liveRpmCar,gear,ratio,animate:!!sample&&(!session||playing)&&!revMotion.matches},performance.now());
+  $('rev-lights').classList.toggle('is-sweeping',revSweepState.active);
+  const lights=RaceInstruments.revLights(revSweepState.ratio,gear,sample?.speed,keepShift&&!revSweepState.active);
   shiftMemory={key:shiftKey,active:lights.shift};
   $('rev-lights').classList.toggle('shift-alert',lights.shift);
   $('rev-lights').setAttribute('title',`Aviso de cambio estimado al 88% · ${maximum?Math.round(maximum*.88).toLocaleString('es-MX'):'—'} RPM · luces de las orillas al centro`);
@@ -519,6 +524,7 @@ function frame(now) {
     syncVideoPanes(false,dt);refreshTransport();draw();
     if(t>=bounds.end)setPlaying(false);
   }
+  if(revSweepState?.active)draw();
   if(renderDirty){renderDirty=false;paint();}
   last = now; requestAnimationFrame(frame);
 }
@@ -530,7 +536,7 @@ function live(state) {
   $('status').textContent = state.udpError ? 'Error UDP: '+state.udpError : `UDP ${connected ? 'activo' : 'en espera'} · ${state.packets} paquetes · ${state.invalid} rechazados · ${state.dropped} perdidos en cola`;
   $('auto').checked = state.auto;
   syncCaptureControls(state);
-  $('obs-status').textContent = state.obs.error || (state.obs.connected ? `OBS conectado${state.obs.owned ? ' · grabación de RaceLab' : ' · listo'}` : state.obs.enabled ? 'OBS desconectado · revisa la conexión' : 'Sin conectar · sólo telemetría');
+  $('obs-status').textContent = state.obs.error || (state.obs.connected ? `OBS conectado${state.obs.owned ? ' · grabación de VertexLab' : ' · listo'}` : state.obs.enabled ? 'OBS desconectado · revisa la conexión' : 'Sin conectar · sólo telemetría');
   if (state.error) $('message').textContent = state.error;
   const packet = state.packet;
   if(packet?.active && Number.isFinite(packet.rpm)) {
@@ -555,7 +561,7 @@ events.onmessage = event => { try { live(JSON.parse(event.data)); } catch (e) { 
 events.onerror = () => { streamConnected=false;updateLiveView();if(!session)draw();$('status').textContent = 'Servidor desconectado · reconectando…'; };
 list().catch(e => { $('message').textContent = e.message; });
 const resizeObserver = new ResizeObserver(() => requestAnimationFrame(draw));
-setupAnalysisUI();setupLapScrollArrow();setupLapTimeline();setupRacingUI();setupViewUI();setupAnalysisInteractions();
+setupAnalysisUI();setupPortableUI();setupLapScrollArrow();setupLapTimeline();setupRacingUI();setupViewUI();setupAnalysisInteractions();
 const initialSession=/^#session\/([a-zA-Z0-9]+)$/.exec(location.hash)?.[1];
 if(initialSession)load(initialSession).catch(e=>{openLiveView();$('message').textContent=e.message;});
 else openLiveView();

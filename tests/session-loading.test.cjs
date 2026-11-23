@@ -4,7 +4,7 @@ function harness(){
   const timers=new Map();let next=0,now=0;
   function element(id){const classes=new Set();return {id,tagName:'DIV',hidden:false,inert:false,isConnected:true,classList:{add:c=>classes.add(c),remove:c=>classes.delete(c),contains:c=>classes.has(c)},setAttribute(){},removeAttribute(){},closest(){return null;},focus(){doc.activeElement=this;}};}
   const nodes=Object.fromEntries(['session-loading','workspace','session-trigger'].map(id=>[id,element(id)]));
-  const doc={body:element('body'),activeElement:nodes['session-trigger']};doc.body.children=Object.values(nodes);
+  const doc={body:element('body'),activeElement:nodes['session-trigger']};doc.body.children=Object.values(nodes);nodes['session-loading-title']=element('title');doc.querySelector=()=>({textContent:''});
   const context=vm.createContext({document:doc,$:id=>nodes[id],performance:{now:()=>now},requestAnimationFrame:fn=>fn(),setTimeout:fn=>{timers.set(++next,fn);return next;},clearTimeout:id=>timers.delete(id)});
   vm.runInContext(fs.readFileSync(require.resolve('../public/view-ui.js'),'utf8'),context);
   return {nodes,start:()=>vm.runInContext('startSessionLoading()',context),advance:()=>{now+=1000;},exit:()=>{for(const [id,fn] of [...timers]){timers.delete(id);fn();}}};

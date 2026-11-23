@@ -1,4 +1,4 @@
-"""Small OBS WebSocket v5 client; only controls recordings started by RaceLab."""
+"""Small OBS WebSocket v5 client; only controls recordings started by VertexLab."""
 import base64
 import hashlib
 import json
@@ -16,7 +16,7 @@ class OBS:
         self.enabled = False
         self.error = None
         self.port = 4455
-        self.password = os.environ.get('RACELAB_OBS_PASSWORD', '')
+        self.password = os.environ.get('VERTEXLAB_OBS_PASSWORD', os.environ.get('RACELAB_OBS_PASSWORD', ''))
 
     def status(self):
         return dict(enabled=self.enabled, connected=self.ws is not None,
@@ -111,7 +111,7 @@ class OBS:
             return None
         status = self.request('GetRecordStatus')
         if status['outputActive']:
-            raise ValueError('OBS ya graba por tu cuenta; RaceLab no modificará esa grabación')
+            raise ValueError('OBS ya graba por tu cuenta; VertexLab no modificará esa grabación')
         self.request('StartRecord')
         self.owned = True
         return self.wait_state(True, False, 'OBS no confirmó el inicio de la grabación')

@@ -5,6 +5,7 @@ function updateSessionActions(){
  $('feature-label').textContent=featured?'Quitar destacado':'Destacar sesión';
  $('feature-session').querySelector('.feature-icon').textContent=featured?'★':'☆';
  $('delete-session').disabled=latest?.recording===session?.meta.id;
+ $('export-session').disabled=!session||latest?.recording===session?.meta.id||(session.meta.version===2&&!session.meta.ended);
 }
 function clearAnalysisHover(){analysisHover=null;legendHoverLap=null;$('analysis-hover').hidden=true;$('map').removeAttribute('data-hover-lap');}
 function showAnalysisHover(hit,event,kind,key=null){

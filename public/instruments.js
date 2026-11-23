@@ -29,6 +29,17 @@
     const levels=Array.from({length:16},(_,i)=>valid ? shift?1:Math.max(0,Math.min(1,ratio/.8*8-Math.min(i,15-i))) : 0);
     return {shift,levels,lit:levels.map(level=>level>0)};
   }
-  root.RaceInstruments = {values,duration,rpmReference,revLights};
+  function revSweep(previous,reading,now){
+    const {context,gear,ratio,animate}=reading;
+    const valid=finite(gear)&&finite(ratio);
+    const same=previous?.context===context;
+    let started=same?previous.started:null;
+    if(!animate||!valid)started=null;
+    else if(same&&finite(previous.gear)&&previous.gear!==gear)started=now;
+    const elapsed=started===null?150:Math.max(0,now-started),active=!!animate&&valid&&elapsed<150;
+    const progress=active?1-Math.pow(1-elapsed/150,3):1;
+    return {context,gear:valid?gear:null,started:active?started:null,active,ratio:valid?ratio*progress:ratio};
+  }
+  root.RaceInstruments = {values,duration,rpmReference,revLights,revSweep};
   if (typeof module !== 'undefined') module.exports = root.RaceInstruments;
 })(globalThis);
