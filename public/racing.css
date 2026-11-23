@@ -167,3 +167,41 @@ body:not(.live-view) #header-brand{grid-column:1;grid-row:1/4;align-self:center;
  #lap-tabs{overflow-x:auto;overflow-y:hidden;touch-action:pan-x;overscroll-behavior-x:contain;overscroll-behavior-y:none;align-items:stretch}
  #lap-tabs>*{flex-shrink:0}
 }
+/* Library uses the original session action and header-drop motion. */
+#settings-panel .library-settings-button{position:static;margin:12px 0 0;padding:17px 11px 13px;border-top:1px solid #ffffff18;border-bottom:0;font-size:16px;color:#e7cbd6}
+#settings-panel .library-settings-button:hover{padding-left:16px;color:#fff0f5}
+#settings-panel .library-settings-button svg{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.browser-viewer[data-session-open=false] #settings-panel .library-settings-button{margin-top:0;border-top:0;padding-top:13px}
+.browser-viewer #library-settings{width:min(600px,calc(100vw - 32px));max-width:none;max-height:calc(100dvh - 48px);padding:28px;border:1px solid #704052;border-top:2px solid #ed4b69;border-radius:12px;background:linear-gradient(145deg,#23171f,#131015);box-shadow:0 24px 90px #000a;font-family:RaceNumbers,sans-serif;line-height:1.5;color:#f7e8ef;overflow:auto}
+#library-settings[open]{animation:library-enter .23s cubic-bezier(.2,.8,.2,1)}
+#library-settings[open]::backdrop{animation:library-backdrop-in .23s ease;background:#070509b8;backdrop-filter:blur(9px)}
+#library-settings[open].is-closing{animation:library-leave .18s ease forwards}
+#library-settings[open].is-closing::backdrop{animation:library-backdrop-out .18s ease forwards}
+#library-settings svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linejoin:round;stroke-linecap:round;flex-shrink:0}
+.library-dialog-heading{display:flex;align-items:center;gap:14px}
+.library-dialog-icon{width:48px;height:48px;display:grid;place-items:center;background:#482132;border:1px solid #814052;border-radius:10px;color:#ff96ad}
+#library-settings .library-dialog-icon svg{width:27px;height:27px}
+#library-settings h2{font-family:RaceDisplay,sans-serif;font-size:32px;line-height:1.1;margin:4px 0 0;letter-spacing:1px}
+.library-eyebrow{font-size:12px;letter-spacing:1.2px;color:#d39aaa}
+#library-dismiss{margin-left:auto;background:transparent;border:0;padding:8px;color:#d9b5c4}
+#library-settings .library-intro{font-size:17px;color:#d5bec9;margin:20px 0}
+.library-section{border-top:1px solid #ffffff14;padding:20px 0 0;margin-top:20px}
+#library-settings h3{display:flex;align-items:center;gap:10px;font-size:20px;font-weight:600;margin:0 0 14px;color:#ffe2ed}
+#library-settings h3 svg{color:#ed7e9c}
+#library-settings .library-option{display:flex;align-items:flex-start;gap:12px;margin:15px 0;font-size:18px;line-height:1.4;cursor:pointer}
+#library-settings input[type=checkbox]{width:19px;height:19px;margin-top:4px;flex-shrink:0;accent-color:#ee4d70}
+#library-settings .library-option small{display:block;font-size:15px;color:#baa2ae;line-height:1.5;margin-top:4px}
+#library-settings #library-location{font-size:16px;padding:12px 14px;border:1px solid #ffffff12;border-radius:7px;overflow-wrap:anywhere}
+#library-settings .dialog-actions{justify-content:flex-start;flex-wrap:wrap;margin-top:12px}
+#library-settings button:not(.icon-button){display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:11px 14px;font:inherit;font-size:16px;border-radius:7px;background:#30202a;border-color:#674052;color:#f3dbe6}
+#library-settings button:not(.icon-button):hover{background:#492535;border-color:#c45d7a}
+#library-settings #library-help,#library-settings .library-note{font-size:15px;color:#bba4af;line-height:1.6}
+#library-settings #library-storage-status{font-size:16px;color:#e6b5c7;overflow-wrap:anywhere}
+.library-dialog-footer{display:flex;justify-content:flex-end;border-top:1px solid #ffffff14;padding-top:18px;margin-top:20px}
+#library-settings #library-close{background:#a52d4d;border-color:#ed607e;min-width:100px}
+@keyframes library-enter{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes library-leave{to{opacity:0;transform:translateY(10px) scale(.98)}}
+@keyframes library-backdrop-in{from{opacity:0}to{opacity:1}}
+@keyframes library-backdrop-out{to{opacity:0}}
+@media(max-width:600px){.browser-viewer #library-settings{padding:20px;max-height:calc(100dvh - 28px)}#library-settings .library-option{font-size:17px}#library-settings #library-persist{width:100%}}
+@media(prefers-reduced-motion:reduce){#library-settings[open],#library-settings[open]::backdrop{animation:none!important}}

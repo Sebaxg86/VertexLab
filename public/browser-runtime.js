@@ -68,6 +68,8 @@
   function decorate(){
     if(!enabled)return;
     document.body.dataset.sessionOpen=String(!!session);
+    $('analysis-settings').hidden=!session;
+    $('settings-title').textContent=session?'SESIÓN / ANÁLISIS':'CONFIGURACIÓN';
     if(matchMedia('(pointer: coarse)').matches)document.querySelector('.map-footer>span').textContent='Zoom con +/− · arrastra para mover';
     $('picker-live').hidden=true;$('manual-controls').hidden=true;
     $('export-session').lastElementChild.textContent='Guardar archivo .vrtx original';
@@ -91,10 +93,26 @@
     initialize().then(()=>list()).catch(error=>{$('message').textContent='Biblioteca no disponible: '+error.message;});
   }
   function setupLibraryUI(){
-    const settings=document.createElement('dialog');settings.id='library-settings';settings.innerHTML=`<h2>BIBLIOTECA DEL DISPOSITIVO</h2><p>Elige dónde guardar las próximas sesiones. Las anteriores conservan su ubicación.</p><label class="switch"><input id="library-save" type="checkbox" checked> Guardar las sesiones que abra en este dispositivo</label><label class="switch"><input id="library-range-video" type="checkbox"> Reproducir video por fragmentos locales</label><label class="switch"><input id="library-two-videos" type="checkbox"> Permitir dos videos simultáneos (más memoria)</label><small>Los cambios de reproducción se aplican al reabrir la sesión.</small><output id="library-location">Almacenamiento privado de VertexLab</output><div class="dialog-actions"><button id="library-folder">Elegir carpeta</button><button id="library-private">Usar almacenamiento de VertexLab</button></div><p id="library-help"></p><button id="library-persist">Proteger almacenamiento sin conexión</button><p id="library-storage-status" role="status"></p><button id="library-close">Listo</button>`;document.body.append(settings);
-    const openSettings=document.createElement('button');openSettings.className='session-action library-settings-button';openSettings.textContent='Almacenamiento de sesiones';openSettings.setAttribute('aria-label','Almacenamiento de sesiones');$('settings-panel').append(openSettings);
+    const icon=(path)=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}"/></svg>`;
+    const books=icon('M4 4h4v16H4ZM10 4h4v16h-4ZM16 5l4-1 3 15-4 1Z');
+    const folderIcon=icon('M3 7V4h7l2 3h9v13H3Z');
+    const deviceIcon=icon('M4 3h16v14H4ZM9 21h6m-3-4v4');
+    const shieldIcon=icon('M12 2l8 3v6c0 6-8 11-8 11S4 17 4 11V5Zm-4 9 3 3 5-6');
+    const filmIcon=icon('M3 4h18v16H3ZM7 4v16M17 4v16M3 9h4m-4 6h4m10-6h4m-4 6h4');
+    const settings=document.createElement('dialog');settings.id='library-settings';settings.setAttribute('aria-labelledby','library-title');
+    settings.innerHTML=`<header class="library-dialog-heading"><div class="library-dialog-icon">${books}</div><div><span class="library-eyebrow">VERTEXLAB · ESTE DISPOSITIVO</span><h2 id="library-title">Biblioteca</h2></div><button id="library-dismiss" class="icon-button" aria-label="Cerrar biblioteca">${icon('M6 6l12 12M18 6 6 18')}</button></header>
+    <p class="library-intro">Configura el guardado de tus sesiones y la reproducción en este dispositivo.</p>
+    <section class="library-section"><h3>${deviceIcon} Guardado de sesiones</h3><label class="switch library-option"><input id="library-save" type="checkbox" checked><span>Guardar las sesiones que abra<small>Disponibles al volver a abrir VertexLab en este dispositivo.</small></span></label><output id="library-location">Almacenamiento privado de VertexLab</output><div class="dialog-actions"><button id="library-folder">${folderIcon}<span>Elegir carpeta</span></button><button id="library-private">${deviceIcon}<span>Usar VertexLab</span></button></div><p id="library-help"></p></section>
+    <section class="library-section"><h3>${filmIcon} Reproducción</h3><label class="switch library-option"><input id="library-range-video" type="checkbox"><span>Reproducir video por fragmentos locales<small>Lee el video por partes para reducir el uso de memoria.</small></span></label><label class="switch library-option"><input id="library-two-videos" type="checkbox"><span>Permitir dos videos simultáneos<small>La comparación de video utiliza más memoria.</small></span></label><p class="library-note">Los cambios de reproducción se aplican al reabrir la sesión.</p></section>
+    <section class="library-section"><h3>${shieldIcon} Almacenamiento</h3><button id="library-persist">${shieldIcon}<span>Proteger almacenamiento sin conexión</span></button><p id="library-storage-status" role="status"></p></section><footer class="library-dialog-footer"><button id="library-close">Listo</button></footer>`;document.body.append(settings);
+    const openSettings=document.createElement('button');openSettings.className='session-action library-settings-button';openSettings.innerHTML=books+'<span>Biblioteca</span>';openSettings.setAttribute('aria-haspopup','dialog');$('settings-panel').append(openSettings);
     const showStatus=async()=>{const folder=await VertexLibrary.setting('directory');$('library-location').textContent=folder?'Carpeta: '+folder.name:'Almacenamiento privado de VertexLab';const estimate=await navigator.storage?.estimate?.();$('library-storage-status').textContent=estimate?.quota?`${(estimate.usage/1024**3).toFixed(2)} GB usados · ${(estimate.quota/1024**3).toFixed(1)} GB de cuota del sitio`:'';};
-    openSettings.onclick=()=>{setMenu(false);settings.showModal();showStatus().catch(error=>$('library-storage-status').textContent=error.message);};$('library-close').onclick=()=>settings.close();
+    let closeTimer;
+    const closeLibrary=()=>{if(!settings.open||settings.classList.contains('is-closing'))return;settings.classList.add('is-closing');closeTimer=setTimeout(()=>{settings.close();settings.classList.remove('is-closing');$('settings-toggle').focus();},matchMedia('(prefers-reduced-motion: reduce)').matches?0:180);};
+    openSettings.onclick=()=>{clearTimeout(closeTimer);settings.classList.remove('is-closing');setMenu(false);settings.showModal();showStatus().catch(error=>$('library-storage-status').textContent=error.message);};
+    $('library-close').onclick=$('library-dismiss').onclick=closeLibrary;
+    settings.addEventListener('cancel',event=>{event.preventDefault();closeLibrary();});
+    settings.addEventListener('click',event=>{if(event.target!==settings)return;const rect=settings.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)closeLibrary();});
     $('library-folder').hidden=!root.showDirectoryPicker;
     $('library-help').textContent=root.showDirectoryPicker?'La carpeta elegida guarda archivos .vrtx organizados por identificador.':'Este navegador no permite elegir una carpeta. Las sesiones se organizan dentro de VertexLab. Conserva el .vrtx original en Archivos como respaldo.';
     $('library-folder').onclick=async()=>{try{const folder=await root.showDirectoryPicker({id:'vertexlab-sessions',mode:'readwrite'});await VertexLibrary.setting('directory',folder);await showStatus();}catch(error){if(error.name!=='AbortError')$('library-storage-status').textContent=error.message;}};
