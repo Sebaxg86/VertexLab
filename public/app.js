@@ -74,6 +74,14 @@ function clearVideo() {
   $('video-empty').hidden = false;
 }
 async function load(id) {
+  const finish=startSessionLoading();
+  try{
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    await loadSession(id);
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+  }finally{await finish();}
+}
+async function loadSession(id) {
   setPlaying(false);
   clearVideo();
   session = await api('sessions/' + id);

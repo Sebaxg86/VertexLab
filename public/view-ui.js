@@ -113,3 +113,30 @@ function setupViewUI(){
   $('session-picker').addEventListener('focusout',()=>{requestAnimationFrame(()=>{if(!document.querySelector('.session-switcher').contains(document.activeElement))setSessionPicker(false);});});
   setInterval(()=>{if(!session){updateLiveView();draw();}},500);
 }
+
+let loadingSessions=0,loadingExitTimer=null,loadingStarted=0,loadingFocus=null,loadingInert=[];
+function startSessionLoading(){
+  const overlay=$('session-loading');clearTimeout(loadingExitTimer);
+  if(!loadingSessions&&!loadingInert.length){
+    loadingStarted=performance.now();loadingFocus=document.activeElement;
+    loadingInert=[...document.body.children].filter(element=>element!==overlay&&element.tagName!=='SCRIPT').map(element=>[element,element.inert]);
+    for(const [element] of loadingInert)element.inert=true;
+  }
+  loadingSessions++;overlay.hidden=false;document.body.classList.add('session-is-loading');$('workspace').setAttribute('aria-busy','true');
+  requestAnimationFrame(()=>{if(loadingSessions){overlay.classList.add('is-visible');overlay.focus({preventScroll:true});}});
+  let finished=false;
+  return async()=>{
+    if(finished)return;finished=true;
+    const remaining=Math.max(0,280-(performance.now()-loadingStarted));
+    if(remaining)await new Promise(resolve=>setTimeout(resolve,remaining));
+    if(--loadingSessions)return;
+    overlay.classList.remove('is-visible');document.body.classList.remove('session-is-loading');$('workspace').removeAttribute('aria-busy');
+    loadingExitTimer=setTimeout(()=>{
+      if(loadingSessions)return;
+      overlay.hidden=true;
+      for(const [element,inert] of loadingInert)element.inert=inert;
+      loadingInert=[];
+      if(loadingFocus?.isConnected&&!loadingFocus.closest('[hidden]'))loadingFocus.focus({preventScroll:true});else $('session-trigger').focus({preventScroll:true});
+    },200);
+  };
+}
