@@ -21,6 +21,11 @@
     const maximum = engine ? sample.engineMaxRpm : finite(observedPeak) && observedPeak>0 ? observedPeak : null;
     return {maximum,engine,ratio:maximum && finite(sample?.rpm) ? Math.max(0,Math.min(1,sample.rpm/maximum)) : null};
   }
-  root.RaceInstruments = {values,duration,rpmReference};
+  function revLights(ratio, gear, speed) {
+    const valid = finite(ratio);
+    const shift = valid && ratio>=.95 && gear>0 && speed>15;
+    return {shift,lit:Array.from({length:16},(_,i)=>valid && (shift || ratio>=(Math.min(i,15-i)+1)/8))};
+  }
+  root.RaceInstruments = {values,duration,rpmReference,revLights};
   if (typeof module !== 'undefined') module.exports = root.RaceInstruments;
 })(globalThis);

@@ -7,7 +7,7 @@ let liveHistory = [], lastLiveStamp = null, legendKey = null, toastTimer;
 let chartRange = null, liveChartSpan = 20, liveChartOffset = 0;
 let sessionRpmPeak = 0, liveRpmPeak = 0, liveRpmCar = null;
 const scaleCache = new Map();
-for (let i=0;i<16;i++) { const led=document.createElement('i'); led.style.setProperty('--led-color',i<9?'#59e2ba':i<13?'#ffc66e':'#f77d94'); $('rev-lights').append(led); }
+for (let i=0;i<16;i++) { const led=document.createElement('i'),pair=Math.min(i,15-i); led.style.setProperty('--led-color',pair<4?'#59e2ba':pair<6?'#ffc66e':'#f77d94'); $('rev-lights').append(led); }
 const metricDefs = [
   {key:'speed', name:'Velocidad', unit:'km/h', decimals:0},
   {key:'rpm', name:'Revoluciones', unit:'RPM', decimals:0},
@@ -328,7 +328,10 @@ function drawInstruments(sample) {
   $('rpm-fill').style.transform = `scaleX(${ratio ?? 0})`;
   $('rpm-scale').textContent = ratio === null ? 'Sin datos del motor' : `${engine?'Máximo del motor':'Pico medido · referencia visual'} · ${Math.round(maximum).toLocaleString('es-MX')} RPM`;
   $('rev-lights').classList.toggle('no-reading',ratio===null);
-  [...$('rev-lights').children].forEach((led,index)=>led.classList.toggle('lit',ratio!==null&&ratio >= (index+1)/16));
+  const lights=RaceInstruments.revLights(ratio,gear,sample?.speed);
+  $('rev-lights').classList.toggle('shift-alert',lights.shift);
+  $('rev-lights').setAttribute('title',lights.shift?'Subir marcha · aviso estimado al 95% de la referencia de RPM':'Luces de RPM: de las orillas al centro');
+  [...$('rev-lights').children].forEach((led,index)=>led.classList.toggle('lit',lights.lit[index]));
   $('instant-gear').dataset.highRpm = engine && ratio !== null && ratio>.95 ? 'true' : 'false';
   const measured = RaceInstruments.values(sample);
   $('instant-source').textContent = session ? 'Sesión · ' + t.toFixed(2) + ' s' : sample ? 'LIVE' : 'En espera';

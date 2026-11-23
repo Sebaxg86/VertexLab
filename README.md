@@ -147,8 +147,12 @@ ilustrativo. Las luces y la barra de RPM usan EngineMaxRpm del juego como escala
 sin afirmar un régimen óptimo de cambio de marcha. Capturas antiguas sin ese campo
 muestran la cifra de RPM y la marcha, y las luces usan el pico realmente medido en la
 sesión como referencia visual explícita (no se considera límite del motor ni régimen
-óptimo de cambio). En LIVE, ese pico se acumula para el vehículo actual. El giro del volante es
-ilustrativo y no representa grados físicos del volante. Las G laterales/longitudinales
+óptimo de cambio). En LIVE, ese pico se acumula para el vehículo actual.
+Las luces avanzan por pares desde las orillas al centro. Al alcanzar el 95% de la
+referencia de RPM, en marcha hacia delante y a más de 15 km/h, todas parpadean en azul
+como aviso estimado de cambio (no una orden explícita del juego). Con movimiento
+reducido configurado en el sistema, se iluminan en azul sin parpadear.
+El giro del volante es ilustrativo y no representa grados físicos del volante. Las G laterales/longitudinales
 se calculan de AccelerationX/Z divididas entre 9.80665, con derecha/adelante positivos;
 la cifra combinada es la magnitud en el plano X/Z. El diagrama limita el punto al borde
 de 2G, conservando las cifras reales incluso si se supera ese rango.

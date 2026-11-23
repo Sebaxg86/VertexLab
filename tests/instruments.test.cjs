@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {values,duration,rpmReference} = require('../public/instruments.js');
+const {values,duration,rpmReference,revLights} = require('../public/instruments.js');
 test('old recordings do not acquire invented instrument values', () => {
   const v = values({speed:120,throttle:80});
   assert.equal(v.steer,null); assert.equal(v.total,null);
@@ -25,4 +25,16 @@ test('RPM lights prefer the motor limit and explicitly fall back to a measured p
   assert.deepEqual(rpmReference({rpm:4000,engineMaxRpm:8000},6000),{maximum:8000,engine:true,ratio:.5});
   assert.deepEqual(rpmReference({rpm:4000},6000),{maximum:6000,engine:false,ratio:2/3});
   assert.equal(rpmReference({},0).ratio,null);
+});
+test('RPM lights fill symmetrically from edges toward the center',()=>{
+  const half=revLights(.5,3,100);
+  assert.deepEqual(half.lit,[true,true,true,true,false,false,false,false,false,false,false,false,true,true,true,true]);
+  assert.equal(half.shift,false);
+});
+test('estimated shift cue lights every bar near the RPM reference, while moving forward',()=>{
+  assert.equal(revLights(.96,3,100).shift,true);
+  assert.ok(revLights(.96,3,100).lit.every(Boolean));
+  assert.equal(revLights(.96,0,100).shift,false);
+  assert.equal(revLights(1,1,0).shift,false);
+  assert.ok(revLights(null,3,100).lit.every(value=>!value));
 });
