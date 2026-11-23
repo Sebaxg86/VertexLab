@@ -10,7 +10,7 @@
   }
   function get(id){const item=sessions.get(id);if(!item)throw Error('Vuelve a abrir el archivo .vrtx en este dispositivo');return item;}
   function release(item){if(item?.url?.startsWith('blob:'))URL.revokeObjectURL(item.url);if(item)navigator.serviceWorker?.controller?.postMessage({type:'vertex-media-release',id:item.meta.id});chartLayers.clear();mapLayer=null;mapSegments=[];chartSegments.clear();RaceRender.mapData([]);}
-  async function open(file,progress,{id:existingId,persist=true}={}){
+  async function open(file,progress,{id:existingId,persist=true,rangeRead=false}={}){
     if(!enabled)throw Error('Visor no disponible');
     const [cars,brands]=await catalogs();
     return new Promise((resolve,reject)=>{
@@ -36,7 +36,7 @@
           resolve({id,hasVideo:!!result.video});
         }catch(error){reject(error);}
       };
-      worker.postMessage(file);
+      worker.postMessage(rangeRead?{remote:true,size:file.size}:file);
     });
   }
   async function request(path,body){
@@ -44,7 +44,7 @@
     if(path==='sessions'){const result=new Map([...saved].map(([id,item])=>[id,{...item.meta,preview:item.preview}]));for(const [id,item] of sessions)result.set(id,{...item.meta,preview:item.preview});return [...result.values()];}
     const [action,id]=path.split('/');
     if(action==='sessions'){for(const [otherId,other] of sessions){if(otherId!==id&&saved.has(otherId)){release(other);sessions.delete(otherId);}}}
-    if(action==='sessions'&&!sessions.has(id)&&saved.has(id)){const record=saved.get(id);await open(await VertexLibrary.file(record),progress=>{document.querySelector('.session-loading-card>span').textContent=progress.phase+' · '+progress.percent+'%';},{id,persist:false});Object.assign(get(id).meta,record.meta);}
+    if(action==='sessions'&&!sessions.has(id)&&saved.has(id)){const record=saved.get(id);await open(await VertexLibrary.file(record),progress=>{document.querySelector('.session-loading-card>span').textContent=progress.phase+' · '+progress.percent+'%';},{id,persist:false,rangeRead:true});Object.assign(get(id).meta,record.meta);}
     const item=get(id);
     if(action==='sessions')return {meta:{...item.meta},laps:item.laps};
     if(action==='feature'){item.meta.featured=!!body.featured;if(saved.has(id)){saved.get(id).meta.featured=item.meta.featured;await VertexLibrary.update(saved.get(id));}return {featured:item.meta.featured};}

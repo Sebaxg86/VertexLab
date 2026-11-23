@@ -69,3 +69,29 @@ test('Safari worker bridge validates an entire package through main-thread range
  });
  assert.equal(result.laps.length,2);assert.equal(result.video.size,8);assert.ok(ranges>3);
 });
+
+test('missing ZIP directory in worker retries through main-thread ranges and still validates the package',async()=>{
+ const vm=require('node:vm'),fs=require('node:fs'),file=await fixture();let retries=0;
+ const result=await new Promise((resolve,reject)=>{
+  const self={postMessage:message=>{
+   if(message.retryRead){retries++;self.onmessage({data:{remote:true,size:file.size}});}
+   else if(message.readRange){const {id,start,end}=message.readRange;file.slice(start,end).arrayBuffer().then(buffer=>self.onmessage({data:{readReply:true,id,buffer}}),reject);}
+   else if(message.result)resolve(message.result);else if(message.error)reject(Error(message.error));
+  }};
+  const reader={read:(input,options)=>{if(!input.remote)throw Error('End of central directory not found');return require('../public/vrtx-reader.js').read(input,options);}};
+  const context=vm.createContext({self,importScripts:()=>{},zip,hashwasm:hash,VertexBrowserCore:core,VertexPackageReader:reader,Map,Promise,Error});
+  vm.runInContext(fs.readFileSync(require.resolve('../public/viewer-worker.js'),'utf8'),context);
+  self.onmessage({data:file});
+ });
+ assert.equal(retries,1);assert.equal(result.laps.length,2);assert.equal(result.video.size,8);
+});
+
+test('a truly missing ZIP directory stops after the single fallback with a recovery message',async()=>{
+ const vm=require('node:vm'),fs=require('node:fs');let retries=0;
+ const message=await new Promise(resolve=>{
+  const self={postMessage:value=>{if(value.retryRead){retries++;self.onmessage({data:{remote:true,size:100}});}else if(value.error)resolve(value.error);}};
+  const context=vm.createContext({self,importScripts:()=>{},zip,hashwasm:hash,VertexBrowserCore:core,VertexPackageReader:{read:async()=>{throw Error('End of central directory not found');}},Map,Promise,Error});
+  vm.runInContext(fs.readFileSync(require.resolve('../public/viewer-worker.js'),'utf8'),context);self.onmessage({data:new Blob(['x'.repeat(100)])});
+ });
+ assert.equal(retries,1);assert.match(message,/Vuelve a importar/);assert.doesNotMatch(message,/End of central directory/);
+});
