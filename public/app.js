@@ -555,7 +555,7 @@ events.onmessage = event => { try { live(JSON.parse(event.data)); } catch (e) { 
 events.onerror = () => { streamConnected=false;updateLiveView();if(!session)draw();$('status').textContent = 'Servidor desconectado · reconectando…'; };
 list().catch(e => { $('message').textContent = e.message; });
 const resizeObserver = new ResizeObserver(() => requestAnimationFrame(draw));
-setupAnalysisUI();setupLapTimeline();setupRacingUI();setupViewUI();setupAnalysisInteractions();
+setupAnalysisUI();setupLapScrollArrow();setupLapTimeline();setupRacingUI();setupViewUI();setupAnalysisInteractions();
 const initialSession=/^#session\/([a-zA-Z0-9]+)$/.exec(location.hash)?.[1];
 if(initialSession)load(initialSession).catch(e=>{openLiveView();$('message').textContent=e.message;});
 else openLiveView();

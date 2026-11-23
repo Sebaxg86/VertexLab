@@ -153,3 +153,12 @@ function setupLapTimeline(){
   });
   input.addEventListener('pointerleave',hide);input.addEventListener('blur',hide);
 }
+
+function updateLapScrollArrow(){const tabs=$('lap-tabs');$('lap-scroll-next').hidden=tabs.scrollWidth-tabs.clientWidth-tabs.scrollLeft<2;}
+function setupLapScrollArrow(){
+  const tabs=$('lap-tabs');tabs.addEventListener('scroll',updateLapScrollArrow,{passive:true});
+  $('lap-scroll-next').onclick=()=>tabs.scrollBy({left:Math.max(115,tabs.clientWidth*.75),behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+  new ResizeObserver(updateLapScrollArrow).observe(tabs);
+  new MutationObserver(()=>requestAnimationFrame(updateLapScrollArrow)).observe(tabs,{childList:true});
+  updateLapScrollArrow();
+}
