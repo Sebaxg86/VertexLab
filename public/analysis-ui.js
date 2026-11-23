@@ -26,6 +26,7 @@ function renderCarBadges(){
 function renderAnalysisMenu(){
   $('all-laps').setAttribute('aria-pressed',String(allMode));
   $('lap-tabs').replaceChildren();
+  const fastest=new Set(RaceAnalysis.fastestLapIds(session?.laps||[]));
   for(const lap of session?.laps||[]){
     const b=document.createElement('button');b.className='lap-tab';b.dataset.lapId=lap.id;b.style.setProperty('--lap-color',colors[lap.id%colors.length]);
     b.setAttribute('aria-pressed',String(!allMode&&selected.has(lap.id)));
@@ -33,6 +34,11 @@ function renderAnalysisMenu(){
     const measured=lap.rows.reduce((max,row)=>Math.max(max,row.lapTime||0),0);
     time.textContent=RaceAnalysis.clock(lap.partial?RaceAnalysis.bounds(lap).end-RaceAnalysis.bounds(lap).start:measured)+(lap.partial?' · parcial':'');
     b.append(name,time);b.onclick=()=>selectAnalysisLap(lap.id);$('lap-tabs').append(b);
+    if(fastest.has(lap.id)){
+      b.classList.add('fastest-lap');const badge=document.createElement('em');badge.className='fastest-badge';badge.innerHTML=RaceIcons.flag+'BEST';name.append(badge);
+      b.title='Vuelta completa más rápida · '+RaceAnalysis.clock(measured);
+      b.setAttribute('aria-label',lapLabel(lap)+' · '+RaceAnalysis.clock(measured)+' · Vuelta más rápida');
+    }
   }
   $('analysis-nav').hidden=!session;
 }

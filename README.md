@@ -70,7 +70,7 @@ No hay reconocimiento visual de resultados ni rebobinado soportado en esta entre
 
 ## Analizar
 
-Abre el menú hamburguesa y selecciona una sesión guardada. El menú se superpone sin
+Pulsa el nombre del vehículo en el header y selecciona una sesión guardada. El selector se superpone sin
 desplazar el área de análisis. Se carga automáticamente el video asociado si sigue en su
 ruta original y el navegador admite su codec. Las sesiones antiguas del MVP siguen
 abriéndose y permiten seleccionar MP4 y ajustar el desfase como antes.
@@ -83,8 +83,8 @@ Los marcadores de las otras vueltas se comparan a la misma distancia. La vista d
 mantiene el reparto 60/40: video e indicadores instantáneos a la izquierda; la zona
 derecha se divide en dos filas de igual altura: gráficas desplazables arriba y recorrido abajo.
 La telemetría observada
-corresponde al cursor de la sesión; Volver a LIVE muestra los paquetes actuales del juego.
-El acceso a Volver a LIVE está dentro del menú. La columna de gráficas tiene un
+corresponde al cursor de la sesión; LIVE muestra los paquetes actuales del juego.
+El acceso a LIVE está fijo arriba en el selector de sesiones. La columna de gráficas tiene un
 encabezado compacto y tres filas visibles: velocidad, RPM, acelerador, freno, tiempos
 y distancia se recorren verticalmente. Los tiempos de vuelta y carrera se muestran
 como segundos con tres decimales por debajo de un minuto (`45.123 s`) y minutos
@@ -231,3 +231,13 @@ admite Escape, teclado y movimiento reducido del sistema.
 
 Los cambios de Python requieren reiniciar el servidor, además de recargar el visor.
 En Windows los puertos HTTP/UDP son exclusivos para evitar instancias superpuestas.
+## Interfaz racing
+
+El selector del header permite cambiar entre LIVE y sesiones guardadas. La
+hamburguesa fue eliminada. LIVE incluye un desplegable para nombrar sesiones,
+REC y guardar, y un engranaje a la derecha con OBS y detección automática.
+Guardar manualmente mantiene LIVE abierto; la sesión aparece en el selector.
+En análisis solo aparecen los iconos de reproducción y las vueltas, sin ajustes
+de captura. BEST identifica la vuelta completa más rápida, incluyendo empates;
+las vueltas parciales no compiten. Las fuentes se incluyen localmente para uso
+sin internet. Los colores, secuencia, umbral y parpadeo de las luces RPM se conservan.

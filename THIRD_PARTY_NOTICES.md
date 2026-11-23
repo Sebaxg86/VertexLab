@@ -25,3 +25,10 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Typography: Barlow Condensed Bold Italic and Rajdhani SemiBold, from Google Fonts.
+Sources: https://github.com/google/fonts/tree/main/ofl/barlowcondensed and
+https://github.com/google/fonts/tree/main/ofl/rajdhani
+Bundled locally for offline use. SIL Open Font License 1.1 notices are included in
+public/OFL-Barlow.txt and public/OFL-Rajdhani.txt.
+RaceLab's tire and playback SVG drawings are implemented locally.

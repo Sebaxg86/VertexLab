@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-const colors = ['#59e2ba', '#bc91ff', '#ffb65b', '#69baff', '#ff7295'];
+const colors = ['#ff414c', '#b8c4d2', '#ffb65b', '#69baff', '#bc91ff'];
 let session = null, selected = new Set(), reference = null, t = 0, playing = false;
 let last = 0, zoom = 1, pan = [0, 0], drag = null, objectUrl = null, hasVideo = false;
 let latest = null, revision = null, pendingSeek = null, chartDragging = false;
@@ -22,7 +22,7 @@ const tireLabels = ['Del. izq.', 'Del. der.', 'Tras. izq.', 'Tras. der.'];
 for (let index=0; index<4; index++) {
   const tile = document.createElement('div');
   tile.className = 'tire-tile'; tile.id = 'tire-' + index;
-  tile.innerHTML = `<svg viewBox="0 0 30 50" aria-hidden="true"><rect x="5" y="3" width="20" height="44" rx="7" class="tire-body"/><path d="m10 7 10 6-10 6 10 6-10 6 10 6-10 6" class="tire-tread"/></svg><div class="tire-info"><span>${tireLabels[index]}</span><output id="tire-temp-${index}">—</output><small id="tire-slip-${index}">Sin datos</small><div class="slip-meter"><i id="tire-slip-bar-${index}"></i><em></em></div></div>`;
+  tile.innerHTML = `<svg viewBox="0 0 36 64" aria-hidden="true" class="racing-tire"><rect x="3" y="2" width="30" height="60" rx="9" class="tire-body"/><path d="M8 7v50M28 7v50" class="tire-shoulder"/><path d="M14 4v56M22 4v56" class="tire-groove"/><path d="m4 12 9-5m-9 17 9-5m-9 17 9-5m-9 17 9-5m10-36 9 5m-9 7 9 5m-9 7 9 5m-9 7 9 5" class="tire-tread"/><path d="M16 12h4M16 22h4M16 32h4M16 42h4M16 52h4" class="tire-sipes"/></svg><div class="tire-info"><span>${tireLabels[index]}</span><output id="tire-temp-${index}">—</output><small id="tire-slip-${index}">Sin datos</small><div class="slip-meter"><i id="tire-slip-bar-${index}"></i><em></em></div></div>`;
   $('tire-grid').append(tile);
 }
 for (const [index, metric] of metricDefs.entries()) {
@@ -32,28 +32,13 @@ for (const [index, metric] of metricDefs.entries()) {
   $('telemetry-rows').append(card);
 }
 
-function setMenu(open) {
-  if(open)setSessionPicker(false);
-  $('session-menu').hidden = !open;
-  $('menu-backdrop').hidden = !open;
-  $('menu-toggle').setAttribute('aria-expanded', String(open));
-  $('menu-toggle').setAttribute('aria-label', open ? 'Cerrar menú' : 'Abrir menú');
-  $('workspace').inert = open;
-  $('player').inert = open;
-  if (open) $('menu-close').focus(); else $('menu-toggle').focus();
+function setMenu(open){
+  if(open&&session)return;
+  if(open){setSessionPicker(false);setHeaderDrop('record-name-menu','record-name-trigger',false);}
+  setHeaderDrop('settings-panel','settings-toggle',open);
 }
-$('menu-toggle').onclick = () => setMenu($('session-menu').hidden);
-$('menu-close').onclick = $('menu-backdrop').onclick = () => setMenu(false);
-document.addEventListener('keydown', event => {
-  if ($('session-menu').hidden) return;
-  if (event.key === 'Escape') { setMenu(false); return; }
-  if (event.key !== 'Tab') return;
-  const focusable = [...$('session-menu').querySelectorAll('button,input,select,summary,[tabindex="0"]')]
-    .filter(element => !element.disabled && element.getClientRects().length);
-  const first = focusable[0], end = focusable.at(-1);
-  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); end?.focus(); }
-  else if (!event.shiftKey && document.activeElement === end) { event.preventDefault(); first?.focus(); }
-});
+$('settings-toggle').onclick=()=>setMenu($('settings-toggle').getAttribute('aria-expanded')!=='true');
+$('settings-close').onclick=()=>{setMenu(false);$('settings-toggle').focus();};
 new MutationObserver(() => {
   $('message').hidden = !$('message').textContent;
   clearTimeout(toastTimer);
@@ -74,14 +59,7 @@ function action(fn) {
 async function list() {
   const sessions = await api('sessions');
   renderPickerSessions(sessions);
-  $('sessions').replaceChildren();
-  for (const item of sessions) {
-    const button = document.createElement('button');
-    button.textContent = `${item.name} · ${new Date(item.created * 1000).toLocaleString()}${item.version === 2 && !item.ended ? ' · abierta' : ''}`;
-    button.classList.toggle('selected', session?.meta.id === item.id);
-    button.onclick = action(async () => { await load(item.id); setMenu(false); });
-    $('sessions').append(button);
-  }
+
 }
 
 function clearVideo() {
@@ -107,7 +85,6 @@ async function load(id) {
   $('session-info').textContent = `Clase ${session.meta.carClass ?? '—'} · PI ${session.meta.carPI ?? '—'} · ${session.laps.reduce((n, l) => n + l.rows.length, 0)} muestras${session.meta.ended ? '' : ' · Usa Actualizar para recargar una sesión abierta'}`;
   allMode=true; allRows=RaceAnalysis.sessionRows(session.laps); videoChoices=[];
   renderCarBadges(); renderAnalysisMenu(); refreshTransport();
-  $('show-live').hidden = false;
   t = 0; zoom = 1; pan = [0, 0];
   if (session.meta.videoPath) {
     hasVideo = true;
@@ -126,16 +103,15 @@ async function load(id) {
   await list();
 }
 
-$('refresh').onclick = action(async () => { if (session) await load(session.meta.id); else await list(); });
 $('auto').onchange = action(async () => { await api('auto', {enabled: $('auto').checked}); });
-$('record').onclick = action(async () => { await api('start', {name: $('name').value}); await list(); });
-$('stop').onclick = action(async () => {
-  const id = latest?.recording;
-  await api('stop', {});
-  $('message').textContent = 'Sesión finalizada. Puedes abrirla para analizarla.';
-  if (id) await load(id); else await list();
+$('record').onclick = action(async () => {
+  manualBusy=true;syncCaptureControls(latest);
+  try{await api('start',{name:$('name').value.trim()});await list();}finally{manualBusy=false;syncCaptureControls(latest);}
 });
-$('open-active').onclick = action(() => latest?.recording && load(latest.recording));
+$('stop').onclick = action(async () => {
+  manualBusy=true;syncCaptureControls(latest);
+  try{await api('stop',{});$('message').textContent='Sesión guardada. Ya está disponible en el selector.';await list();}finally{manualBusy=false;syncCaptureControls(latest);}
+});
 $('obs-connect').onclick = action(async () => {
   $('message').textContent = 'Conectando con OBS…';
   try {
@@ -172,9 +148,8 @@ $('volume').oninput = () => { $('video').volume = Number($('volume').value); $('
 function updateVolume() {
   $('mute').setAttribute('aria-pressed', String($('video').muted));
   $('mute').setAttribute('aria-label', $('video').muted ? 'Activar sonido del video' : 'Silenciar video');
-  $('mute').textContent = $('video').muted ? '♪̸' : '♪';
+  $('mute').innerHTML = $('video').muted ? RaceIcons.muted : RaceIcons.volume;
 }
-$('show-live').onclick = openLiveView;
 
 function currentMeta() { return {...session?.meta, offset: Number($('offset').value) || 0}; }
 function videoOnly() { return allMode && hasVideo && session?.meta.version === 2 && !session.meta.syncSegments?.length; }
@@ -195,7 +170,8 @@ function seek(value) {
 }
 function setPlaying(value) {
   playing = value;
-  $('play').textContent = playing ? 'Ⅱ Pausar' : '▶ Reproducir';
+  $('play').innerHTML = playing ? RaceIcons.pause : RaceIcons.play;
+  $('play').setAttribute('aria-label',playing?'Pausar':'Reproducir');$('play').title=playing?'Pausar':'Reproducir';
   if (!value) { $('video').pause(); $('compare-video').pause(); }
 }
 $('time').oninput = () => seek(playbackBounds().start+Number($('time').value));
@@ -478,10 +454,7 @@ function live(state) {
   const connected = liveConnection().online;
   $('status').textContent = state.udpError ? 'Error UDP: '+state.udpError : `UDP ${connected ? 'activo' : 'en espera'} · ${state.packets} paquetes · ${state.invalid} rechazados · ${state.dropped} perdidos en cola`;
   $('auto').checked = state.auto;
-  $('capture-state').dataset.mode = state.mode;
-  const labels = {armed: 'Listo para la próxima carrera', idle: 'Detección automática desactivada', recording: '● Grabando carrera', paused: 'Ⅱ Pausa / esperando confirmar el final'};
-  $('capture-state').textContent = (labels[state.mode] || state.mode) + (state.recording ? ` · ${state.elapsed.toFixed(1)} s` : '');
-  $('open-active').hidden = !state.recording;
+  syncCaptureControls(state);
   $('obs-status').textContent = state.obs.error || (state.obs.connected ? `OBS conectado${state.obs.owned ? ' · grabación de RaceLab' : ' · listo'}` : state.obs.enabled ? 'OBS desconectado · revisa la conexión' : 'Sin conectar · sólo telemetría');
   if (state.error) $('message').textContent = state.error;
   const packet = state.packet;
@@ -507,7 +480,7 @@ events.onmessage = event => { try { live(JSON.parse(event.data)); } catch (e) { 
 events.onerror = () => { streamConnected=false;updateLiveView();if(!session)draw();$('status').textContent = 'Servidor desconectado · reconectando…'; };
 list().catch(e => { $('message').textContent = e.message; });
 const resizeObserver = new ResizeObserver(() => requestAnimationFrame(draw));
-setupAnalysisUI();setupViewUI();
+setupAnalysisUI();setupRacingUI();setupViewUI();
 const initialSession=/^#session\/([a-zA-Z0-9]+)$/.exec(location.hash)?.[1];
 if(initialSession)load(initialSession).catch(e=>{openLiveView();$('message').textContent=e.message;});
 else openLiveView();

@@ -37,6 +37,8 @@ function updateLiveView(){
 }
 function setViewLayout(isLive){
   document.body.classList.toggle('live-view',isLive);
+  $('manual-controls').hidden=!isLive;document.querySelector('.settings-wrap').hidden=!isLive;
+  setMenu(false);setHeaderDrop('record-name-menu','record-name-trigger',false);
   $('workspace').hidden=isLive;$('live-workspace').hidden=!isLive;$('player').hidden=isLive;
   $('instant-dashboard').setAttribute('aria-label',isLive?'Instrumentos LIVE en tiempo real':'Indicadores del instante observado');
   if(isLive)$('live-dashboard-host').append($('instant-dashboard'));
@@ -46,10 +48,10 @@ function setViewLayout(isLive){
 function openLiveView(){
   setPlaying(false);clearVideo();session=null;selected.clear();reference=null;t=0;
   allRows=[];allMode=true;videoChoices=[];chartRange=null;scaleCache.clear();legendKey=null;
-  $('analysis-nav').hidden=true;$('show-live').hidden=true;$('video-options').hidden=true;
+  $('analysis-nav').hidden=true;$('video-options').hidden=true;
   $('video-options-button').hidden=true;$('video-pane-b').hidden=true;
   $('video-split').classList.remove('two-videos');
-  setSessionPicker(false);if(!$('session-menu').hidden)setMenu(false);
+  setSessionPicker(false);setMenu(false);
   history.replaceState(null,'','#live');setViewLayout(true);draw();
 }
 function renderPickerSessions(items){
@@ -63,7 +65,7 @@ function renderPickerSessions(items){
     const text=document.createElement('span'),title=document.createElement('b'),meta=document.createElement('small');
     title.textContent=item.name;meta.textContent=new Date(item.created*1000).toLocaleString()+(item.version===2&&!item.ended?' · En curso':'');
     text.append(title,meta);button.append(icon,text);
-    button.onclick=action(async()=>{button.disabled=true;try{await load(item.id);setSessionPicker(false);if(!$('session-menu').hidden)setMenu(false);}finally{button.disabled=false;}});
+    button.onclick=action(async()=>{button.disabled=true;try{await load(item.id);setSessionPicker(false);setMenu(false);}finally{button.disabled=false;}});
     container.append(button);
   }
   container.scrollTop=scroll;

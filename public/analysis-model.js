@@ -26,6 +26,11 @@
     // Only distance is interpolated for smooth comparison clocks; readings stay measured.
     return {...sample,t:time,d:a.d+(b.d-a.d)*(time-a.t)/(b.t-a.t||1)};
   }
-  root.RaceAnalysis={clock,bounds,sessionRows,atDistance,videoChoices,sampleAtTime};
+  function fastestLapIds(laps){
+    const complete=laps.filter(lap=>!lap.partial&&lap.rows.length>1).map(lap=>({id:lap.id,time:lap.rows.reduce((max,row)=>Math.max(max,Number.isFinite(row.lapTime)?row.lapTime:0),0)})).filter(lap=>lap.time>0);
+    const best=Math.min(...complete.map(lap=>lap.time));
+    return complete.filter(lap=>Math.abs(lap.time-best)<.0005).map(lap=>lap.id);
+  }
+  root.RaceAnalysis={clock,bounds,sessionRows,atDistance,videoChoices,sampleAtTime,fastestLapIds};
   if(typeof module!=='undefined')module.exports=root.RaceAnalysis;
 })(globalThis);
