@@ -65,13 +65,14 @@ function renderPickerSessions(items){
     if(item.preview?.path){
       const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),path=document.createElementNS('http://www.w3.org/2000/svg','path');
       svg.setAttribute('viewBox','0 0 96 64');svg.setAttribute('role','img');
-      svg.setAttribute('aria-label','Trazada de la segunda vuelta'+(item.preview.partial?' · parcial':''));
+      const routeLabel=item.preview.source==='session'?'Trazada de la sesión libre':`Trazada de la ${item.preview.recordedLap===1?'primera':'segunda'} vuelta`+(item.preview.partial?' · parcial':'');
+      svg.setAttribute('aria-label',routeLabel);
       path.setAttribute('d',item.preview.path);svg.append(path);preview.append(svg);
-      preview.title='Segunda vuelta registrada'+(item.preview.partial?' · parcial':'');
-    }else{preview.textContent='Sin vuelta 2';preview.classList.add('empty-route');}
+      preview.title=routeLabel;
+    }else{preview.textContent='Sin trazada';preview.classList.add('empty-route');}
     const brand=document.createElement('span');brand.className='picker-brand';
     if(item.brand?.logo){
-      const logo=document.createElement('img');logo.src=item.brand.logo;logo.alt=item.brand.name;logo.width=38;logo.height=32;logo.loading='lazy';
+      const logo=document.createElement('img');logo.src=item.brand.logo;logo.alt=item.brand.name;logo.width=38;logo.height=32;logo.loading='lazy';if(item.brand.logo.endsWith('.svg'))logo.className='brand-vector';
       logo.onerror=()=>{brand.textContent=item.brand.name;brand.classList.add('brand-text');};brand.append(logo);
     }else{brand.textContent='—';brand.title='Marca sin identificar';}
     const text=document.createElement('span');text.className='picker-session-text';

@@ -247,6 +247,13 @@ los controles de nombre y REC están centrados; el diagnóstico se consulta desd
 engranaje. Sin nombre, la grabación manual recibe «Sesión libre 001», «002», etc.;
 el contador persiste en data/.manual-sequence y no se reinicia al borrar sesiones.
 El selector muestra una miniatura de la segunda vuelta registrada y el logotipo
-local del fabricante, identificado mediante el catálogo del vehículo. Una sesión
-sin segunda vuelta muestra «Sin vuelta 2». Las miniaturas se generan con límites
+local del fabricante, identificado mediante el catálogo del vehículo. Si no hay segunda vuelta utilizable, se dibuja la primera; en una sesión libre
+sin cronometraje se utiliza todo el recorrido. Solo se muestra «Sin trazada»
+si no hay movimiento registrado suficiente. Las miniaturas se generan con límites
 y discontinuidades reales de los datos y se cachean hasta que el archivo cambia.
+
+
+Detección automática: conducción activa y posición de carrera mayor que cero o
+tiempo de vuelta mayor que cero. Esto incluye contrarrelojes/Rivales que emitan
+su reloj de vuelta. No hay reconocimiento geográfico de Time Attack en mundo
+abierto ni clasificación por nombre de modo; si no llegan esas señales, usar REC.

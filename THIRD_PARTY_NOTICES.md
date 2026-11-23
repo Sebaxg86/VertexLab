@@ -41,3 +41,8 @@ Manufacturer logos: car-logos-dataset by filippofilip95 (local thumbnail assets)
 Source: https://github.com/filippofilip95/car-logos-dataset
 Logo images remain the property of their respective manufacturers. Used only to
 identify recorded vehicles; no affiliation or endorsement is implied.
+
+Compact manufacturer emblems / wordmarks: Cardog Icons (43 local SVG variants).
+Source: https://github.com/cardog-ai/icons/tree/master/core/optimized
+Icon variants are preferred over combined logos; text-only marques use wordmarks.
+Copyright / MIT notice: public/LICENSE-Cardog.txt. Trademarks remain their owners'.

@@ -74,7 +74,7 @@ class Runtime:
                 signature = (stat.st_mtime_ns, stat.st_size)
                 cached = self.preview_cache.get(meta['id'])
                 if not cached or cached[0] != signature:
-                    cached = (signature, second_lap_preview(path))
+                    cached = (signature, second_lap_preview(path, manual=meta.get('automatic') is False))
                     self.preview_cache[meta['id']] = cached
                 meta['preview'] = cached[1]
             except FileNotFoundError:
