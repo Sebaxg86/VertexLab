@@ -241,3 +241,12 @@ En análisis solo aparecen los iconos de reproducción y las vueltas, sin ajuste
 de captura. BEST identifica la vuelta completa más rápida, incluyendo empates;
 las vueltas parciales no compiten. Las fuentes se incluyen localmente para uso
 sin internet. Los colores, secuencia, umbral y parpadeo de las luces RPM se conservan.
+
+El header de análisis no muestra importación de video ni diagnóstico UDP. En LIVE,
+los controles de nombre y REC están centrados; el diagnóstico se consulta desde el
+engranaje. Sin nombre, la grabación manual recibe «Sesión libre 001», «002», etc.;
+el contador persiste en data/.manual-sequence y no se reinicia al borrar sesiones.
+El selector muestra una miniatura de la segunda vuelta registrada y el logotipo
+local del fabricante, identificado mediante el catálogo del vehículo. Una sesión
+sin segunda vuelta muestra «Sin vuelta 2». Las miniaturas se generan con límites
+y discontinuidades reales de los datos y se cachean hasta que el archivo cambia.

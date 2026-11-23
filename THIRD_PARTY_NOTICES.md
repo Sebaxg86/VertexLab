@@ -32,3 +32,12 @@ https://github.com/google/fonts/tree/main/ofl/rajdhani
 Bundled locally for offline use. SIL Open Font License 1.1 notices are included in
 public/OFL-Barlow.txt and public/OFL-Rajdhani.txt.
 RaceLab's tire and playback SVG drawings are implemented locally.
+
+Steering wheel: Tabler Icons, filled steering-wheel.svg (adapted into the animated dial).
+Source: https://github.com/tabler/tabler-icons/blob/main/icons/filled/steering-wheel.svg
+MIT license, Copyright (c) 2020-2026 Paweł Kuna. Full notice: public/LICENSE-Tabler.txt.
+
+Manufacturer logos: car-logos-dataset by filippofilip95 (local thumbnail assets).
+Source: https://github.com/filippofilip95/car-logos-dataset
+Logo images remain the property of their respective manufacturers. Used only to
+identify recorded vehicles; no affiliation or endorsement is implied.

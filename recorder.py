@@ -1,5 +1,6 @@
 """Race lifecycle and a pause-free analysis clock, independent from UDP/UI."""
 import json
+import re
 import time
 import uuid
 from pathlib import Path
@@ -64,6 +65,22 @@ class Recorder:
             raise ValueError('Ya hay una sesión abierta')
         if self.obs.owned:
             raise ValueError('OBS conserva una grabación pendiente. Reintenta finalizarla antes de grabar otra sesión.')
+        name = name.strip() if name else None
+        if manual and not name:
+            counter_path = self.data/'.manual-sequence'
+            try:
+                counter = int(counter_path.read_text())
+            except (FileNotFoundError, ValueError):
+                counter = 0
+            for path in self.data.glob('*.json'):
+                match = re.fullmatch(r'Sesión libre (\d+)', json.loads(path.read_text(encoding='utf-8')).get('name', ''))
+                if match:
+                    counter = max(counter, int(match[1]))
+            counter += 1
+            temporary = self.data/'.manual-sequence.tmp'
+            temporary.write_text(str(counter))
+            temporary.replace(counter_path)
+            name = f'Sesión libre {counter:03d}'
         ordinal = row.get('carOrdinal', 0) if row else 0
         self.meta = dict(id=uuid.uuid4().hex, name=name or car_name(ordinal), created=time.time(),
                          offset=0, version=2, carOrdinal=ordinal, carClass=(row or {}).get('carClass'),

@@ -122,6 +122,22 @@ class RecorderTests(unittest.TestCase):
     def rows(self, sid):
         return [json.loads(line) for line in (Path(self.tmp.name)/(sid+'.jsonl')).read_text().splitlines()]
 
+    def test_unnamed_manual_sessions_have_persistent_serial_names(self):
+        self.rec.begin(100, name='   ', manual=True)
+        first = self.rec.meta['id']
+        self.assertEqual(self.rec.meta['name'], 'Sesión libre 001')
+        self.rec.finish()
+        self.rec = Recorder(self.tmp.name, self.obs)
+        self.rec.begin(101, manual=True)
+        self.assertEqual(self.rec.meta['name'], 'Sesión libre 002')
+        self.rec.finish()
+        self.rec.begin(102, name='Mi práctica', manual=True)
+        self.assertEqual(self.rec.meta['name'], 'Mi práctica')
+        self.rec.finish()
+        (Path(self.tmp.name)/(first+'.json')).unlink()
+        self.rec.begin(103, manual=True)
+        self.assertEqual(self.rec.meta['name'], 'Sesión libre 003')
+
     def test_free_roam_never_opens_even_first_packet(self):
         for wall in [100,101,102]: self.feed(wall,event=False)
         self.assertIsNone(self.rec.meta)

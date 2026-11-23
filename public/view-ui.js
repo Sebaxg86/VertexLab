@@ -61,10 +61,26 @@ function renderPickerSessions(items){
   for(const item of items){
     const button=document.createElement('button');button.className='picker-session';
     button.setAttribute('aria-current',session?.meta.id===item.id?'page':'false');
-    const icon=document.createElement('span');icon.className='picker-session-icon';icon.textContent='↗';icon.setAttribute('aria-hidden','true');
-    const text=document.createElement('span'),title=document.createElement('b'),meta=document.createElement('small');
-    title.textContent=item.name;meta.textContent=new Date(item.created*1000).toLocaleString()+(item.version===2&&!item.ended?' · En curso':'');
-    text.append(title,meta);button.append(icon,text);
+    const preview=document.createElement('span');preview.className='picker-route';
+    if(item.preview?.path){
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),path=document.createElementNS('http://www.w3.org/2000/svg','path');
+      svg.setAttribute('viewBox','0 0 96 64');svg.setAttribute('role','img');
+      svg.setAttribute('aria-label','Trazada de la segunda vuelta'+(item.preview.partial?' · parcial':''));
+      path.setAttribute('d',item.preview.path);svg.append(path);preview.append(svg);
+      preview.title='Segunda vuelta registrada'+(item.preview.partial?' · parcial':'');
+    }else{preview.textContent='Sin vuelta 2';preview.classList.add('empty-route');}
+    const brand=document.createElement('span');brand.className='picker-brand';
+    if(item.brand?.logo){
+      const logo=document.createElement('img');logo.src=item.brand.logo;logo.alt=item.brand.name;logo.width=38;logo.height=32;logo.loading='lazy';
+      logo.onerror=()=>{brand.textContent=item.brand.name;brand.classList.add('brand-text');};brand.append(logo);
+    }else{brand.textContent='—';brand.title='Marca sin identificar';}
+    const text=document.createElement('span');text.className='picker-session-text';
+    const title=document.createElement('b'),date=document.createElement('small');
+    const knownCar=item.carName&&!item.carName.startsWith('Vehículo #');
+    title.textContent=knownCar?item.carName:item.name;
+    if(knownCar&&item.name!==item.carName){const label=document.createElement('span');label.className='picker-custom-name';label.textContent=item.name;text.append(label);}
+    date.textContent=new Date(item.created*1000).toLocaleString()+(item.version===2&&!item.ended?' · En curso':'');
+    text.prepend(title);text.append(date);button.append(preview,brand,text);
     button.onclick=action(async()=>{button.disabled=true;try{await load(item.id);setSessionPicker(false);setMenu(false);}finally{button.disabled=false;}});
     container.append(button);
   }

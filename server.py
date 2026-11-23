@@ -14,8 +14,10 @@ from urllib.parse import urlparse
 from obs_control import OBS
 from recorder import Recorder, car_name
 from telemetry import decode, analyze
+from session_preview import second_lap_preview
 
 ROOT = Path(__file__).resolve().parent
+BRANDS = json.loads((ROOT/'car-brands.json').read_text(encoding='utf-8')) if (ROOT/'car-brands.json').exists() else {}
 
 
 class ThreadingHTTPServer(BaseHTTPServer):
@@ -41,6 +43,7 @@ class Runtime:
         self.worker = threading.Thread(target=self.run, daemon=True)
         self.worker.start()
         self.sock = None
+        self.preview_cache = {}
 
     def status(self):
         with self.lock:
@@ -60,8 +63,23 @@ class Runtime:
 
     def sessions(self):
         with self.lock:
-            return sorted([json.loads(p.read_text(encoding='utf-8')) for p in self.data.glob('*.json')],
-                          key=lambda s:s['created'], reverse=True)
+            sessions = sorted([json.loads(p.read_text(encoding='utf-8')) for p in self.data.glob('*.json')],
+                              key=lambda s:s['created'], reverse=True)
+        for meta in sessions:
+            meta['carName'] = car_name(meta.get('carOrdinal', 0))
+            meta['brand'] = BRANDS.get(str(meta.get('carOrdinal')))
+            path = self.data/(meta['id']+'.jsonl')
+            try:
+                stat = path.stat()
+                signature = (stat.st_mtime_ns, stat.st_size)
+                cached = self.preview_cache.get(meta['id'])
+                if not cached or cached[0] != signature:
+                    cached = (signature, second_lap_preview(path))
+                    self.preview_cache[meta['id']] = cached
+                meta['preview'] = cached[1]
+            except FileNotFoundError:
+                meta['preview'] = None
+        return sessions
 
     def read_session(self, sid):
         with self.lock:

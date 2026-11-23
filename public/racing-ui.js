@@ -17,6 +17,8 @@ function syncCaptureControls(state){
   $('record').hidden=recording;$('stop').hidden=!recording;
   $('record').disabled=manualBusy;$('stop').disabled=manualBusy;
   $('record-name-trigger').disabled=recording||manualBusy;
+  if(recording&&state.sessionName)setViewText('record-name-label',state.sessionName);
+  else if(!$('name').value.trim())setViewText('record-name-label','Nombrar sesión');
   $('capture-state').dataset.mode=state?.mode||'idle';
   setViewText('capture-state',recording?(state.mode==='paused'?'PAUSA · ':'REC · ')+(state.elapsed||0).toFixed(1)+' s':'');
 }
