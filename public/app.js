@@ -50,6 +50,7 @@ new MutationObserver(() => {
 }).observe($('message'), {childList:true, characterData:true, subtree:true});
 
 async function api(path, body) {
+  if(globalThis.VertexBrowser?.enabled)return VertexBrowser.request(path,body);
   const response = await fetch('/api/' + path, body === undefined ? {} : {
     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
   });
@@ -102,7 +103,7 @@ async function loadSession(id) {
   if (session.meta.videoPath) {
     hasVideo = true;
     $('video-empty').hidden = true;
-    $('video').src = '/api/video/' + id;
+    $('video').src = globalThis.VertexBrowser?.enabled?VertexBrowser.videoURL(id):'/api/video/'+id;
     $('video-status').textContent = 'Video asociado por OBS. Si tu navegador no admite el formato, remultiplexa a MP4 H.264 y ábrelo con «Abrir video local».';
   } else {
     $('video-status').textContent = 'Sin video asociado. Puedes abrir uno local; las sesiones antiguas admiten ajuste manual.';
@@ -556,13 +557,16 @@ function live(state) {
     if (session && changed && state.lastSaved && !state.recording && !playing) load(state.lastSaved).catch(e => { $('message').textContent = e.message; });
   }
 }
+if(!globalThis.VertexBrowser?.enabled){
 const events = new EventSource('/events');
 events.onmessage = event => { try { live(JSON.parse(event.data)); } catch (e) { $('message').textContent = 'Error de actualización: '+e.message; } };
 events.onerror = () => { streamConnected=false;updateLiveView();if(!session)draw();$('status').textContent = 'Servidor desconectado · reconectando…'; };
+}
 list().catch(e => { $('message').textContent = e.message; });
 const resizeObserver = new ResizeObserver(() => requestAnimationFrame(draw));
 setupAnalysisUI();setupPortableUI();setupLapScrollArrow();setupLapTimeline();setupRacingUI();setupViewUI();setupAnalysisInteractions();
-const initialSession=/^#session\/([a-zA-Z0-9]+)$/.exec(location.hash)?.[1];
+globalThis.VertexBrowser?.setup();
+const initialSession=!globalThis.VertexBrowser?.enabled&&/^#session\/([a-zA-Z0-9]+)$/.exec(location.hash)?.[1];
 if(initialSession)load(initialSession).catch(e=>{openLiveView();$('message').textContent=e.message;});
 else openLiveView();
 resizeObserver.observe($('map')); resizeObserver.observe($('telemetry-scroll'));

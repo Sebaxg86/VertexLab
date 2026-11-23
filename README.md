@@ -303,8 +303,21 @@ Se restauran las vueltas seleccionadas, referencia, los dos videos de comparaci�
 
 El formato v1 es un ZIP64 con `manifest.json`, `session.json`, `view.json`, `telemetry.jsonl` y, si existe, `video.<extensión>`. El manifiesto contiene tamaños y SHA-256 de cada componente. Se validan integridad, nombres exactos, versión, espacio libre, muestras y sincronización antes de publicar la sesión. No se extraen rutas del ZIP ni se usan rutas de video suministradas en sus metadatos. El límite del paquete es 256 GiB, con telemetría de hasta 4 GiB. El empaquetado, subida local e importación usan bloques sin cargar el video entero en RAM; la exportación temporal necesita espacio adicional en disco y caduca a los 30 minutos si no se descarga.
 
-Esta fase transporta sesiones: no incluye el programa dentro del archivo, no registra doble clic en Windows y no implementa todavía Google Drive ni un visor para teléfono. La reproducción conserva la compatibilidad del codec original con el navegador del equipo de destino. No convierte formatos ni reduce la calidad para hacerlos compatibles.
+Esta fase transporta sesiones: no incluye el programa dentro del archivo, no registra doble clic en Windows y no implementa todavía Google Drive; el visor web descrito abajo permite abrir el archivo en teléfonos. La reproducción conserva la compatibilidad del codec original con el navegador del equipo de destino. No convierte formatos ni reduce la calidad para hacerlos compatibles.
 
 La carpeta del repositorio se conserva en su ubicación actual para mantener accesos existentes. El nombre visible es VertexLab. Se admite `VERTEXLAB_OBS_PASSWORD` y, por compatibilidad, `RACELAB_OBS_PASSWORD`.
 
-Las luces de RPM reinician un barrido visual de 150 ms desde cero al detectar cambios de marcha, tanto ascendentes como descendentes, en LIVE y durante reproducción. El destino sigue las RPM reales; los números, telemetría y sincronización no cambian. No se dispara al buscar puntos con la sesión pausada ni al cambiar de vehículo. Se respeta la preferencia de reducir movimiento.
+Las luces de RPM reinician un barrido visual de 220 ms desde cero al detectar cambios de marcha, tanto ascendentes como descendentes, en LIVE y durante reproducción. El destino sigue las RPM reales; los números, telemetría y sincronización no cambian. No se dispara al buscar puntos con la sesión pausada ni al cambiar de vehículo. Se respeta la preferencia de reducir movimiento.
+
+
+### Visor web para computadora y teléfono
+
+Disponible en https://sebaxg86.github.io/VertexLab/ . Exporta el `.vrtx` en la PC, cópialo al dispositivo y pulsa **Abrir archivo .vrtx** en el visor. No necesita Python, OBS ni que la PC siga encendida. El archivo se procesa en el dispositivo: no se suben grabaciones al sitio ni a GitHub. Conserva la interfaz de análisis, vueltas, comparación de dos videos y sincronización por tramos. La captura LIVE y el control de OBS permanecen en la aplicación local de Windows.
+
+La biblioteca web vive únicamente en la pestaña: después de recargar, abre de nuevo el archivo. **Cerrar sesión de esta pestaña** libera sus recursos sin borrar el original. **Guardar archivo .vrtx original** descarga el archivo abierto; todavía no incorpora los cambios de vista hechos en el visor web. Google Drive queda para una fase posterior.
+
+El visor incluye manifiesto instalable y caché sin conexión: después de una primera visita completa puede abrirse sin servidor. El sistema operativo puede eliminar esa caché; guarda siempre tus archivos originales. No almacena los videos en la caché. El diseño se verificó en Chromium con tamaños de escritorio y teléfono; queda pendiente probar en dispositivos Android/iPhone físicos. El navegador debe admitir el codec del video original: el visor no convierte formatos.
+
+Para proteger la memoria del teléfono, el lector web limita la telemetría a 128 MiB y 250 000 muestras, y el paquete a 256 GiB. Valida SHA-256 y CRC antes de abrir; esa primera lectura tarda según el tamaño del video. Usa un Worker y una porción del archivo original para reproducir el video sin descomprimirlo entero en memoria. Admite el video sin compresión ZIP que genera el exportador de VertexLab.
+
+Construcción local: `python tools/build_viewer.py`, seguido de `python -m http.server 8770 --directory _site`. Abre `http://localhost:8770`; no abras el HTML mediante `file://`. El directorio `_site` contiene solo código, catálogos y recursos públicos. El flujo de GitHub Actions publica ese resultado en Pages con cada actualización de `main`.

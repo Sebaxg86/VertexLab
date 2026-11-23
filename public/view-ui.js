@@ -33,6 +33,7 @@ function setSessionPicker(open,restoreFocus=false){
   if(restoreFocus)$('session-trigger').focus();
 }
 function updateLiveView(){
+  if(globalThis.VertexBrowser?.enabled){VertexBrowser.decorate();return;}
   const state=liveConnection();
   document.body.dataset.liveConnected=String(state.online);
   setViewText('picker-live-status',state.online?'Conectado':'Sin señal');
@@ -46,6 +47,7 @@ function updateLiveView(){
   setViewText('live-connection',state.detail);
 }
 function setViewLayout(isLive){
+  if(globalThis.VertexBrowser?.enabled)isLive=false;
   document.body.classList.toggle('live-view',isLive);
   $('manual-controls').hidden=!isLive;document.querySelector('.settings-wrap').hidden=false;
   $('live-settings').hidden=!isLive;$('analysis-settings').hidden=isLive;
@@ -67,7 +69,7 @@ function openLiveView(){
   $('video-options-button').hidden=true;$('video-pane-b').hidden=true;
   $('video-split').classList.remove('two-videos');
   setSessionPicker(false);setMenu(false);
-  history.replaceState(null,'','#live');setViewLayout(true);draw();
+  history.replaceState(null,'',globalThis.VertexBrowser?.enabled?'#viewer':'#live');setViewLayout(true);draw();
 }
 function renderPickerSessions(items){
   const container=$('picker-sessions'),scroll=container.scrollTop;container.replaceChildren();

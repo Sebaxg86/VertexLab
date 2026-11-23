@@ -46,3 +46,10 @@ Compact manufacturer emblems / wordmarks: Cardog Icons (43 local SVG variants).
 Source: https://github.com/cardog-ai/icons/tree/master/core/optimized
 Icon variants are preferred over combined logos; text-only marques use wordmarks.
 Copyright / MIT notice: public/LICENSE-Cardog.txt. Trademarks remain their owners'.
+
+## Browser portable viewer
+
+- zip.js 2.25.0 — Gildas Lormeau — BSD-3-Clause. Source: https://github.com/gildas-lormeau/zip.js . Bundled as `public/vendor-zip-2.25.0.js`; license beside it.
+- hash-wasm 4.13.0 — Dániel Németh — MIT. Source: https://github.com/Daninet/hash-wasm . SHA-256 bundle `public/vendor-sha256-4.13.0.js`; license beside it.
+
+Packages were pinned and their npm tarball SRI verified before vendoring. No third-party scripts are fetched when a user opens a session.

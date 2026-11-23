@@ -22,14 +22,19 @@ function setupPortableUI(){
     const file=$('portable-file').files[0];$('portable-file').value='';if(!file)return;
     const finish=startSessionLoading('Importando sesión','Verificando video y telemetría');
     try{
+      let result;
+      if(globalThis.VertexBrowser?.enabled){result=await VertexBrowser.open(file,progress=>{document.querySelector('.session-loading-card>span').textContent=progress.phase+' · '+progress.percent+'%';});}
+      else{
       const response=await fetch('/api/portable/import',{method:'POST',headers:{'Content-Type':'application/vnd.vertexlab.session+zip'},body:file});
-      const result=await response.json();if(!response.ok)throw Error(result.error);
+      result=await response.json();if(!response.ok)throw Error(result.error);
+      }
       await list();await load(result.id);setSessionPicker(false);
-      $('message').textContent='Sesión importada. Video, telemetría y análisis disponibles en este equipo.';
+      $('message').textContent=globalThis.VertexBrowser?.enabled?'Sesión abierta en esta pestaña. El archivo permanece en tu dispositivo.':'Sesión importada. Video, telemetría y análisis disponibles en este equipo.';
     }catch(error){$('message').textContent=error.message;}finally{await finish();}
   };
   $('export-session').onclick=action(async()=>{
     if(!session)return;
+    if(globalThis.VertexBrowser?.enabled){const file=VertexBrowser.original(session.meta.id),url=URL.createObjectURL(file),link=document.createElement('a');link.href=url;link.download=file.name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);setMenu(false);$('message').textContent='Se descarga el archivo original; conserva el estado de análisis con el que fue exportado.';return;}
     if(objectUrl)throw Error('El video abierto temporalmente debe asociarse a la sesión antes de exportar.');
     setPlaying(false);setMenu(false);const view=capturePortableView();
     const finish=startSessionLoading('Preparando archivo .vrtx','Empaquetando el video original y la telemetría');
