@@ -348,3 +348,10 @@ El reproductor mantiene una sola petición play pendiente por video, ignora Abor
 La vista Todo el recorrido comparte las muestras originales para los instrumentos y conserva únicamente una proyección de los campos de las gráficas, evitando duplicar todos los datos de cada muestra. Al cambiar entre sesiones guardadas libera la anterior de la memoria; no modifica sus archivos.
 
 Validación: pruebas de rangos por encima de 2 GiB, cortes exactos del ZIP, HEAD/206/416, cancelación, recuperación del Service Worker y control de play; prueba en navegador de reproducción desde la ruta local. Sigue pendiente confirmar el comportamiento y la memoria con el iPhone físico y su sesión local de 2.8 GB.
+
+
+### Reloj de reproducción y cortes periódicos
+
+Con video sincronizado, el primer video (el que tiene audio) marca el reloj de sesión. Las gráficas y el mapa siguen su currentTime mediante las referencias reales de OBS. Al esperar datos o buscar un punto no acumulan tiempo independiente que obligue a saltar el video para alcanzarlo. En comparación, se convierte la distancia de ese video al instante correspondiente de la vuelta de referencia. El video principal mantiene la velocidad elegida; solo el segundo se adapta a la comparación. Los saltos explícitos del usuario y los cortes reales entre segmentos de OBS siguen aplicándose.
+
+Las secciones sin video o con error conservan el reloj de telemetría. No se reinicia un video que ya terminó. Se verificaron relojes con renderizado irregular y buffering repetido, pausas OBS y referencias de vueltas diferentes. Validación física de los tirones reportados en iPhone pendiente.

@@ -2,7 +2,7 @@
 (function(root){
  const pending=new WeakMap();
  function play(video,onError){
-  if(!video.paused||pending.has(video))return;
+  if(video.ended||!video.paused||pending.has(video))return;
   const source=video.getAttribute('src');
   let result;try{result=video.play();}catch(error){onError(error);return;}
   const task=Promise.resolve(result).catch(error=>{if(error.name!=='AbortError'&&source===video.getAttribute('src'))onError(error);}).finally(()=>{if(pending.get(video)===task)pending.delete(video);});pending.set(video,task);

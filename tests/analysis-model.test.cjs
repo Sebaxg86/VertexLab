@@ -27,3 +27,38 @@ test('session overview shares heavy telemetry arrays while preserving instrument
  assert.equal(rows[0].source,original);assert.equal(Object.hasOwn(rows[0],'tireTemp'),false);
  const sample=model.instrumentSample(model.sampleAtTime(rows,.5));assert.equal(sample.tireTemp,temps);assert.equal(sample.tireSlipRatio,slip);assert.equal(sample.steer,45);assert.equal(sample.d,50);assert.equal(sample.rpm,6000);
 });
+
+test('video clock follows decoded media time instead of accumulating frame timer drift',()=>{
+ const {videoClock}=require('../public/analysis-model.js'),timeline=require('../public/timeline.js');
+ const state={current:10,meta:{version:1,offset:2},allMode:true,video:{duration:100,currentTime:12.8,readyState:4,seeking:false,ended:false,error:null}};
+ assert.ok(Math.abs(videoClock(state,timeline)-10.8)<1e-8);
+ // If media stalls, telemetry holds the same instant instead of racing ahead and seeking.
+ state.current=10.8;assert.ok(Math.abs(videoClock(state,timeline)-10.8)<1e-8);
+ state.video.seeking=true;state.video.currentTime=0;assert.equal(videoClock(state,timeline),10.8);
+ state.video.seeking=false;state.video.readyState=1;assert.equal(videoClock(state,timeline),10.8);
+});
+test('comparison clock maps the audible lap to the selected reference by distance',()=>{
+ const {videoClock}=require('../public/analysis-model.js'),timeline=require('../public/timeline.js');
+ const sourceLap={id:3,rows:[{t:30,d:0},{t:40,d:100}]},referenceLap={id:6,rows:[{t:60,d:0},{t:80,d:100}]};
+ const state={current:65,meta:{version:1},allMode:false,sourceLap,referenceLap,video:{duration:100,currentTime:35,readyState:4,seeking:false,ended:false,error:null}};
+ assert.equal(videoClock(state,timeline),70);
+});
+test('video clock preserves OBS pause anchors and allows telemetry-only sections to advance',()=>{
+ const {videoClock}=require('../public/analysis-model.js'),timeline=require('../public/timeline.js');
+ const state={current:5,meta:{version:2,syncSegments:[{tStart:1,tEnd:10,videoStart:2},{tStart:11,tEnd:20,videoStart:14}]},allMode:true,video:{duration:25,currentTime:7,readyState:4}};
+ assert.equal(videoClock(state,timeline),6);
+ state.current=10.5;assert.equal(videoClock(state,timeline),null);
+ state.current=12;state.video.currentTime=15;assert.equal(videoClock(state,timeline),12);
+ state.video.error={code:3};assert.equal(videoClock(state,timeline),null);
+});
+
+test('irregular rendering and repeated buffering never accumulate catch-up drift against video',()=>{
+ const {videoClock}=require('../public/analysis-model.js'),timeline=require('../public/timeline.js');
+ const state={current:0,meta:{version:1},allMode:true,video:{duration:120,currentTime:0,readyState:4,seeking:false,ended:false,error:null}};
+ for(let frame=0;frame<1000;frame++){
+  const elapsed=frame%7===0?.18:1/60,buffering=frame%100<15;
+  if(!buffering)state.video.currentTime+=elapsed;
+  state.current=videoClock(state,timeline);
+  assert.ok(Math.abs(state.current-state.video.currentTime)<1e-9);
+ }
+});

@@ -1,5 +1,5 @@
 /* Analysis modes and video panes share the original session clock and OBS mapping. */
-let allMode=true, allRows=[], videoChoices=[], videoTargets=new Map();
+let allMode=true, allRows=[], videoChoices=[], videoTargets=new Map(), videoClockActive=false;
 function lapLabel(lap){return lap?`Vuelta ${(Number.isFinite(lap.number)?lap.number:lap.id)+1}`:'Sin vuelta';}
 function analysisExtent(){return allMode?Math.max(1,allRows.at(-1)?.t||0):Math.max(1,...visible().map(lap=>lap.rows.at(-1)?.d||0));}
 function analysisX(row){return allMode?row.t:row.d;}
@@ -77,6 +77,13 @@ function renderVideoControls(){
   $('video-selection-note').textContent=selected.size>2?'Se comparan todas las vueltas marcadas. Elige aquí los dos videos.':'Videos alineados por distancia · audio del primero';
   videoTargets.clear();
 }
+function videoPlaybackClock(){
+  if(!session||!hasVideo)return null;
+  const video=$('video');
+  return RaceAnalysis.videoClock({current:t,meta:currentMeta(),allMode,
+    sourceLap:session.laps.find(lap=>lap.id===videoChoices[0]),referenceLap:session.laps.find(lap=>lap.id===reference),
+    video:{error:video.error,ended:video.ended,duration:video.duration,seeking:video.seeking,readyState:video.readyState,currentTime:video.currentTime}},RaceTimeline);
+}
 function syncVideoPanes(force=false,dt=0){
   if(!session||!hasVideo)return;
   const sample=observedSample();
@@ -85,7 +92,10 @@ function syncVideoPanes(force=false,dt=0){
     const video=index?$('compare-video'):$('video'),warning=$(index?'video-warning-b':'video-warning-a');
     if(video.error){warning.hidden=false;warning.textContent=VertexPlayback.message(null,video);return;}
     const lap=lapId===null?null:session.laps.find(lap=>lap.id===lapId);
-    const targetTime=allMode||lapId===reference?t:sample?RaceAnalysis.atDistance(lap,sample.d):null;
+    let targetTime=allMode||lapId===reference?t:sample?RaceAnalysis.atDistance(lap,sample.d):null;
+    // Do not seek the audible clock back to a distance plateau when the car stops.
+    // Round-tripping its own clock still skips real gaps between OBS segments.
+    if(index===0&&playing&&videoClockActive&&!force)targetTime=RaceTimeline.fromVideo(currentMeta(),video.currentTime);
     const target=targetTime===null?null:RaceTimeline.toVideo(currentMeta(),targetTime);
     const available=target!==null&&target>=0&&Number.isFinite(video.duration)&&target<=video.duration;
     warning.hidden=available;
@@ -95,8 +105,8 @@ function syncVideoPanes(force=false,dt=0){
     const previous=videoTargets.get(index);
     if(playing){
       let rate=Number($('rate').value);
-      if(!allMode&&previous!==undefined&&dt>0)rate=Math.max(.25,Math.min(4,(target-previous)/dt));
-      video.playbackRate=rate;
+      if(index>0&&!allMode&&previous!==undefined&&dt>0)rate=Math.max(.25,Math.min(4,(target-previous)/dt));
+      if(Math.abs(video.playbackRate-rate)>.01)video.playbackRate=rate;
       VertexPlayback.play(video,error=>{if(error.name==='NotAllowedError')setPlaying(false);warning.hidden=false;warning.textContent=VertexPlayback.message(error,video);$('message').textContent=warning.textContent;});
     }else video.pause();
     videoTargets.set(index,target);

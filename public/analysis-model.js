@@ -27,6 +27,21 @@
     // Only distance is interpolated for smooth comparison clocks; readings stay measured.
     return {...sample,t:time,d:a.d+(b.d-a.d)*(time-a.t)/(b.t-a.t||1)};
   }
+  // The audible video is the playback clock. Buffering freezes telemetry, never triggers catch-up seeks.
+  function videoClock(state,timeline){
+    const {current,meta,allMode,sourceLap,referenceLap,video}=state;
+    if(video.error||video.ended||!Number.isFinite(video.duration))return null;
+    let sourceTime=current;
+    if(!allMode&&sourceLap?.id!==referenceLap?.id){const sample=sampleAtTime(referenceLap?.rows||[],current);sourceTime=sample?atDistance(sourceLap,sample.d):null;}
+    const target=sourceTime===null?null:timeline.toVideo(meta,sourceTime);
+    if(target===null||target<0||target>video.duration)return null;
+    if(video.seeking||video.readyState<2)return current;
+    const measured=timeline.fromVideo(meta,video.currentTime);
+    if(!Number.isFinite(measured))return null;
+    if(allMode||sourceLap?.id===referenceLap?.id)return measured;
+    const sample=sampleAtTime(sourceLap?.rows||[],measured);
+    return sample?atDistance(referenceLap,sample.d):null;
+  }
   function fastestLapIds(laps){
     const complete=laps.filter(lap=>!lap.partial&&lap.rows.length>1).map(lap=>({id:lap.id,time:lap.rows.reduce((max,row)=>Math.max(max,Number.isFinite(row.lapTime)?row.lapTime:0),0)})).filter(lap=>lap.time>0);
     const best=Math.min(...complete.map(lap=>lap.time));
@@ -45,6 +60,6 @@
     timeSeriesCache.set(rows,series);return series;
   }
   function lapTimeline(laps,total){return laps.filter(lap=>lap.rows.length).map(lap=>{const b=bounds(lap);return {id:lap.id,number:lap.number,partial:!!lap.partial,start:Math.max(0,b.start),end:Math.min(total,b.end)};}).filter(lap=>lap.end>lap.start);}
-  root.RaceAnalysis={clock,bounds,sessionRows,instrumentSample,atDistance,videoChoices,sampleAtTime,fastestLapIds,lapSummary,timeSeries,lapTimeline};
+  root.RaceAnalysis={clock,bounds,sessionRows,instrumentSample,atDistance,videoChoices,sampleAtTime,videoClock,fastestLapIds,lapSummary,timeSeries,lapTimeline};
   if(typeof module!=='undefined')module.exports=root.RaceAnalysis;
 })(globalThis);

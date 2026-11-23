@@ -522,7 +522,8 @@ function frame(now) {
     }
   } else if (playing && session) {
     const bounds=playbackBounds(),dt=Math.min((now-last)/1000,.1);
-    t=Math.min(bounds.end,t+dt*Number($('rate').value));
+    const videoTime=videoPlaybackClock();videoClockActive=Number.isFinite(videoTime);
+    t=Math.max(bounds.start,Math.min(bounds.end,Number.isFinite(videoTime)?videoTime:t+dt*Number($('rate').value)));
     syncVideoPanes(false,dt);refreshTransport();draw();
     if(t>=bounds.end)setPlaying(false);
   }
