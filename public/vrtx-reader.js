@@ -5,7 +5,7 @@
     for(let attempt=0;attempt<3;attempt++){
       try{
         const part=file.slice(start,end);
-        const buffer=typeof FileReaderSync!=='undefined'?new FileReaderSync().readAsArrayBuffer(part):await part.arrayBuffer();
+        const buffer=typeof FileReaderSync!=='undefined'&&!file.remote?new FileReaderSync().readAsArrayBuffer(part):await part.arrayBuffer();
         if(buffer.byteLength!==end-start)throw Error('Lectura incompleta');
         return new Uint8Array(buffer);
       }catch(error){if(attempt===2)throw Error('No se pudo leer el archivo del dispositivo. En Archivos, descarga primero el .vrtx y cópialo a «En mi iPhone»; después vuelve a abrirlo. Detalle: '+error.message);}

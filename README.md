@@ -332,3 +332,6 @@ En Safari/iPhone y otros navegadores sin selector de carpeta se usa almacenamien
 En pantallas de hasta 600 px el video permanece arriba, debajo del header, mientras se exploran las gráficas y el recorrido. Conserva los mismos elementos de video, reproducción y sincronización, sin recrearlos al desplazar.
 
 El lector de paquetes usa lecturas por rangos y `FileReaderSync` en el Worker cuando está disponible, en lugar del streaming de Blob. Reintenta errores transitorios de lectura y conserva la validación de tamaños, SHA-256 y CRC. Si Archivos/iCloud no puede proporcionar el archivo, indica descargarlo completamente y copiarlo a **En mi iPhone**. La corrección tiene pruebas automatizadas; su confirmación con el archivo y iPhone del usuario está pendiente.
+
+
+Para errores de lectura de archivos grandes en el Worker de Safari, el visor reintenta automáticamente con un puente de lectura: el hilo principal lee rangos pequeños con FileReader y transfiere los bloques al Worker, donde siguen verificándose y analizándose. No se carga el archivo completo en RAM. Se verificaron posiciones superiores a 2 GiB y la lectura integral de un paquete a través del puente. Caso reportado pendiente de confirmar en hardware: iOS 26, app web instalada desde Safari y paquete local de 2.8 GB.

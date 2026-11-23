@@ -19,6 +19,8 @@
       cancel.onclick=()=>{finish();reject(Error('Apertura cancelada'));};
       worker.onerror=()=>{finish();reject(Error('No se pudo procesar el archivo. Comprueba la memoria disponible y vuelve a abrirlo.'));};
       worker.onmessage=async event=>{
+        if(event.data.retryRead){progress?.({phase:'Reintentando lectura compatible con Safari',percent:0});worker.postMessage({remote:true,size:file.size});return;}
+        if(event.data.readRange){const {id,start,end}=event.data.readRange;try{if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||start<0||end<start||end>file.size||end-start>4*1024**2)throw Error('Rango de lectura inválido');const reader=new FileReader();const buffer=await new Promise((resolve,reject)=>{reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error||Error('I/O Read operation failed'));reader.readAsArrayBuffer(file.slice(start,end));});worker.postMessage({readReply:true,id,buffer},[buffer]);}catch(error){worker.postMessage({readReply:true,id,error:error.message});}return;}
         if(event.data.progress){progress?.(event.data.progress);return;}
         finish();
         if(event.data.error){reject(Error(event.data.error));return;}

@@ -42,3 +42,30 @@ test('worker reads use FileReaderSync when available, without Blob streaming',as
  assert.deepEqual([...await readBytes({slice:()=>({bytes:new Uint8Array([3,4])})},0,2)],[3,4]);
  }finally{if(previous===undefined)delete global.FileReaderSync;else global.FileReaderSync=previous;}
 });
+
+test('range reads above 2 GiB preserve 64-bit positions without allocating the whole file',async()=>{
+ const {readBytes}=require('../public/vrtx-reader.js');const offset=2800000000;let requested;
+ const result=await readBytes({slice:(start,end)=>{requested=[start,end];return {arrayBuffer:async()=>new Uint8Array([5,6]).buffer};}},offset,offset+2);
+ assert.deepEqual(requested,[offset,offset+2]);assert.deepEqual([...result],[5,6]);
+});
+test('Safari fallback requests small ranges without reading its File inside the worker',async()=>{
+ const {readBytes}=require('../public/vrtx-reader.js');const previous=global.FileReaderSync;
+ try{global.FileReaderSync=class{readAsArrayBuffer(){throw Error('worker File unavailable');}};
+ const bytes=await readBytes({remote:true,slice:()=>({arrayBuffer:async()=>new Uint8Array([7,8]).buffer})},0,2);
+ assert.deepEqual([...bytes],[7,8]);
+ }finally{if(previous===undefined)delete global.FileReaderSync;else global.FileReaderSync=previous;}
+});
+
+test('Safari worker bridge validates an entire package through main-thread range replies',async()=>{
+ const vm=require('node:vm'),fs=require('node:fs'),file=await fixture();let ranges=0;
+ const result=await new Promise((resolve,reject)=>{
+  const self={postMessage:message=>{
+   if(message.readRange){ranges++;const {id,start,end}=message.readRange;file.slice(start,end).arrayBuffer().then(buffer=>self.onmessage({data:{readReply:true,id,buffer}}),reject);}
+   else if(message.result)resolve(message.result);else if(message.error)reject(Error(message.error));
+  }};
+  const context=vm.createContext({self,importScripts:()=>{},zip,hashwasm:hash,VertexBrowserCore:core,VertexPackageReader:require('../public/vrtx-reader.js'),Map,Promise,Error});
+  vm.runInContext(fs.readFileSync(require.resolve('../public/viewer-worker.js'),'utf8'),context);
+  self.onmessage({data:{remote:true,size:file.size}});
+ });
+ assert.equal(result.laps.length,2);assert.equal(result.video.size,8);assert.ok(ranges>3);
+});
