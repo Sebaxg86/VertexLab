@@ -205,3 +205,15 @@ body:not(.live-view) #header-brand{grid-column:1;grid-row:1/4;align-self:center;
 @keyframes library-backdrop-out{to{opacity:0}}
 @media(max-width:600px){.browser-viewer #library-settings{padding:20px;max-height:calc(100dvh - 28px)}#library-settings .library-option{font-size:17px}#library-settings #library-persist{width:100%}}
 @media(prefers-reduced-motion:reduce){#library-settings[open],#library-settings[open]::backdrop{animation:none!important}}
+/* The focused transport moves into the free area beneath the video. */
+@media(max-width:600px){
+ .transport.mobile-focused{inset:var(--player-focus-top,var(--focus-top)) 12px auto!important;animation:none!important;transform-origin:top left;max-height:calc(100dvh - var(--focus-top) - 32px);overflow:auto}
+ .transport{transform-origin:top left}
+ .transport-focus .mobile-focus-close{display:none!important}
+ .transport-focus .mobile-focus-veil{background:#050409e8}
+ .transport-focus .mobile-focus-veil.focus-leaving{animation-duration:.32s}
+ .transport .timeline-control{touch-action:none;-webkit-user-select:none;user-select:none}
+ .transport.mobile-focused .timeline-control{padding:8px 0}
+ .transport.mobile-focused #time{cursor:ew-resize}
+}
+@media(max-width:600px){.transport-focus #timeline-lap-hover{display:none!important}}
