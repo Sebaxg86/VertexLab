@@ -38,3 +38,5 @@ test('estimated shift cue lights every bar near the RPM reference, while moving 
   assert.equal(revLights(1,1,0).shift,false);
   assert.ok(revLights(null,3,100).lit.every(value=>!value));
 });
+test('GR86 recorded full-throttle RPM reaches blue before the reported engine maximum',()=>{const {ratio}=rpmReference({rpm:8250,engineMaxRpm:9000},8816);const lights=revLights(ratio,3,150);assert.equal(lights.shift,true);assert.ok(lights.lit.every(Boolean));assert.equal(revLights(8000/9000,3,150).shift,false);});
+test('shift cue hysteresis tolerates limiter oscillations and releases after RPM drop',()=>{assert.equal(revLights(.90,3,150).shift,true);assert.equal(revLights(.89,3,150).shift,false);assert.equal(revLights(.89,3,150,true).shift,true);assert.equal(revLights(.879,3,150,true).shift,false);assert.equal(revLights(null,3,150,true).shift,false);assert.equal(revLights(.91,0,150,true).shift,false);});

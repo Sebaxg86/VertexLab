@@ -6,6 +6,7 @@ let latest = null, revision = null, pendingSeek = null, chartDragging = false;
 let liveHistory = [], lastLiveStamp = null, legendKey = null, toastTimer;
 let chartRange = null, liveChartSpan = 20, liveChartOffset = 0;
 let sessionRpmPeak = 0, liveRpmPeak = 0, liveRpmCar = null;
+let shiftMemory = {key:null,active:false};
 const scaleCache = new Map();
 for (let i=0;i<16;i++) { const led=document.createElement('i'),pair=Math.min(i,15-i); led.style.setProperty('--led-color',pair<4?'#59e2ba':pair<6?'#ffc66e':'#f77d94'); $('rev-lights').append(led); }
 const metricDefs = [
@@ -284,9 +285,12 @@ function drawInstruments(sample) {
   $('rpm-fill').style.transform = `scaleX(${ratio ?? 0})`;
   $('rpm-scale').textContent = ratio === null ? 'Sin datos del motor' : `${engine?'Máximo del motor':'Pico medido · referencia visual'} · ${Math.round(maximum).toLocaleString('es-MX')} RPM`;
   $('rev-lights').classList.toggle('no-reading',ratio===null);
-  const lights=RaceInstruments.revLights(ratio,gear,sample?.speed);
+  const shiftKey=`${session?session.meta.id:'live:'+liveRpmCar}:${gear}`;
+  const keepShift=(!session||playing)&&shiftMemory.key===shiftKey&&shiftMemory.active;
+  const lights=RaceInstruments.revLights(ratio,gear,sample?.speed,keepShift);
+  shiftMemory={key:shiftKey,active:lights.shift};
   $('rev-lights').classList.toggle('shift-alert',lights.shift);
-  $('rev-lights').setAttribute('title',lights.shift?'Subir marcha · aviso estimado al 95% de la referencia de RPM':'Luces de RPM: de las orillas al centro');
+  $('rev-lights').setAttribute('title',`Aviso de cambio estimado al 90% · ${maximum?Math.round(maximum*.9).toLocaleString('es-MX'):'—'} RPM · luces de las orillas al centro`);
   [...$('rev-lights').children].forEach((led,index)=>led.classList.toggle('lit',lights.lit[index]));
   $('instant-gear').dataset.highRpm = engine && ratio !== null && ratio>.95 ? 'true' : 'false';
   const measured = RaceInstruments.values(sample);
