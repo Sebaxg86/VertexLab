@@ -36,6 +36,14 @@
     const best=Math.min(...rows.filter(row=>!row.partial&&row.time>0).map(row=>row.time));
     return rows.map(row=>({...row,best:!row.partial&&row.time>0&&Math.abs(row.time-best)<.0005,delta:!row.partial&&row.time>0&&Number.isFinite(best)?Math.max(0,row.time-best):null}));
   }
-  root.RaceAnalysis={clock,bounds,sessionRows,atDistance,videoChoices,sampleAtTime,fastestLapIds,lapSummary};
+  const timeSeriesCache=new WeakMap();
+  function timeSeries(rows){
+    if(timeSeriesCache.has(rows))return timeSeriesCache.get(rows);
+    const series=[];let previous=null;
+    for(const row of rows){let item=series.at(-1);if(!item||item.id!==row.lapId){item={id:row.lapId,rows:previous&&!row.gap&&!row.breakBefore?[previous]:[]};series.push(item);}item.rows.push(row);previous=row;}
+    timeSeriesCache.set(rows,series);return series;
+  }
+  function lapTimeline(laps,total){return laps.filter(lap=>lap.rows.length).map(lap=>{const b=bounds(lap);return {id:lap.id,number:lap.number,partial:!!lap.partial,start:Math.max(0,b.start),end:Math.min(total,b.end)};}).filter(lap=>lap.end>lap.start);}
+  root.RaceAnalysis={clock,bounds,sessionRows,atDistance,videoChoices,sampleAtTime,fastestLapIds,lapSummary,timeSeries,lapTimeline};
   if(typeof module!=='undefined')module.exports=root.RaceAnalysis;
 })(globalThis);

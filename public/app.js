@@ -408,7 +408,7 @@ function drawMetrics(sample, laps) {
     chart.save(); chart.beginPath(); chart.rect(left,top,right-left,bottom-top); chart.clip();
     const segments=[];chartSegments.set(metric.key,segments);
     for (const item of series) {
-      const hovered=analysisHover?.kind==='chart'&&analysisHover.key===metric.key&&(allMode||analysisHover.lapId===item.id);
+      const hovered=analysisHover?.kind==='chart'&&analysisHover.key===metric.key&&analysisHover.lapId===item.id;
       chart.globalAlpha=analysisHover?.kind==='chart'&&analysisHover.key===metric.key&&!hovered ? .25 : 1;
       chart.shadowBlur=hovered?7:0;
       chart.shadowColor=colors[item.id%colors.length];
@@ -547,7 +547,7 @@ events.onmessage = event => { try { live(JSON.parse(event.data)); } catch (e) { 
 events.onerror = () => { streamConnected=false;updateLiveView();if(!session)draw();$('status').textContent = 'Servidor desconectado · reconectando…'; };
 list().catch(e => { $('message').textContent = e.message; });
 const resizeObserver = new ResizeObserver(() => requestAnimationFrame(draw));
-setupAnalysisUI();setupRacingUI();setupViewUI();setupAnalysisInteractions();
+setupAnalysisUI();setupLapTimeline();setupRacingUI();setupViewUI();setupAnalysisInteractions();
 const initialSession=/^#session\/([a-zA-Z0-9]+)$/.exec(location.hash)?.[1];
 if(initialSession)load(initialSession).catch(e=>{openLiveView();$('message').textContent=e.message;});
 else openLiveView();

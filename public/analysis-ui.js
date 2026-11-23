@@ -3,14 +3,14 @@ let allMode=true, allRows=[], videoChoices=[], videoTargets=new Map();
 function lapLabel(lap){return lap?`Vuelta ${(Number.isFinite(lap.number)?lap.number:lap.id)+1}`:'Sin vuelta';}
 function analysisExtent(){return allMode?Math.max(1,allRows.at(-1)?.t||0):Math.max(1,...visible().map(lap=>lap.rows.at(-1)?.d||0));}
 function analysisX(row){return allMode?row.t:row.d;}
-function analysisSeries(){return allMode?[{id:0,rows:allRows}]:visible();}
+function analysisSeries(){return allMode?RaceAnalysis.timeSeries(allRows):visible();}
 function playbackBounds(){return allMode?{start:0,end:allRows.at(-1)?.t||0}:RaceAnalysis.bounds(session?.laps.find(lap=>lap.id===reference));}
 function observedSample(){
   if(!session)return null;
   const rows=allMode?allRows:session.laps.find(lap=>lap.id===reference)?.rows||[];
   return RaceAnalysis.sampleAtTime(rows,t);
 }
-function refreshTransport(){const b=playbackBounds();$('time').max=Math.max(0,b.end-b.start);$('time').value=Math.max(0,t-b.start);$('duration').textContent=RaceAnalysis.clock(b.end-b.start);}
+function refreshTransport(){const b=playbackBounds();$('time').max=Math.max(0,b.end-b.start);$('time').value=Math.max(0,t-b.start);$('duration').textContent=RaceAnalysis.clock(b.end-b.start);renderLapTimeline();}
 function renderCarBadges(){
   $('session-info').replaceChildren();
   if(!session){$('session-info').textContent='Abre una sesión desde el menú';return;}
@@ -124,4 +124,32 @@ function setupAnalysisUI(){
   $('compare-video').muted=true;
   $('compare-video').onloadedmetadata=()=>syncVideoPanes(true);
   $('compare-video').onerror=()=>{$('video-warning-b').hidden=false;$('video-warning-b').textContent='No se pudo abrir el segundo video';};
+}
+
+let lapTimelineKey=null,lapTimelineSegments=[];
+function renderLapTimeline(){
+  const enabled=!!session&&allMode,total=enabled?playbackBounds().end:0;
+  const segments=enabled?RaceAnalysis.lapTimeline(session.laps,total):[];
+  const key=JSON.stringify([session?.meta.id,enabled,total,segments]);
+  if(key===lapTimelineKey)return;
+  lapTimelineKey=key;lapTimelineSegments=segments;
+  const track=$('timeline-laps');track.replaceChildren();$('time').classList.toggle('lap-colored',enabled);
+  $('timeline-lap-hover').hidden=true;
+  const stops=['#343039 0%'];
+  for(const segment of segments){const color=colors[segment.id%colors.length],start=segment.start/total*100,end=segment.end/total*100;stops.push(`#343039 ${start}%`,`${color} ${start}%`,`${color} ${end}%`,`#343039 ${end}%`);const span=document.createElement('span');span.style.left=start+'%';span.style.width=(end-start)+'%';span.style.setProperty('--lap-color',color);span.dataset.lapId=segment.id;track.append(span);}
+  stops.push('#343039 100%');$('time').style.setProperty('--lap-track',`linear-gradient(to right,${stops.join(',')})`);
+}
+function setupLapTimeline(){
+  const input=$('time'),tooltip=$('timeline-lap-hover');
+  function hide(){tooltip.hidden=true;for(const span of $('timeline-laps').children)span.classList.remove('is-hovered');}
+  input.addEventListener('pointermove',event=>{
+    if(!session||!allMode){hide();return;}
+    const rect=input.getBoundingClientRect(),fraction=Math.max(0,Math.min(1,(event.clientX-rect.left-6)/Math.max(1,rect.width-12))),time=fraction*playbackBounds().end;
+    const lap=lapTimelineSegments.find(lap=>time>=lap.start&&time<=lap.end);
+    if(!lap){hide();return;}
+    tooltip.textContent=lapLabel(lap)+' · '+RaceAnalysis.clock(lap.end-lap.start)+(lap.partial?' · parcial':'')+' | '+RaceAnalysis.clock(time);
+    tooltip.style.setProperty('--lap-color',colors[lap.id%colors.length]);tooltip.style.left=Math.max(0,Math.min(rect.width-220,event.clientX-rect.left-110))+'px';tooltip.hidden=false;
+    for(const span of $('timeline-laps').children)span.classList.toggle('is-hovered',Number(span.dataset.lapId)===lap.id);
+  });
+  input.addEventListener('pointerleave',hide);input.addEventListener('blur',hide);
 }
