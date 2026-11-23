@@ -1,10 +1,24 @@
 /* Shared browser/Node ZIP reader. Videos remain lazy slices of the user's File. */
 (function(root){
   const MAX_TELEMETRY=128*1024**2,MAX_PACKAGE=256*1024**3;
+  async function readBytes(file,start,end){
+    for(let attempt=0;attempt<3;attempt++){
+      try{
+        const part=file.slice(start,end);
+        const buffer=typeof FileReaderSync!=='undefined'?new FileReaderSync().readAsArrayBuffer(part):await part.arrayBuffer();
+        if(buffer.byteLength!==end-start)throw Error('Lectura incompleta');
+        return new Uint8Array(buffer);
+      }catch(error){if(attempt===2)throw Error('No se pudo leer el archivo del dispositivo. En Archivos, descarga primero el .vrtx y cópialo a «En mi iPhone»; después vuelve a abrirlo. Detalle: '+error.message);}
+    }
+  }
   async function read(file,{zip,hash,core,progress=()=>{}}){
     if(file.size>MAX_PACKAGE)throw Error('El archivo supera 256 GiB');
     zip.configure({useWebWorkers:false});
-    const archive=new zip.ZipReader(new zip.BlobReader(file),{checkSignature:true,checkOverlappingEntry:true});
+    class LocalReader extends zip.Reader{
+      constructor(){super();this.size=file.size;}
+      async readUint8Array(offset,length){return readBytes(file,offset,offset+length);}
+    }
+    const archive=new zip.ZipReader(new LocalReader(),{checkSignature:true,checkOverlappingEntry:true});
     let processed=0,lastProgress=0;
     try{
       const entries=[];for await(const entry of archive.getEntriesGenerator()){entries.push(entry);if(entries.length>5)throw Error('Demasiados archivos en el paquete .vrtx');}const byName=new Map(entries.map(entry=>[entry.filename,entry]));
@@ -42,10 +56,10 @@
           if(entry.compressionMethod!==0)throw Error('Reexporta esta sesión desde VertexLab: el video debe estar almacenado sin compresión ZIP');
           const offset=entry.offset;
           if(!Number.isSafeInteger(offset)||offset<0)throw Error('Posición de video inválida');
-          const local=new DataView(await file.slice(offset,offset+30).arrayBuffer());
+          const local=new DataView((await readBytes(file,offset,offset+30)).buffer);
           if(local.byteLength!==30||local.getUint32(0,true)!==0x04034b50)throw Error('Cabecera de video inválida');
           const nameLength=local.getUint16(26,true),extraLength=local.getUint16(28,true),start=offset+30+nameLength+extraLength;
-          const localName=new TextDecoder().decode(await file.slice(offset+30,offset+30+nameLength).arrayBuffer());
+          const localName=new TextDecoder().decode(await readBytes(file,offset+30,offset+30+nameLength));
           if(localName!==name||start+written>file.size||entry.compressedSize!==written)throw Error('Rango de video inválido');
           const extension=name.split('.').at(-1),types={mp4:'video/mp4',m4v:'video/mp4',webm:'video/webm',mkv:'video/x-matroska',mov:'video/quicktime',ts:'video/mp2t',flv:'video/x-flv'};
           video={offset:start,size:written,type:types[extension]};
@@ -54,5 +68,5 @@
       progress({percent:100,phase:'Preparando análisis'});return {meta,view,laps,video};
     }finally{await archive.close();}
   }
-  root.VertexPackageReader={read,MAX_TELEMETRY};if(typeof module!=='undefined')module.exports=root.VertexPackageReader;
+  root.VertexPackageReader={read,readBytes,MAX_TELEMETRY};if(typeof module!=='undefined')module.exports=root.VertexPackageReader;
 })(globalThis);

@@ -17,7 +17,7 @@ for name in ('cars.json', 'car-brands.json', 'THIRD_PARTY_NOTICES.md'):
 html = (ROOT / 'public/index.html').read_text(encoding='utf-8')
 html = html.replace('<body>', '<body class="browser-viewer" data-mode="viewer" data-session-open="false">')
 html = html.replace('</head>', '<meta name="theme-color" content="#141014"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="VertexLab"></head>')
-html = html.replace('<script src="timeline.js">', '<script src="browser-core.js"></script><script src="browser-runtime.js"></script><script src="timeline.js">')
+html = html.replace('<script src="timeline.js">', '<script src="browser-core.js"></script><script src="browser-library.js"></script><script src="browser-runtime.js"></script><script src="timeline.js">')
 (OUT / 'index.html').write_text(html, encoding='utf-8')
 (OUT / '.nojekyll').write_text('')
 

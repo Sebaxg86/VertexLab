@@ -314,10 +314,21 @@ Las luces de RPM reinician un barrido visual de 220 ms desde cero al detectar ca
 
 Disponible en https://sebaxg86.github.io/VertexLab/ . Exporta el `.vrtx` en la PC, cópialo al dispositivo y pulsa **Abrir archivo .vrtx** en el visor. No necesita Python, OBS ni que la PC siga encendida. El archivo se procesa en el dispositivo: no se suben grabaciones al sitio ni a GitHub. Conserva la interfaz de análisis, vueltas, comparación de dos videos y sincronización por tramos. La captura LIVE y el control de OBS permanecen en la aplicación local de Windows.
 
-La biblioteca web vive únicamente en la pestaña: después de recargar, abre de nuevo el archivo. **Cerrar sesión de esta pestaña** libera sus recursos sin borrar el original. **Guardar archivo .vrtx original** descarga el archivo abierto; todavía no incorpora los cambios de vista hechos en el visor web. Google Drive queda para una fase posterior.
+La biblioteca web persiste en el dispositivo cuando está activado el guardado en Almacenamiento de sesiones. Las aperturas temporales solo viven en la pestaña. **Cerrar sesión de esta pestaña** libera sus recursos sin borrar el original. **Guardar archivo .vrtx original** descarga el archivo abierto; todavía no incorpora los cambios de vista hechos en el visor web. Google Drive queda para una fase posterior.
 
 El visor incluye manifiesto instalable y caché sin conexión: después de una primera visita completa puede abrirse sin servidor. El sistema operativo puede eliminar esa caché; guarda siempre tus archivos originales. No almacena los videos en la caché. El diseño se verificó en Chromium con tamaños de escritorio y teléfono; queda pendiente probar en dispositivos Android/iPhone físicos. El navegador debe admitir el codec del video original: el visor no convierte formatos.
 
 Para proteger la memoria del teléfono, el lector web limita la telemetría a 128 MiB y 250 000 muestras, y el paquete a 256 GiB. Valida SHA-256 y CRC antes de abrir; esa primera lectura tarda según el tamaño del video. Usa un Worker y una porción del archivo original para reproducir el video sin descomprimirlo entero en memoria. Admite el video sin compresión ZIP que genera el exportador de VertexLab.
 
 Construcción local: `python tools/build_viewer.py`, seguido de `python -m http.server 8770 --directory _site`. Abre `http://localhost:8770`; no abras el HTML mediante `file://`. El directorio `_site` contiene solo código, catálogos y recursos públicos. El flujo de GitHub Actions publica ese resultado en Pages con cada actualización de `main`.
+
+
+### Biblioteca local y video fijo en móvil
+
+El engranaje **Almacenamiento de sesiones** aparece también sin una sesión abierta. Permite guardar automáticamente las sesiones importadas o abrirlas temporalmente, consultar la cuota y solicitar almacenamiento persistente. En navegadores con `showDirectoryPicker` permite escoger una carpeta de destino; los paquetes se guardan con identificador único y extensión `.vrtx`. Cambiar la carpeta afecta las próximas importaciones, sin mover las anteriores. La biblioteca conserva la referencia a cada ubicación y vuelve a pedir permiso de lectura cuando el navegador lo exige.
+
+En Safari/iPhone y otros navegadores sin selector de carpeta se usa almacenamiento privado del sitio (OPFS cuando puede escribir archivos; IndexedDB como alternativa). No es una carpeta visible en Archivos. El índice, las preferencias y las estrellas persisten en IndexedDB; la telemetría se lee al seleccionar cada sesión, sin cargar todas las grabaciones al iniciar. Quitar de la biblioteca conserva el paquete guardado; no libera ese espacio. Borrar datos del sitio o la expulsión de almacenamiento del navegador puede eliminar las copias privadas: conserva siempre el original. No hay sincronización entre dispositivos todavía.
+
+En pantallas de hasta 600 px el video permanece arriba, debajo del header, mientras se exploran las gráficas y el recorrido. Conserva los mismos elementos de video, reproducción y sincronización, sin recrearlos al desplazar.
+
+El lector de paquetes usa lecturas por rangos y `FileReaderSync` en el Worker cuando está disponible, en lugar del streaming de Blob. Reintenta errores transitorios de lectura y conserva la validación de tamaños, SHA-256 y CRC. Si Archivos/iCloud no puede proporcionar el archivo, indica descargarlo completamente y copiarlo a **En mi iPhone**. La corrección tiene pruebas automatizadas; su confirmación con el archivo y iPhone del usuario está pendiente.

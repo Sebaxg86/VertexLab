@@ -29,7 +29,7 @@ function setupPortableUI(){
       result=await response.json();if(!response.ok)throw Error(result.error);
       }
       await list();await load(result.id);setSessionPicker(false);
-      $('message').textContent=globalThis.VertexBrowser?.enabled?'Sesión abierta en esta pestaña. El archivo permanece en tu dispositivo.':'Sesión importada. Video, telemetría y análisis disponibles en este equipo.';
+      $('message').textContent=globalThis.VertexBrowser?.enabled?($('library-save')?.checked?'Sesión guardada en la biblioteca de este dispositivo.':'Sesión temporal abierta. No se guardará en la biblioteca.'):'Sesión importada. Video, telemetría y análisis disponibles en este equipo.';
     }catch(error){$('message').textContent=error.message;}finally{await finish();}
   };
   $('export-session').onclick=action(async()=>{

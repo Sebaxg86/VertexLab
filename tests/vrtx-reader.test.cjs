@@ -29,3 +29,16 @@ test('future versions and extra paths are rejected before publication',async()=>
  await assert.rejects(()=>fixture((c,m)=>{m.version=9;}).then(file=>read(file,{zip,hash,core})),/Versión/);
  await assert.rejects(()=>fixture(c=>{c['../escape']='bad';}).then(file=>read(file,{zip,hash,core})),/Unsafe filename|Demasiados/);
 });
+
+test('local reads retry transient file provider failures and explain unavailable iPhone files',async()=>{
+ const {readBytes}=require('../public/vrtx-reader.js');let reads=0;
+ const file={slice:()=>({arrayBuffer:async()=>{if(++reads<3)throw Error('I/O Read operation failed');return new Uint8Array([1,2]).buffer;}})};
+ assert.deepEqual([...await readBytes(file,0,2)],[1,2]);assert.equal(reads,3);
+ await assert.rejects(()=>readBytes({slice:()=>({arrayBuffer:async()=>{throw Error('I/O Read operation failed');}})},0,2),/En mi iPhone/);
+});
+test('worker reads use FileReaderSync when available, without Blob streaming',async()=>{
+ const {readBytes}=require('../public/vrtx-reader.js');const previous=global.FileReaderSync;
+ try{global.FileReaderSync=class{readAsArrayBuffer(part){return part.bytes.buffer;}};
+ assert.deepEqual([...await readBytes({slice:()=>({bytes:new Uint8Array([3,4])})},0,2)],[3,4]);
+ }finally{if(previous===undefined)delete global.FileReaderSync;else global.FileReaderSync=previous;}
+});
