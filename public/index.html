@@ -5,7 +5,14 @@
 <header class="app-header">
   <button id="menu-toggle" class="icon-button" aria-label="Abrir menú" aria-controls="session-menu" aria-expanded="false"><span aria-hidden="true">☰</span></button>
   <strong>RACE<span>LAB</span></strong>
-  <div class="session-heading"><span class="eyebrow">ANÁLISIS DE SESIÓN</span><h1 id="title">Tu próxima sesión, bajo la lupa.</h1><p id="session-info" class="hint">Abre una sesión desde el menú para analizarla.</p></div>
+  <div class="session-switcher">
+    <button id="session-trigger" class="session-heading" aria-label="Cambiar sesión o abrir LIVE" aria-expanded="false" aria-controls="session-picker"><span id="view-eyebrow" class="eyebrow">SEGUNDO MONITOR</span><span class="session-title-line"><span id="title" role="heading" aria-level="1">OFF LIVE</span><i id="live-dot" aria-hidden="true"></i><span class="picker-chevron" aria-hidden="true">⌄</span></span><span id="session-info" class="hint">Esperando a Forza</span></button>
+    <section id="session-picker" aria-label="Cambiar vista y sesión" hidden inert>
+      <button id="picker-live"><span class="picker-live-icon" aria-hidden="true">◉</span><span><b>LIVE</b><small>Tu tablero en tiempo real</small></span><span id="picker-live-status">Sin señal</span></button>
+      <div class="picker-list-heading"><span>SESIONES GUARDADAS</span><small id="picker-count">0</small></div>
+      <div id="picker-sessions" aria-label="Sesiones guardadas"></div>
+    </section>
+  </div>
   <nav id="analysis-nav" aria-label="Seleccionar recorrido y vueltas" hidden><button id="all-laps" aria-pressed="true">Todo el recorrido</button><div id="lap-tabs" aria-label="Vueltas de la sesión"></div></nav>
   <label class="button import-button">Abrir video local<input id="file" type="file" accept="video/mp4,video/webm,video/x-matroska,.mkv" hidden></label>
   <output id="status">Conectando…</output>
@@ -73,6 +80,7 @@
     </div>
   </div>
 </main>
+<main id="live-workspace" class="live-workspace" aria-label="Tablero LIVE para segundo monitor"><div class="live-intro"><span class="eyebrow">CADA INSTANTE, AL VOLANTE</span><p id="live-car">Esperando a Forza</p><small id="live-connection" role="status">Activa Data Out para recibir telemetría</small></div><div id="live-dashboard-host"></div></main>
 <div id="message" role="status" hidden></div>
 <nav id="player" class="transport" aria-label="Reproductor de la sesión">
   <button id="skip-back" class="skip-button" aria-label="Retroceder cinco segundos">−5s</button><button id="play" class="play-button">▶ Reproducir</button><button id="skip-forward" class="skip-button" aria-label="Avanzar cinco segundos">+5s</button>
@@ -80,5 +88,5 @@
   <select id="rate" aria-label="Velocidad de reproducción"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
   <button id="mute" class="icon-button" aria-label="Silenciar video" aria-pressed="false">♪</button><input id="volume" aria-label="Volumen del video" type="range" min="0" max="1" step="0.05" value="1">
 </nav>
-<script src="timeline.js"></script><script src="instruments.js"></script><script src="view-math.js"></script><script src="analysis-model.js"></script><script src="analysis-ui.js"></script><script src="app.js"></script>
+<script src="timeline.js"></script><script src="instruments.js"></script><script src="view-math.js"></script><script src="analysis-model.js"></script><script src="analysis-ui.js"></script><script src="view-ui.js"></script><script src="app.js"></script>
 </body></html>

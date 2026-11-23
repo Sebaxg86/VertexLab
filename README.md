@@ -210,3 +210,19 @@ Si falta cobertura en una vuelta o video, se indica y se pausa ese panel, sin
 extrapolar imágenes. Los archivos grabados y sus referencias no se modifican.
 
 Verificación adicional: `node --test tests/analysis-model.test.cjs`.
+
+## Tablero LIVE y selector de sesiones
+
+Pulsa el nombre del vehículo en el header para desplegar el selector animado.
+LIVE permanece fijo arriba; las sesiones guardadas tienen su propio scroll.
+Seleccionar una sesión abre análisis, con las vueltas y videos habituales.
+LIVE abre un tablero dedicado para el segundo monitor: marcha, velocidad y luces
+al centro, y dirección, fuerzas G y neumáticos debajo. Puedes abrir directamente
+`http://127.0.0.1:8765/#live` en otra ventana. Recargar conserva la vista elegida.
+
+El indicador verde respira mientras llegan paquetes recientes de Forza. Tras dos
+segundos sin datos, o al perder la conexión al servidor, cambia a OFF LIVE y limpia
+los indicadores; no conserva lecturas viejas como si fueran actuales. Los paquetes
+de pausa o menú mantienen la conexión e indican ese estado, sin mostrar conducción
+activa. Guardar automáticamente una carrera no saca al usuario de LIVE. El selector
+admite Escape, teclado y movimiento reducido del sistema.

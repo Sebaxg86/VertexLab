@@ -32,6 +32,7 @@ for (const [index, metric] of metricDefs.entries()) {
 }
 
 function setMenu(open) {
+  if(open)setSessionPicker(false);
   $('session-menu').hidden = !open;
   $('menu-backdrop').hidden = !open;
   $('menu-toggle').setAttribute('aria-expanded', String(open));
@@ -71,6 +72,7 @@ function action(fn) {
 }
 async function list() {
   const sessions = await api('sessions');
+  renderPickerSessions(sessions);
   $('sessions').replaceChildren();
   for (const item of sessions) {
     const button = document.createElement('button');
@@ -94,6 +96,7 @@ async function load(id) {
   setPlaying(false);
   clearVideo();
   session = await api('sessions/' + id);
+  setViewLayout(false);history.replaceState(null,'','#session/'+id);
   sessionRpmPeak = session.laps.reduce((peak,lap)=>lap.rows.reduce((max,row)=>Number.isFinite(row.rpm)?Math.max(max,row.rpm):max,peak),0);
   scaleCache.clear(); chartRange = null; legendKey = null; $('telemetry-scroll').scrollTop = 0;
   selected = new Set(session.laps.map(lap => lap.id));
@@ -170,15 +173,7 @@ function updateVolume() {
   $('mute').setAttribute('aria-label', $('video').muted ? 'Activar sonido del video' : 'Silenciar video');
   $('mute').textContent = $('video').muted ? '♪̸' : '♪';
 }
-$('show-live').onclick = () => {
-  setPlaying(false); clearVideo(); session = null; selected.clear(); reference = null;
-  $('title').textContent = 'Telemetría en vivo'; $('session-info').textContent = 'Los valores corresponden a los paquetes actuales del juego.';
-  $('time').max = 0; $('time').value = 0; t = 0; $('duration').textContent = '0.00 s';
-  $('show-live').hidden = true; $('reference').replaceChildren(); allRows=[];allMode=true;videoChoices=[];$('analysis-nav').hidden=true;$('video-pane-b').hidden=true;$('video-options-button').hidden=true;$('video-split').classList.remove('two-videos');
-  $('video-options').hidden=true;$('video-options-button').setAttribute('aria-expanded','false');
-  $('sync-status').textContent = ''; $('video-status').textContent = 'Abre una sesión desde el menú para analizar su video.';
-  scaleCache.clear(); legendKey = null; draw();
-};
+$('show-live').onclick = openLiveView;
 
 function currentMeta() { return {...session?.meta, offset: Number($('offset').value) || 0}; }
 function videoOnly() { return allMode && hasVideo && session?.meta.version === 2 && !session.meta.syncSegments?.length; }
@@ -243,6 +238,7 @@ function nearest(rows, key, value) {
   return rows[lo];
 }
 function draw() {
+  if(!session){drawInstruments(RaceConnection.connection(latest,Date.now()/1000,streamConnected).active?latest.packet:null);return;}
   const laps=session?analysisSeries():[], rows=laps.flatMap(lap=>lap.rows);
   const sample=observedSample();
   if (playing && sample && chartRange) {
@@ -275,7 +271,7 @@ function draw() {
     map.fillStyle = '#8997aa'; map.font = '12px Segoe UI'; map.fillText('Abre una sesión para ver su recorrido.', 20, h/2);
   }
   drawMetrics(sample, laps);
-  const liveRecent = latest?.lastPacket && Date.now()/1000-latest.lastPacket < 2;
+  const liveRecent = RaceConnection.connection(latest,Date.now()/1000,streamConnected).active;
   drawInstruments(session ? sample : liveRecent && latest?.packet?.active ? latest.packet : null);
   if (session && hasVideo && !videoOnly() && toVideo(t) === null) $('clock').textContent += ' · sin video';
 }
@@ -474,7 +470,7 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 function live(state) {
-  latest = state;
+  latest = state;streamConnected=true;updateLiveView();
   const connected = state.lastPacket && Date.now()/1000-state.lastPacket < 2;
   $('status').textContent = state.udpError ? 'Error UDP: '+state.udpError : `UDP ${connected ? 'activo' : 'en espera'} · ${state.packets} paquetes · ${state.invalid} rechazados · ${state.dropped} perdidos en cola`;
   $('auto').checked = state.auto;
@@ -499,14 +495,17 @@ function live(state) {
   if (revision !== state.revision) {
     const changed = revision !== null; revision = state.revision;
     list().catch(() => {});
-    if (changed && state.lastSaved && !state.recording && !playing) load(state.lastSaved).catch(e => { $('message').textContent = e.message; });
+    if (session && changed && state.lastSaved && !state.recording && !playing) load(state.lastSaved).catch(e => { $('message').textContent = e.message; });
   }
 }
 const events = new EventSource('/events');
 events.onmessage = event => { try { live(JSON.parse(event.data)); } catch (e) { $('message').textContent = 'Error de actualización: '+e.message; } };
-events.onerror = () => { $('status').textContent = 'Servidor desconectado · reconectando…'; };
+events.onerror = () => { streamConnected=false;updateLiveView();if(!session)draw();$('status').textContent = 'Servidor desconectado · reconectando…'; };
 list().catch(e => { $('message').textContent = e.message; });
 const resizeObserver = new ResizeObserver(() => requestAnimationFrame(draw));
-setupAnalysisUI();
+setupAnalysisUI();setupViewUI();
+const initialSession=/^#session\/([a-zA-Z0-9]+)$/.exec(location.hash)?.[1];
+if(initialSession)load(initialSession).catch(e=>{openLiveView();$('message').textContent=e.message;});
+else openLiveView();
 resizeObserver.observe($('map')); resizeObserver.observe($('telemetry-scroll'));
 draw();
