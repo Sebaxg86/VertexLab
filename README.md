@@ -355,3 +355,9 @@ Validación: pruebas de rangos por encima de 2 GiB, cortes exactos del ZIP, HEAD
 Con video sincronizado, el primer video (el que tiene audio) marca el reloj de sesión. Las gráficas y el mapa siguen su currentTime mediante las referencias reales de OBS. Al esperar datos o buscar un punto no acumulan tiempo independiente que obligue a saltar el video para alcanzarlo. En comparación, se convierte la distancia de ese video al instante correspondiente de la vuelta de referencia. El video principal mantiene la velocidad elegida; solo el segundo se adapta a la comparación. Los saltos explícitos del usuario y los cortes reales entre segmentos de OBS siguen aplicándose.
 
 Las secciones sin video o con error conservan el reloj de telemetría. No se reinicia un video que ya terminó. Se verificaron relojes con renderizado irregular y buffering repetido, pausas OBS y referencias de vueltas diferentes. Validación física de los tirones reportados en iPhone pendiente.
+
+### Enfoque táctil en teléfonos
+
+En pantallas de hasta 600 px, un toque enfoca Telemetría, Recorrido o el reproductor. El video permanece visible y el fondo se desenfoca. En Telemetría se puede desplazar la lista sin buscar otro instante; tocar una gráfica la expande y habilita su cursor. Listo o Escape cierra el enfoque. Recorrido conserva controles de zoom y arrastre dentro del enfoque. La barra de reproducción deja espacio sobre el área de gestos del sistema y se amplía al enfocarla, con respuesta visual durante el arrastre. La fila de vueltas admite desplazamiento horizontal y bloquea el vertical. El zoom de página se desactiva para esta experiencia; los controles propios de gráficas y mapa siguen disponibles. El almacenamiento del visor se abre desde el único engranaje de configuración.
+
+Estos cambios requieren comprobación de gestos en iPhone físico; la simulación de tamaño móvil en Chrome no reproduce la navegación de Safari ni todos los gestos del sistema.
