@@ -2,6 +2,7 @@ import base64
 import hashlib
 import json
 import socket
+import subprocess
 import struct
 import sys
 import tempfile
@@ -144,6 +145,50 @@ class RecorderTests(unittest.TestCase):
         self.assertTrue(rows[2]['breakBefore'])
         self.assertAlmostEqual(rows[3]['videoTime'],.9)
         self.assertEqual(len(self.rec.meta['syncSegments']),2)
+
+    def test_instruments_saved_and_replayed_with_obs_segments_across_pause(self):
+        expected = []
+        for wall, steer, accel, temp in [(100, -127, 1, 80), (100.1, 0, 2, 90), (800, 127, 3, 100), (800.1, -64, 4, 110)]:
+            if wall == 800:
+                self.rec.heartbeat(100.8)
+                self.obs.wall, self.obs.duration = 800, .8
+            raw = packet(stamp=int(wall*1000))
+            struct.pack_into('<b', raw, 320, steer)
+            struct.pack_into('<fff', raw, 20, accel, 0, -accel)
+            struct.pack_into('<ffff', raw, 268, *([temp*9/5+32]*4))
+            struct.pack_into('<ffff', raw, 180, .2, .4, .6, .8)
+            self.rec.feed(decode(raw), wall)
+            expected.append((steer, accel, temp))
+        sid = self.rec.meta['id']
+        self.rec.finish()
+        rows = self.rows(sid)
+        meta = json.loads((Path(self.tmp.name)/(sid+'.json')).read_text())
+        for row, (steer, accel, temp) in zip(rows, expected):
+            self.assertEqual(row['steer'], steer)
+            self.assertEqual(row['accelX'], accel)
+            self.assertAlmostEqual(row['tireTempsC'][0], temp)
+            self.assertAlmostEqual(row['tireSlipCombined'][3], .8, places=6)
+        self.assertEqual([row['breakBefore'] for row in rows], [False, False, True, False])
+        self.assertAlmostEqual(rows[-1]['t'], .2)
+        # Exercise the exact browser replay and video functions against saved JSON.
+        script = """
+const assert=require('node:assert/strict');
+const A=require('./public/analysis-model.js'),T=require('./public/timeline.js'),I=require('./public/instruments.js');
+let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{
+ const {rows,meta,laps}=JSON.parse(input),replay=A.sessionRows(laps);
+ for(const row of [rows[0],rows[2],rows[3]]){
+  const sample=A.sampleAtTime(replay,row.t);
+  assert.equal(sample.steer,row.steer);assert.equal(sample.accelX,row.accelX);
+  assert.deepEqual(sample.tireTempsC,row.tireTempsC);
+  assert.ok(Math.abs(T.toVideo(meta,row.t)-row.videoTime)<1e-8);
+  assert.ok(Math.abs(I.values(sample).lateral-row.accelX/9.80665)<1e-8);
+ }
+ assert.equal(A.sampleAtTime(replay,.11).steer,127);
+ assert.ok(Math.abs(T.toVideo(meta,.15)-.85)<1e-8);
+});
+"""
+        result = subprocess.run(['node', '-e', script], input=json.dumps(dict(rows=rows,meta=meta,laps=analyze(rows))), text=True, capture_output=True, cwd=Path(__file__).resolve().parents[1])
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_inactive_packets_pause_but_do_not_end(self):
         self.feed(100)

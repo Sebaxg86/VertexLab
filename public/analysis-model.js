@@ -15,10 +15,12 @@
   function videoChoices(selected,previous){const ids=[...selected];const kept=previous.filter(id=>ids.includes(id));return [...new Set([...kept,...ids])].slice(0,2);}
   function sampleAtTime(rows,time){
     if(!rows.length||time<rows[0].t||time>rows.at(-1).t)return null;
-    let lo=0,hi=rows.length-1;
-    while(lo<hi){const m=(lo+hi)>>1;if(rows[m].t<time)lo=m+1;else hi=m;}
-    const b=rows[lo],a=rows[Math.max(0,lo-1)];
-    if(b.t===time)return b;
+    let lo=0,hi=rows.length;
+    while(lo<hi){const m=(lo+hi)>>1;if(rows[m].t<=time)lo=m+1;else hi=m;}
+    const a=rows[Math.max(0,lo-1)],b=rows[Math.min(lo,rows.length-1)];
+    // Resume shares the last active timestamp: use the new segment's reading,
+    // matching the OBS timeline's newest-anchor selection.
+    if(a.t===time)return a;
     if(b.gap||b.breakBefore)return null;
     const sample=time-a.t<b.t-time?a:b;
     // Only distance is interpolated for smooth comparison clocks; readings stay measured.
