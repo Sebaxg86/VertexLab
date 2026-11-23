@@ -26,7 +26,8 @@
     // The reported engine maximum can exceed the full-throttle limiter.
     // Enter at 88%; release below 86% to avoid flickering around the threshold.
     const shift = valid && ratio>=(wasShifting ? .86 : .88) && gear>0 && speed>15;
-    return {shift,lit:Array.from({length:16},(_,i)=>valid && (shift || ratio>=(Math.min(i,15-i)+1)/8))};
+    const levels=Array.from({length:16},(_,i)=>valid ? shift?1:Math.max(0,Math.min(1,ratio/.8*8-Math.min(i,15-i))) : 0);
+    return {shift,levels,lit:levels.map(level=>level>0)};
   }
   root.RaceInstruments = {values,duration,rpmReference,revLights};
   if (typeof module !== 'undefined') module.exports = root.RaceInstruments;

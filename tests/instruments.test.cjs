@@ -27,7 +27,7 @@ test('RPM lights prefer the motor limit and explicitly fall back to a measured p
   assert.equal(rpmReference({},0).ratio,null);
 });
 test('RPM lights fill symmetrically from edges toward the center',()=>{
-  const half=revLights(.5,3,100);
+  const half=revLights(.4,3,100);
   assert.deepEqual(half.lit,[true,true,true,true,false,false,false,false,false,false,false,false,true,true,true,true]);
   assert.equal(half.shift,false);
 });
@@ -40,3 +40,5 @@ test('estimated shift cue lights every bar near the RPM reference, while moving 
 });
 test('GR86 recorded full-throttle RPM reaches blue before the reported engine maximum',()=>{const {ratio}=rpmReference({rpm:8250,engineMaxRpm:9000},8816);const lights=revLights(ratio,3,150);assert.equal(lights.shift,true);assert.ok(lights.lit.every(Boolean));assert.equal(revLights(7800/9000,3,150).shift,false);});
 test('shift cue hysteresis tolerates limiter oscillations and releases after RPM drop',()=>{assert.equal(revLights(.88,3,150).shift,true);assert.equal(revLights(.87,3,150).shift,false);assert.equal(revLights(.87,3,150,true).shift,true);assert.equal(revLights(.859,3,150,true).shift,false);assert.equal(revLights(null,3,150,true).shift,false);assert.equal(revLights(.91,0,150,true).shift,false);});
+
+test('red has a usable range before blue and each pair fades progressively',()=>{assert.equal(revLights(.79,3,100).shift,false);assert.ok(revLights(.79,3,100).levels[7]>.8);assert.ok(revLights(.8,3,100).levels.every(v=>v===1));assert.equal(revLights(.879,3,100).shift,false);assert.equal(revLights(.88,3,100).shift,true);assert.ok(revLights(.025,3,100).levels[0]<revLights(.075,3,100).levels[0]);});

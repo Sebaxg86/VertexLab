@@ -279,3 +279,11 @@ Pulsar su nombre expande uno a toda la altura; volver a pulsarlo recupera dos.
 En modo expandido, scroll recorre los parámetros individualmente. Hover muestra
 vuelta, tiempo y valor; clic navega al instante exacto con el mapeo OBS existente.
 El aviso azul de RPM se activa al 88% en LIVE y análisis, con salida bajo 86%.
+
+### Instrumentos y rendimiento
+
+Las luces de RPM llenan progresivamente desde las orillas: todas las luces rojas quedan encendidas al 80% de la referencia; el aviso azul conserva el 88% (libera bajo 86%). Es una referencia visual estimada, no una orden de cambio enviada por Forza.
+
+Las gráficas conservan una capa dibujada por parámetro y ventana visible; el cursor se actualiza aparte. La reducción por píxel conserva extremos, cambios y cortes, sin modificar muestras guardadas. El mapa conserva las trazadas y consulta un índice espacial cuando se acerca la cámara.
+
+FH6 Data Out de 324 bytes no expone daños por componente. Impactos muestra únicamente `SmashableVelDiff` (m/s, offset 236) y `SmashableMass` (kg, offset 240) para objetos rompibles; no representa daño del motor, ruedas ni carrocería. Estos campos se guardan desde esta versión; sesiones anteriores muestran «Sin datos». Fuente: https://support.forza.net/hc/en-us/articles/51744149102611-Forza-Horizon-6-Data-Out-Documentation

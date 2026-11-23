@@ -1,4 +1,4 @@
-let expandedMetric=null,analysisHover=null,mapSegments=[],chartSegments=new Map(),mapPointer=null,scrollLocked=false,hoverPaintAt=0,preferredMapLap=null,legendHoverLap=null;
+let expandedMetric=null,analysisHover=null,mapSegments=[],chartSegments=new Map(),mapPointer=null,scrollLocked=false,preferredMapLap=null,legendHoverLap=null;
 function updateSessionActions(){
  const featured=!!session?.meta.featured;
  $('feature-session').setAttribute('aria-pressed',String(featured));

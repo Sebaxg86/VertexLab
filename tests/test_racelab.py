@@ -84,6 +84,14 @@ class DecoderTests(unittest.TestCase):
         self.assertEqual(row['tireTempsC'],[0,100,50,80])
         self.assertAlmostEqual(row['tireSlipCombined'][1],-1.5)
 
+    def test_smashable_fields_are_not_component_damage(self):
+        data=packet()
+        struct.pack_into("<ff",data,236,3.25,125)
+        row=decode(data)
+        self.assertEqual(row["smashableVelDiff"],3.25)
+        self.assertEqual(row["smashableMass"],125)
+        self.assertNotIn("engineDamage",row)
+
     def test_layout(self):
         row = decode(packet())
         self.assertEqual((row['x'], row['z'], row['speed'], row['lap'], row['lapTime'], row['raceTime']), (10,30,90,2,12,12))

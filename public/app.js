@@ -199,7 +199,7 @@ $('play').onclick = () => {
 };
 $('rate').onchange = () => { $('video').playbackRate = Number($('rate').value); };
 function canvas(id) {
-  const element = $(id), rect = element.getBoundingClientRect(), ratio = devicePixelRatio || 1;
+  const element = $(id), rect = frameRects?.get(id)||element.getBoundingClientRect(), ratio = devicePixelRatio || 1;
   if (element.width !== Math.round(rect.width * ratio) || element.height !== Math.round(rect.height * ratio)) {
     element.width = Math.round(rect.width * ratio); element.height = Math.round(rect.height * ratio);
   }
@@ -215,8 +215,15 @@ function nearest(rows, key, value) {
   if (lo > 0 && Math.abs(rows[lo-1][key] - value) < Math.abs(rows[lo][key] - value)) return rows[lo-1];
   return rows[lo];
 }
-function draw() {
+let renderDirty=true,frameRects=null;
+function textValue(id,value){const element=$(id),next=String(value);if(element.textContent!==next)element.textContent=next;}
+const chartLayers=new Map();
+let mapLayer=null;
+function draw(){renderDirty=true;}
+function paint() {
+  const renderStarted=performance.now();
   if(!session){drawInstruments(liveConnection().active?latest.packet:null);return;}
+  frameRects=new Map(['map','telemetry-scroll',...metricDefs.map((m,i)=>i?'chart-'+m.key:'charts')].map(id=>[id,$(id).getBoundingClientRect()]));
   const laps=analysisSeries();
   const sample=observedSample();
   if (playing && sample && chartRange) {
@@ -234,19 +241,26 @@ function draw() {
   }
   const [map, w, h] = canvas('map');
   mapSegments=[];
-  const mapLaps=visible(),mapRows=mapLaps.flatMap(lap=>lap.rows);
+  const mapLaps=visible(),mapData=RaceRender.mapData(mapLaps),mapRows=mapData.rows;
   $('map-zoom-label').textContent=zoom.toFixed(1).replace('.0','')+'×';$('map').dataset.zoom=zoom;
   if(mapRows.length){
-    let xmin=Infinity,xmax=-Infinity,zmin=Infinity,zmax=-Infinity;
-    for(const row of mapRows){xmin=Math.min(xmin,row.x);xmax=Math.max(xmax,row.x);zmin=Math.min(zmin,row.z);zmax=Math.max(zmax,row.z);}
+    const {xmin,xmax,zmin,zmax}=mapData;
     const center=[(xmin+xmax)/2,(zmin+zmax)/2],scale=Math.min((w-30)/(xmax-xmin||1),(h-30)/(zmax-zmin||1))*zoom;
     if(playing&&zoom>1&&sample&&!mapPointer?.moved)pan=RaceInteraction.cameraPan(sample,center,scale);
     const point=row=>[w/2+(row.x-center[0])*scale+pan[0],h/2-(row.z-center[1])*scale+pan[1]];
+    const mapKey=JSON.stringify([session.meta.id,mapLaps.map(l=>[l.id,l.rows.length,l.rows.at(-1)?.t]),w,h,devicePixelRatio,zoom,pan,analysisHover?.kind==='map'?analysisHover.lapId:legendHoverLap]);
+    const mapCached=mapLayer?.key===mapKey;
+    if(mapCached){map.drawImage(mapLayer.image,0,0,w,h);mapSegments=mapLayer.segments;}
+    else {
     for(const lap of mapLaps){
       const hovered=analysisHover?.kind==='map'&&analysisHover.lapId===lap.id||legendHoverLap===lap.id;
       map.strokeStyle=colors[lap.id%colors.length];map.lineWidth=hovered?3.3:1.8;
       map.globalAlpha=(analysisHover?.kind==='map'||legendHoverLap!==null)&&!hovered ? .24 : 1;
-      map.shadowColor=map.strokeStyle;map.shadowBlur=hovered?8+2*Math.sin(performance.now()/180):0;map.beginPath();
+      map.shadowColor=map.strokeStyle;map.shadowBlur=hovered?8:0;map.beginPath();
+      if(zoom>2){
+        const rect={xmin:center[0]+(-w/2-pan[0]-12)/scale,xmax:center[0]+(w/2-pan[0]+12)/scale,zmin:center[1]-(h/2-pan[1]+12)/scale,zmax:center[1]-(-h/2-pan[1]-12)/scale};
+        for(const segment of RaceRender.segments(lap.rows,rect)){const [ax,ay]=point(segment.a),[bx,by]=point(segment.b);map.moveTo(ax,ay);map.lineTo(bx,by);mapSegments.push({a:{x:ax,y:ay,t:segment.a.t,d:segment.a.d,row:segment.a},b:{x:bx,y:by,t:segment.b.t,d:segment.b.d,row:segment.b},lapId:lap.id});}
+      }else{
       let previous=null;
       for(const row of lap.rows){
         const [x,y]=point(row),p={x,y,t:row.t,d:row.d,row};
@@ -254,25 +268,32 @@ function draw() {
         else{map.lineTo(x,y);if(Math.max(x,previous.x)>=-12&&Math.min(x,previous.x)<=w+12&&Math.max(y,previous.y)>=-12&&Math.min(y,previous.y)<=h+12)mapSegments.push({a:previous,b:p,lapId:lap.id});}
         previous=p;
       }
+      }
       map.stroke();map.globalAlpha=1;map.shadowBlur=0;
+    }
+    const image=mapLayer?.image||document.createElement('canvas');if(image.width!==$('map').width||image.height!==$('map').height){image.width=$('map').width;image.height=$('map').height;}const layer=image.getContext('2d');layer.clearRect(0,0,image.width,image.height);layer.drawImage($('map'),0,0);mapLayer={key:mapKey,image,segments:mapSegments};
+    }
+    for(const lap of mapLaps){map.strokeStyle=colors[lap.id%colors.length];
       const current=sample?(allMode?(sample.lapId===lap.id?sample:null):(lap.id===reference?sample:RaceAnalysis.atDistance(lap,sample.d)!==null?nearest(lap.rows,'d',sample.d):null)):null;
       if(current){map.fillStyle=map.strokeStyle;map.beginPath();map.arc(...point(current),lap.id===reference||allMode?5:3.5,0,Math.PI*2);map.fill();if(lap.id===reference||allMode){const p=point(current);$('map').dataset.carX=p[0];$('map').dataset.carY=p[1];}}
-      if(hovered&&analysisHover?.row){map.strokeStyle='#fff3f5';map.lineWidth=1.5;map.beginPath();map.arc(...point(analysisHover.row),6,0,Math.PI*2);map.stroke();}
+      if(analysisHover?.kind==='map'&&analysisHover.lapId===lap.id&&analysisHover?.row){map.strokeStyle='#fff3f5';map.lineWidth=1.5;map.beginPath();map.arc(...point(analysisHover.row),6,0,Math.PI*2);map.stroke();}
     }
   }else{map.fillStyle='#8997aa';map.font='12px Segoe UI';map.fillText('Abre una sesión para ver su recorrido.',20,h/2);}
   drawMetrics(sample, laps);
   const liveRecent = liveConnection().active;
   drawInstruments(session ? sample : liveRecent && latest?.packet?.active ? latest.packet : null);
   if (session && hasVideo && !videoOnly() && toVideo(t) === null) $('clock').textContent += ' · sin video';
+  frameRects=null;
+  $('workspace').dataset.renderMs=(performance.now()-renderStarted).toFixed(2);
 }
 function drawInstruments(sample) {
   const rpm = sample?.rpm, gear = sample?.gear;
   const {ratio,maximum,engine} = RaceInstruments.rpmReference(sample,session?sessionRpmPeak:liveRpmPeak);
-  $('instant-gear').textContent = Number.isFinite(gear) ? gear===0?'R':String(gear) : '—';
-  $('instant-rpm').textContent = Number.isFinite(rpm) ? Math.round(rpm).toLocaleString('es-MX') : '—';
-  $('instant-speed').textContent = Number.isFinite(sample?.speed) ? sample.speed.toFixed(0) : '—';
+  textValue('instant-gear',Number.isFinite(gear) ? gear===0?'R':String(gear) : '—');
+  textValue('instant-rpm',Number.isFinite(rpm) ? Math.round(rpm).toLocaleString('es-MX') : '—');
+  textValue('instant-speed',Number.isFinite(sample?.speed) ? sample.speed.toFixed(0) : '—');
   $('rpm-fill').style.transform = `scaleX(${ratio ?? 0})`;
-  $('rpm-scale').textContent = ratio === null ? 'Sin datos del motor' : `${engine?'Máximo del motor':'Pico medido · referencia visual'} · ${Math.round(maximum).toLocaleString('es-MX')} RPM`;
+  textValue('rpm-scale',ratio === null ? 'Sin datos del motor' : `${engine?'Máximo del motor':'Pico medido · referencia visual'} · ${Math.round(maximum).toLocaleString('es-MX')} RPM`);
   $('rev-lights').classList.toggle('no-reading',ratio===null);
   const shiftKey=`${session?session.meta.id:'live:'+liveRpmCar}:${gear}`;
   const keepShift=(!session||playing)&&shiftMemory.key===shiftKey&&shiftMemory.active;
@@ -280,24 +301,28 @@ function drawInstruments(sample) {
   shiftMemory={key:shiftKey,active:lights.shift};
   $('rev-lights').classList.toggle('shift-alert',lights.shift);
   $('rev-lights').setAttribute('title',`Aviso de cambio estimado al 88% · ${maximum?Math.round(maximum*.88).toLocaleString('es-MX'):'—'} RPM · luces de las orillas al centro`);
-  [...$('rev-lights').children].forEach((led,index)=>led.classList.toggle('lit',lights.lit[index]));
+  [...$('rev-lights').children].forEach((led,index)=>{led.classList.toggle('lit',lights.lit[index]);led.style.setProperty('--led-strength',lights.levels[index]);});
   $('instant-gear').dataset.highRpm = engine && ratio !== null && ratio>.95 ? 'true' : 'false';
+  const impact=Number.isFinite(sample?.smashableVelDiff)&&Number.isFinite(sample?.smashableMass);
+  $('impact-panel').dataset.impact=impact&&sample.smashableVelDiff>0?'true':'false';
+  $('impact-delta').textContent=impact?sample.smashableVelDiff.toFixed(2)+' m/s':'Sin datos';
+  $('impact-mass').textContent=impact?sample.smashableMass.toFixed(0)+' kg':'—';
   const measured = RaceInstruments.values(sample);
-  $('instant-source').textContent = session ? 'Sesión · ' + t.toFixed(2) + ' s' : sample ? 'LIVE' : 'En espera';
+  textValue('instant-source',session ? 'Sesión · ' + t.toFixed(2) + ' s' : sample ? 'LIVE' : 'En espera');
   const missing = measured.steer === null || measured.lateral === null || measured.longitudinal === null || measured.tires.some(tire => tire.temp === null || tire.slip === null);
-  $('instant-note').textContent = missing ? session ? 'Estos datos no se guardaban en sesiones anteriores.' : 'Esperando datos de conducción' : 'Valores del instante observado';
+  textValue('instant-note',missing ? session ? 'Estos datos no se guardaban en sesiones anteriores.' : 'Esperando datos de conducción' : 'Valores del instante observado');
   $('steering-icon').classList.toggle('no-reading', measured.steer === null);
   $('steering-wheel').style.transform = `rotate(${(measured.steer ?? 0)*135}deg)`;
-  $('steering-value').textContent = measured.steer === null ? 'Sin datos' : Math.abs(measured.steer)<.01 ? 'Centrado · 0%' : `${measured.steer<0?'Izq.':'Der.'} · ${Math.round(Math.abs(measured.steer)*100)}%`;
+  textValue('steering-value',measured.steer === null ? 'Sin datos' : Math.abs(measured.steer)<.01 ? 'Centrado · 0%' : `${measured.steer<0?'Izq.':'Der.'} · ${Math.round(Math.abs(measured.steer)*100)}%`);
   $('steering-icon').setAttribute('aria-label', 'Entrada de dirección: ' + $('steering-value').textContent + '. El giro del icono es ilustrativo.');
   for (const key of ['throttle','brake']) {
     const value = sample?.[key];
     $('instant-'+key).style.transform = `scaleX(${Number.isFinite(value)?Math.max(0,Math.min(1,value/100)):0})`;
     $('instant-'+key+'-value').textContent = Number.isFinite(value) ? value.toFixed(0)+'%' : '—';
   }
-  $('g-lateral').textContent = measured.lateral === null ? '—' : measured.lateral.toFixed(2)+' G';
-  $('g-longitudinal').textContent = measured.longitudinal === null ? '—' : measured.longitudinal.toFixed(2)+' G';
-  $('g-total').textContent = measured.total === null ? 'Sin datos' : measured.total.toFixed(2)+' G';
+  textValue('g-lateral',measured.lateral === null ? '—' : measured.lateral.toFixed(2)+' G');
+  textValue('g-longitudinal',measured.longitudinal === null ? '—' : measured.longitudinal.toFixed(2)+' G');
+  textValue('g-total',measured.total === null ? 'Sin datos' : measured.total.toFixed(2)+' G');
   $('g-point').style.opacity = measured.total === null ? 0 : 1;
   const size = Math.max(2, measured.total || 0);
   $('g-point').style.transform = `translate(${(measured.lateral || 0)/size*55}px,${-(measured.longitudinal || 0)/size*55}px)`;
@@ -317,9 +342,7 @@ function metricScale(metric, series) {
   const cacheKey = metric.key + ':' + series.map(item => item.id).join(',');
   if (session && scaleCache.has(cacheKey)) return scaleCache.get(cacheKey);
   let min = 0, max = metric.max || 1;
-  if (!metric.max) for (const item of series) for (const row of item.rows) if (Number.isFinite(row[metric.key]) && (!session || !chartRange || analysisX(row)>=chartRange.start && analysisX(row)<=chartRange.end)) {
-    min = Math.min(min, row[metric.key]); max = Math.max(max, row[metric.key]);
-  }
+  if(!metric.max)for(const item of series){const bounds=RaceRender.extent(item.rows,session?(allMode?'t':'d'):'liveTime',metric.key,session&&chartRange?chartRange.start:-Infinity,session&&chartRange?chartRange.end:Infinity);min=Math.min(min,bounds[0]);max=Math.max(max,bounds[1]);}
   const bounds = [min, max];
   if (session) scaleCache.set(cacheKey, bounds);
   return bounds;
@@ -340,15 +363,15 @@ function drawMetrics(sample, laps) {
   const rangeLabel = session ? allMode?`Tramo visible: ${RaceAnalysis.clock(range.start)} a ${RaceAnalysis.clock(range.end)}`:`Tramo visible: ${range.start.toFixed(0)} a ${range.end.toFixed(0)} metros` : `Tramo visible: hace ${(liveChartOffset+liveChartSpan).toFixed(1)} a ${liveChartOffset.toFixed(1)} segundos`;
   $('chart-pan').setAttribute('aria-valuetext',rangeLabel);
   $('chart-pan').title = available < .001 ? 'Acerca las gráficas para desplazarlas' : rangeLabel;
-  const scrollRect = $('telemetry-scroll').getBoundingClientRect();
+  const scrollRect = frameRects.get('telemetry-scroll');
   $('telemetry-rows').style.setProperty('--metric-height',Math.max(1,scrollRect.height/(expandedMetric?1:2))+'px');
   chartSegments=new Map();
   for (const [index, metric] of metricDefs.entries()) {
     const value = observed?.[metric.key];
     const duration = metric.divisor ? RaceInstruments.duration(value) : null;
-    $('value-' + metric.key).textContent = duration ? duration.text : Number.isFinite(value) ? value.toFixed(metric.decimals) : '—';
+    textValue('value-'+metric.key,duration ? duration.text : Number.isFinite(value) ? value.toFixed(metric.decimals) : '—');
     if (duration) $('value-' + metric.key).nextElementSibling.textContent=duration.unit;
-    const id = index === 0 ? 'charts' : 'chart-' + metric.key, element = $(id), rect = element.getBoundingClientRect();
+    const id = index === 0 ? 'charts' : 'chart-' + metric.key, element = $(id), rect = frameRects.get(id);
     element.classList.toggle('live-chart', !session);
     element.setAttribute('aria-label', metric.name + (session ? allMode?' por tiempo':' por distancia' : ' en vivo'));
     if(element.closest('.metric-card').hidden||rect.bottom<=scrollRect.top||rect.top>=scrollRect.bottom)continue;
@@ -356,6 +379,10 @@ function drawMetrics(sample, laps) {
     const left = metric.divisor?58:28, right = width - 8, top = 6, bottom = height - 19;
     const end = (liveHistory.at(-1)?.liveTime || 0)-liveChartOffset;
     const point = row => [session ? left + (analysisX(row)-range.start)/span*(right-left) : left + (row.liveTime - (end-liveChartSpan))/liveChartSpan*(right-left), bottom - (row[metric.key]-min)/(max-min || 1)*(bottom-top)];
+    const layerKey=JSON.stringify([session?.meta.id,allMode,series.map(item=>[item.id,item.rows.length,item.rows.at(-1)?.t]),range,width,height,devicePixelRatio,min,max,analysisHover?.kind==='chart'&&analysisHover.key===metric.key?analysisHover.lapId:null]);
+    const cached=session&&chartLayers.get(metric.key);
+    if(cached?.key===layerKey){chart.drawImage(cached.image,0,0,width,height);chartSegments.set(metric.key,cached.segments);}
+    else {
     const axisValue=value=>{if(!metric.divisor)return value.toFixed(0);const d=RaceInstruments.duration(value);return d.text+' '+d.unit;};
     chart.font = '9px Segoe UI'; chart.fillStyle = '#7489a2'; chart.fillText(axisValue(max), 0, top+6); chart.fillText(axisValue(min), 0, bottom);
     chart.strokeStyle = '#26354a'; chart.lineWidth = 1; chart.beginPath(); chart.moveTo(left, bottom); chart.lineTo(right, bottom); chart.stroke();
@@ -364,11 +391,11 @@ function drawMetrics(sample, laps) {
     for (const item of series) {
       const hovered=analysisHover?.kind==='chart'&&analysisHover.key===metric.key&&(allMode||analysisHover.lapId===item.id);
       chart.globalAlpha=analysisHover?.kind==='chart'&&analysisHover.key===metric.key&&!hovered ? .25 : 1;
-      chart.shadowBlur=hovered?7+2*Math.sin(performance.now()/180):0;
+      chart.shadowBlur=hovered?7:0;
       chart.shadowColor=colors[item.id%colors.length];
       chart.strokeStyle = session ? colors[item.id % colors.length] : colors[0]; chart.lineWidth = hovered?2.8:1.4; chart.beginPath();
       let previous = null;
-      for (const row of item.rows) {
+      for (const row of RaceRender.reduce(item.rows,session?(allMode?'t':'d'):'liveTime',metric.key,session?range.start:end-liveChartSpan,session?range.end:end,right-left)) {
         if (!Number.isFinite(row[metric.key])) { previous = null; continue; }
         const p = point(row);
         if(previous&&!row.gap&&!row.breakBefore&&Math.max(p[0],previous[0])>=left&&Math.min(p[0],previous[0])<=right)segments.push({a:{x:previous[0],y:previous[1],t:previous.row.t,d:previous.row.d,row:previous.row},b:{x:p[0],y:p[1],t:row.t,d:row.d,row},lapId:allMode?row.lapId:item.id});
@@ -380,11 +407,15 @@ function drawMetrics(sample, laps) {
       chart.stroke();
     }
     chart.globalAlpha=1;chart.shadowBlur=0;
-    if(analysisHover?.kind==='chart'&&analysisHover.key===metric.key){const x=left+((allMode?analysisHover.time:analysisHover.d)-range.start)/span*(right-left);chart.strokeStyle='#ffc2cb';chart.setLineDash([3,3]);chart.beginPath();chart.moveTo(x,top);chart.lineTo(x,bottom);chart.stroke();chart.setLineDash([]);}
-    if (sample) { const x = left + (analysisX(sample)-range.start)/span*(right-left); chart.strokeStyle = '#e3fff0aa'; chart.beginPath(); chart.moveTo(x, top); chart.lineTo(x, bottom); chart.stroke(); }
     chart.restore();
     chart.fillStyle = '#7489a2'; chart.fillText(session ? allMode?RaceAnalysis.clock(range.start):range.start.toFixed(0)+' m' : '−'+(liveChartSpan+liveChartOffset).toFixed(1)+' s', left, height-3);
     chart.textAlign = 'right'; chart.fillText(session ? allMode?RaceAnalysis.clock(range.end):range.end.toFixed(0)+' m' : liveChartOffset<.01?'Ahora':'−'+liveChartOffset.toFixed(1)+' s', right, height-3); chart.textAlign = 'left';
+    if(session){const image=cached?.image||document.createElement('canvas');if(image.width!==element.width||image.height!==element.height){image.width=element.width;image.height=element.height;}const layer=image.getContext('2d');layer.clearRect(0,0,image.width,image.height);layer.drawImage(element,0,0);chartLayers.set(metric.key,{key:layerKey,image,segments});}
+    }
+    chart.save();chart.beginPath();chart.rect(left,top,right-left,bottom-top);chart.clip();
+    if(analysisHover?.kind==='chart'&&analysisHover.key===metric.key){const x=left+((allMode?analysisHover.time:analysisHover.d)-range.start)/span*(right-left);chart.strokeStyle='#ffc2cb';chart.setLineDash([3,3]);chart.beginPath();chart.moveTo(x,top);chart.lineTo(x,bottom);chart.stroke();chart.setLineDash([]);}
+    if (sample) { const x = left + (analysisX(sample)-range.start)/span*(right-left); chart.strokeStyle = '#e3fff0aa'; chart.beginPath(); chart.moveTo(x, top); chart.lineTo(x, bottom); chart.stroke(); }
+    chart.restore();
   }
 }
 function chartSeek(event) {
@@ -461,7 +492,7 @@ function frame(now) {
     syncVideoPanes(false,dt);refreshTransport();draw();
     if(t>=bounds.end)setPlaying(false);
   }
-  if(analysisHover&&session&&!playing&&now-hoverPaintAt>40){hoverPaintAt=now;draw();}
+  if(renderDirty){renderDirty=false;paint();}
   last = now; requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
