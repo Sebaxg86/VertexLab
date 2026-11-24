@@ -161,5 +161,5 @@ public sealed class SeriesView : FrameworkElement
     void Wheel(object sender, MouseWheelEventArgs e) { if (data is null) return; if (IsMap) ZoomMapAt(e.GetPosition(this), e.Delta > 0 ? 1.3 : 1 / 1.3); else { double factor = e.Delta > 0 ? 1.3 : 1 / 1.3, span = Math.Clamp((end - start) / factor, .05, extent), part = Math.Clamp((e.GetPosition(this).X - 30) / PlotWidth, 0, 1), anchor = start + (end - start) * part, a = Math.Clamp(anchor - span * part, 0, extent - span); RangeChanged?.Invoke(a, a + span); } e.Handled = true; }
     void Down(object sender, MouseButtonEventArgs e) { if (!IsMap && e.GetPosition(this).Y < 32) { Expand?.Invoke(); e.Handled = true; return; } drag = e.GetPosition(this); dragged = false; CaptureMouse(); if (!IsMap) SeekAt(drag.Value); e.Handled = true; }
     void Up(object sender, MouseButtonEventArgs e) { if (drag is not null) { if (IsMap && !dragged) SeekAt(e.GetPosition(this)); else if (!IsMap) SeekAt(e.GetPosition(this)); drag = null; pointerDirty = false; ReleaseMouseCapture(); e.Handled = true; } }
-    void SeekAt(Point point) { if (Nearest(point) is { } nearest) Seek?.Invoke(nearest.Packet.T); }
+    void SeekAt(Point point) { if(Nearest(point) is {} nearest){hovered=nearest;inspect.Set(1,Now);dirty=true;Seek?.Invoke(nearest.Packet.T);} }
 }
