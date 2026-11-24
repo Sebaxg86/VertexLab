@@ -17,9 +17,9 @@ internal static class UiMotion
     public static void Enter(UIElement element, double offset = 7, double milliseconds = 200)
     {
         if (!Enabled) return;
-        element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(.15, 1, TimeSpan.FromMilliseconds(milliseconds)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
-        var move = new TranslateTransform(0, offset); element.RenderTransform = move;
-        move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(offset, 0, TimeSpan.FromMilliseconds(milliseconds)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
+        element.SetCurrentValue(UIElement.OpacityProperty, 1d); element.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(.15, 1, TimeSpan.FromMilliseconds(milliseconds)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }, FillBehavior = FillBehavior.Stop });
+        var move = new TranslateTransform(0, 0); element.RenderTransform = move;
+        move.BeginAnimation(TranslateTransform.YProperty, new DoubleAnimation(offset, 0, TimeSpan.FromMilliseconds(milliseconds)) { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }, FillBehavior = FillBehavior.Stop });
     }
     public static void Fade(UIElement element, double target, double milliseconds, Action? completed = null)
     {

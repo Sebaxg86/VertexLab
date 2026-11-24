@@ -5,7 +5,8 @@ namespace VertexLab.Desktop;
 public sealed class RaceIcon : FrameworkElement
 {
     public string Kind { get; set; } = "play";
-    public Brush Ink { get; set; } = Brushes.White;
+    public static readonly DependencyProperty InkProperty=DependencyProperty.Register(nameof(Ink),typeof(Brush),typeof(RaceIcon),new FrameworkPropertyMetadata(Brushes.White,FrameworkPropertyMetadataOptions.AffectsRender));
+    public Brush Ink{get=>(Brush)GetValue(InkProperty);set=>SetValue(InkProperty,value);}
     public RaceIcon() { Width = 20; Height = 20; IsHitTestVisible = false; }
     protected override void OnRender(DrawingContext dc)
     {
@@ -24,7 +25,8 @@ public sealed class RaceIcon : FrameworkElement
             "stop" => "M5 5H19V19H5Z",
             _ => "M12 8A4 4 0 1 0 12 16A4 4 0 1 0 12 8M9 3H15L16 6L19 5L22 10L20 12L22 14L19 19L16 18L15 21H9L8 18L5 19L2 14L4 12L2 10L5 5L8 6Z"
         };
-        dc.DrawGeometry(Kind is "play" or "stop" ? Ink : null, pen, Geometry.Parse(path)); dc.Pop();
+        if(Kind=="settings"){dc.PushTransform(new TranslateTransform(0,1));dc.DrawGeometry(null,pen,Geometry.Parse("m9 3 .6-2h4.8l.6 2 2 .9 2.1-.4 2.4 4.2-1.4 1.6.1 2.3 1.3 1.6-2.4 4.2-2.1-.4-2 .9-.6 2H9.6l-.6-2-2-.9-2.1.4-2.4-4.2 1.4-1.6-.1-2.3-1.3-1.6L4.9 3.5l2.1.4Z"));dc.Pop();dc.DrawEllipse(null,pen,new Point(12,12),3,3);}
+        else dc.DrawGeometry(Kind is "play" or "stop" ? Ink : null, pen, Geometry.Parse(path)); dc.Pop();
     }
 }
 public sealed class LoadingWheel : FrameworkElement

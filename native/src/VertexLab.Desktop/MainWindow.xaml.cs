@@ -13,9 +13,10 @@ namespace VertexLab.Desktop;
 public partial class MainWindow : Window
 {
     readonly AppPaths paths = new(); readonly Library library;
-    readonly DispatcherTimer statusTimer = new() { Interval = TimeSpan.FromMilliseconds(100) }, frameTimer = new() { Interval = TimeSpan.FromMilliseconds(33) };
+    readonly DispatcherTimer statusTimer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(150) }, frameTimer = new(DispatcherPriority.Render) { Interval = TimeSpan.FromSeconds(1d / 60) };
+    readonly PlaybackViewport viewport = new(); double lastFrameClock, compareLastSync;
     readonly CancellationTokenSource lifetime = new(); readonly ScrubController scrub = new();
-    bool liveConnected; bool polling, playing, internalTime, loading, videoFailed, selectionUpdating, panUpdating; SessionEntry? selected; SessionAnalysis? analysis; EngineStatus? engine;
+    bool videoReady, chartSeeking; bool liveConnected; bool polling, playing, internalTime, loading, videoFailed, selectionUpdating; SessionEntry? selected; SessionAnalysis? analysis; EngineStatus? engine;
     double time, playRate = 1; int generation, reference, firstVideo, secondVideo; DateTime lastRefresh = DateTime.MinValue; string librarySignature = ""; readonly HashSet<int> chosen = []; SeriesView? expanded;
     static double SeekClock => Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency;
     SeriesView[] Plots => [SpeedPlot, RpmPlot, ThrottlePlot, BrakePlot, LapTimePlot, RaceTimePlot, DistancePlot];
@@ -38,26 +39,28 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent(); library = new(paths);
-        foreach (var plot in Plots) { plot.Seek += Seek; plot.RangeChanged += (a, b) => { foreach (var other in Plots) if (other != plot) other.SetRange(a, b); UpdatePan(); }; plot.Expand += () => ExpandPlot(plot); }
+        foreach (var plot in Plots) { plot.Seek += target => { chartSeeking = true; try { Seek(target); } finally { chartSeeking = false; } }; plot.RangeChanged += (a, b) => { viewport.SetRange(a, b); viewport.ResumeFollow(); ApplyViewport(); }; plot.Expand += () => ExpandPlot(plot); }
         Route.Seek += Seek;
-        Timeline.MouseMove += (_, e) => TimelineHover(e.GetPosition(Timeline).X);
-        Timeline.MouseLeave += (_, _) => TimelineHover(null);
-        ToolTipService.SetInitialShowDelay(Timeline, 0); ToolTipService.SetBetweenShowDelay(Timeline, 0);
+        ChartPan.InteractionChanged += active => { if (active) viewport.BeginPan(); else viewport.EndPan(); };
+        ChartScroll.ScrollChanged += (_, _) => RefreshActivePlots();
+        LapScroll.ScrollChanged += (_, _) => UpdateLapOverflow(); LapScroll.SizeChanged += (_, _) => UpdateLapOverflow();
+        SizeChanged += (_, _) => UpdateSessionWidth();
+        NextLapsButton.MouseEnter += (_, _) => AnimateNextArrow(3); NextLapsButton.MouseLeave += (_, _) => AnimateNextArrow(0);
         foreach (var control in Plots.Cast<UIElement>().Append(Timeline)) control.AddHandler(Mouse.PreviewMouseDownEvent, new MouseButtonEventHandler(ScrubDown), true);
         AddHandler(Mouse.PreviewMouseUpEvent, new MouseButtonEventHandler(ScrubUp), true); AddHandler(Mouse.LostMouseCaptureEvent, new MouseEventHandler(ScrubCaptureLost), true); Deactivated += (_, _) => FinishDrag(); PreviewKeyDown += (_, e) => { if (e.Key == Key.Escape) { LibraryPopup.IsOpen = false; OptionsPopup.IsOpen = false; } };
-        SettingsButton.MouseEnter+=(_,_)=>RotateGear(OptionsPopup.IsOpen?90:60);SettingsButton.MouseLeave+=(_,_)=>RotateGear(OptionsPopup.IsOpen?90:0);OptionsPopup.Closed+=(_,_)=>RotateGear(SettingsButton.IsMouseOver?60:0);
+        SettingsButton.MouseEnter += (_, _) => RotateGear(OptionsPopup.IsOpen ? 90 : 60); SettingsButton.MouseLeave += (_, _) => RotateGear(OptionsPopup.IsOpen ? 90 : 0); OptionsPopup.Closed += (_, _) => { RotateGear(SettingsButton.IsMouseOver ? 60 : 0); SettingsButton.ClearValue(BackgroundProperty); SettingsButton.ClearValue(BorderBrushProperty); SettingsButton.ClearValue(ForegroundProperty); };
         LibraryPopup.Opened += (_, _) => { if (LibraryPopup.Child is UIElement child) UiMotion.Enter(child, -10, 200); };
-        OptionsPopup.Opened += (_, _) => {RotateGear(90); if (OptionsPopup.Child is UIElement child) UiMotion.Enter(child, -10, 200); };
+        OptionsPopup.Opened += (_, _) => { RotateGear(90); SettingsButton.Background = new SolidColorBrush(Color.FromRgb(70, 25, 35)); SettingsButton.BorderBrush = new SolidColorBrush(Color.FromRgb(255, 70, 87)); SettingsButton.Foreground = new SolidColorBrush(Color.FromRgb(255, 141, 152)); if (OptionsPopup.Child is UIElement child) UiMotion.Enter(child, -10, 200); };
         statusTimer.Tick += async (_, _) => await Poll(); frameTimer.Tick += (_, _) => Frame();
     }
     async void WindowLoaded(object sender, RoutedEventArgs e)
     {
-        RefreshLibrary(); frameTimer.Start(); statusTimer.Start();
+        RefreshLibrary(); lastFrameClock = SeekClock; frameTimer.Start(); statusTimer.Start();
         try { using var probe = new CancellationTokenSource(600); await CaptureClient.SendAsync(paths, new("status"), probe.Token); }
         catch { var exe = System.IO.Path.Combine(AppContext.BaseDirectory, "VertexLab.Capture.exe"); if (!System.IO.File.Exists(exe)) { Message.Text = "Falta el motor de captura."; return; } var info = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden }; info.Environment["VERTEXLAB_DATA"] = paths.Root; Process.Start(info); }
         await Poll(); var file = Environment.GetCommandLineArgs().Skip(1).FirstOrDefault(); if (file is not null && System.IO.File.Exists(file)) await ImportPath(file);
     }
-    void WindowClosed(object? sender, EventArgs e) { scrub.Cancel(); lifetime.Cancel(); statusTimer.Stop(); frameTimer.Stop(); Video.Close(); CompareVideo.Close(); }
+    void WindowClosed(object? sender, EventArgs e) { scrub.Cancel(); lifetime.Cancel(); statusTimer.Stop(); frameTimer.Stop(); Video.Close(); CompareVideo.Close(); PresentationMetrics.Save(); }
     async Task Poll()
     {
         if (polling) return; polling = true;
@@ -85,7 +88,7 @@ public partial class MainWindow : Window
     void LibraryClicked(object sender, RoutedEventArgs e) { OptionsPopup.IsOpen = false; LibraryPopup.IsOpen = !LibraryPopup.IsOpen; }
     void RotateGear(double degrees)
     {
-        ((RotateTransform)GearIcon.RenderTransform).BeginAnimation(RotateTransform.AngleProperty,new System.Windows.Media.Animation.DoubleAnimation(degrees,TimeSpan.FromMilliseconds(UiMotion.Enabled?300:0)){EasingFunction=new System.Windows.Media.Animation.CubicEase{EasingMode=System.Windows.Media.Animation.EasingMode.EaseOut}});
+        ((RotateTransform)GearIcon.RenderTransform).BeginAnimation(RotateTransform.AngleProperty, new System.Windows.Media.Animation.DoubleAnimation(degrees, TimeSpan.FromMilliseconds(UiMotion.Enabled ? 450 : 0)) { EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut } });
     }
     void OptionsClicked(object sender, RoutedEventArgs e)
     {
@@ -98,33 +101,33 @@ public partial class MainWindow : Window
     void LiveClicked(object sender, RoutedEventArgs e)
     {
         scrub.Cancel(); generation++; selected = null; analysis = null; playing = false; Video.Close(); Video.Source = null; CompareVideo.Close(); CompareVideo.Source = null; SessionTitle.Text = "LIVE"; ModeLabel.Text = "TELEMETRÍA EN DIRECTO"; SessionList.SelectedItem = null; LibraryPopup.IsOpen = false;
-        AnalysisLayout.Visibility = LapNavigation.Visibility = Transport.Visibility = Visibility.Collapsed; LiveDashboard.Visibility = CaptureControls.Visibility = Visibility.Visible; foreach (var plot in Plots) plot.SetData(null); Route.SetData(null); Dashboard.Reset(); LiveDashboard.Reset(); UiMotion.Enter(LiveDashboard, 10, 220);
+        AnalysisLayout.Visibility = LapNavigation.Visibility = Transport.Visibility = Visibility.Collapsed; LiveDashboard.Visibility = CaptureControls.Visibility = Visibility.Visible; foreach (var plot in Plots) plot.SetData(null); Route.SetData(null); Dashboard.Reset(); LiveDashboard.Reset(); UpdateSessionWidth(); UiMotion.Enter(LiveDashboard, 10, 220);
     }
     async void SessionSelected(object sender, SelectionChangedEventArgs e)
     {
         if (SessionList.SelectedItem is not LibraryItem item || item.Meta.Id == selected?.Meta.Id) return;
         if (item.Meta.Ended is null) { Message.Text = "Finaliza y guarda la captura para analizarla."; return; }
-        LibraryPopup.IsOpen = false; ShowLoading(); AnalysisLayout.Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 9 };
-        scrub.Cancel(); int request = ++generation; videoFailed = false; loading = true; playing = false; UpdatePlayIcon(); Video.Close(); Video.Source = null; CompareVideo.Close(); CompareVideo.Source = null; VideoHint.Visibility = Visibility.Visible; VideoHint.Text = "Cargando telemetría…";
+        LibraryPopup.IsOpen = false; ShowLoading(); ChartStack.Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 9 };
+        scrub.Cancel(); int request = ++generation; videoReady = false; videoFailed = false; loading = true; playing = false; UpdatePlayIcon(); Video.Close(); Video.Source = null; CompareVideo.Close(); CompareVideo.Source = null; VideoHint.Visibility = Visibility.Visible; VideoHint.Text = "Cargando telemetría…";
         try
         {
             var loaded = await Task.Run(() => Analysis.Load(item.Entry.TelemetryPath), lifetime.Token); if (request != generation) return; selected = item.Entry; analysis = loaded; time = 0; reference = loaded.Laps.FirstOrDefault()?.Id ?? 0;
-            SessionTitle.Text = item.Meta.Name; UpdateCar(item.Meta.CarOrdinal, item.Meta.CarClass, item.Meta.CarPI); ModeLabel.Text = "ANÁLISIS DE SESIÓN"; LiveDashboard.Visibility = CaptureControls.Visibility = Visibility.Collapsed; AnalysisLayout.Visibility = LapNavigation.Visibility = Transport.Visibility = Visibility.Visible; Dashboard.Reset(); LiveDashboard.Reset();
+            SessionTitle.Text = item.Meta.Name; UpdateSessionWidth(); UpdateCar(item.Meta.CarOrdinal, item.Meta.CarClass, item.Meta.CarPI); ModeLabel.Text = "ANÁLISIS DE SESIÓN"; LiveDashboard.Visibility = CaptureControls.Visibility = Visibility.Collapsed; AnalysisLayout.Visibility = LapNavigation.Visibility = Transport.Visibility = Visibility.Visible; Dashboard.Reset(); LiveDashboard.Reset();
             chosen.Clear(); BuildLapNavigation(); BuildLapSummary(); ApplySelection(false);
             if (item.Meta.VideoPath is { } path && System.IO.File.Exists(path)) { var uri = new Uri(System.IO.Path.GetFullPath(path)); Video.Source = uri; Video.Volume = Volume.Value; Video.Play(); Video.Pause(); VideoHint.Text = "Preparando video…"; } else VideoHint.Text = "Esta sesión no tiene un video disponible.";
             Message.Text = item.Entry.State == "Interrupted" ? "Sesión recuperada tras una interrupción." : ""; UpdateCursor();
         }
         catch (Exception ex) { Message.Text = "No se pudo abrir la sesión: " + ex.Message; VideoHint.Text = Message.Text; }
-        finally { if (request == generation) { loading = false; HideLoading(request); UiMotion.Enter(AnalysisLayout, 6, 220); } }
+        finally { if (request == generation) { loading = false; HideLoading(request); UiMotion.Enter(Dashboard, 6, 220); UiMotion.Enter(ChartStack, 6, 220); } }
     }
     void UpdateCar(int ordinal, int? carClass, int? pi)
     {
         var key = (ordinal, carClass, pi, selected is null); if (lastCar == key) return; lastCar = key; string name = Cars.GetValueOrDefault(ordinal.ToString()) ?? "Vehículo " + ordinal; SessionSelector.ToolTip = name;
         if (selected is null) SessionTitle.Text = "LIVE · " + name;
         ClassBadge.Text = carClass is { } c ? new[] { "D", "C", "B", "A", "S1", "S2", "X" }[Math.Clamp(c, 0, 6)] : "—"; PiBadge.Text = pi is { } p ? $"PI {p}" : "PI —"; YearBadge.Text = name.Length >= 4 && int.TryParse(name[..4], out _) ? name[..4] : "—";
-        var logo = LogoPath(ordinal); BrandLogo.Source = BrandImages.Load(logo);
+        var logo = LogoPath(ordinal); BrandLogo.Source = BrandImages.Load(logo); UpdateSessionWidth();
     }
-    void UpdatePlayIcon() { PlayButton.Content = new RaceIcon { Kind = playing ? "pause" : "play" }; }
+    void UpdatePlayIcon() { string kind = playing ? "pause" : "play"; if (PlayButton.Content is RaceIcon icon && icon.Kind == kind) return; PlayButton.Content = new RaceIcon { Kind = kind }; }
     void ShowLoading()
     {
         LoadingOverlay.BeginAnimation(OpacityProperty, null); LoadingOverlay.Opacity = 0; LoadingOverlay.Visibility = Visibility.Visible;
@@ -132,25 +135,25 @@ public partial class MainWindow : Window
     }
     void HideLoading(int request)
     {
-        UiMotion.Fade(LoadingOverlay, 0, 180, () => { if (request == generation) { LoadingOverlay.Visibility = Visibility.Collapsed; AnalysisLayout.Effect = null; } });
+        UiMotion.Fade(LoadingOverlay, 0, 180, () => { if (request == generation) { LoadingOverlay.Visibility = Visibility.Collapsed; ChartStack.Effect = null; } });
     }
-    void VideoOpened(object sender, RoutedEventArgs e) { VideoHint.Visibility = Visibility.Collapsed; Seek(time); }
+    void VideoOpened(object sender, RoutedEventArgs e) { videoReady = true; VideoHint.Visibility = Visibility.Collapsed; PresentationMetrics.Info("decoded-video", $"{Video.NaturalVideoWidth}x{Video.NaturalVideoHeight}"); PresentationMetrics.Info("render-tier", (RenderCapability.Tier >> 16).ToString()); Seek(time); }
     void CompareOpened(object sender, RoutedEventArgs e) { CompareVideo.Pause(); SyncCompare(true); if (playing) CompareVideo.Play(); }
     void CompareFailed(object sender, ExceptionRoutedEventArgs e) { Message.Text = "No se pudo preparar el segundo video: " + e.ErrorException.Message; }
-    void VideoFailed(object sender, ExceptionRoutedEventArgs e) { videoFailed = true; VideoHint.Visibility = Visibility.Visible; VideoHint.Text = "Windows no pudo abrir el video. La telemetría sigue disponible."; Message.Text = e.ErrorException.Message; }
+    void VideoFailed(object sender, ExceptionRoutedEventArgs e) { videoReady = false; videoFailed = true; VideoHint.Visibility = Visibility.Visible; VideoHint.Text = "Windows no pudo abrir el video. La telemetría sigue disponible."; Message.Text = e.ErrorException.Message; }
     void VideoEnded(object sender, RoutedEventArgs e) { playing = false; CompareVideo.Pause(); UpdatePlayIcon(); }
     void PlayClicked(object sender, RoutedEventArgs e)
     {
         if (analysis is null) return;
         if (!playing && time >= Timeline.Maximum - .025) { time = Timeline.Minimum; if (VideoTarget(time, firstVideo) is { } restart) Video.Position = TimeSpan.FromSeconds(Math.Max(0, restart)); SyncCompare(true); UpdateCursor(); }
         bool next = !playing; if (scrub.Active) { scrub.End(SeekClock); ApplyScrub(); scrub.Cancel(); }
-        playing = next; UpdatePlayIcon();
+        playing = next; if (playing) viewport.ResumeFollow(); UpdatePlayIcon();
         if (Video.Source is not null) { if (playing) { Video.Play(); if (SecondVideoColumn.Width.Value > 0) CompareVideo.Play(); } else { Video.Pause(); CompareVideo.Pause(); } }
     }
     void BackClicked(object sender, RoutedEventArgs e) => Seek(time - 5);
     void ForwardClicked(object sender, RoutedEventArgs e) => Seek(time + 5);
     void TimeChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (!internalTime && !loading && analysis is not null) Seek(e.NewValue); }
-    void ScrubDown(object sender, MouseButtonEventArgs e) { if (e.ChangedButton != MouseButton.Left || analysis is null || loading) return; scrub.Begin(playing, SeekClock); playing = false; Video.Pause(); CompareVideo.Pause(); UpdatePlayIcon(); }
+    void ScrubDown(object sender, MouseButtonEventArgs e) { if (e.ChangedButton != MouseButton.Left || analysis is null || loading || sender is SeriesView graph && e.GetPosition(graph).Y < 32) return; scrub.Begin(playing, SeekClock); playing = false; Video.Pause(); CompareVideo.Pause(); UpdatePlayIcon(); }
     void ScrubUp(object sender, MouseButtonEventArgs e) { if (e.ChangedButton == MouseButton.Left) Dispatcher.BeginInvoke(FinishDrag, DispatcherPriority.Input); }
     void ScrubCaptureLost(object sender, MouseEventArgs e) { if (Mouse.LeftButton == MouseButtonState.Released) FinishDrag(); }
     void FinishDrag() { if (!scrub.Active) return; scrub.End(SeekClock); ApplyScrub(); }
@@ -159,7 +162,7 @@ public partial class MainWindow : Window
         if (analysis is null || selected is null) return; time = Math.Clamp(value, 0, analysis.Duration);
         if (chosen.Count > 0 && analysis.At(time) is { } hit) { if (hit.LapId != reference) time = analysis.AtDistance(reference, hit.Distance)?.Packet.T ?? time; var lap = analysis.Laps.First(l => l.Id == reference); time = Math.Clamp(time, lap.Start, lap.End); }
         bool entering = !scrub.Active; scrub.Request(time, playing, SeekClock); playing = false; if (entering) { Video.Pause(); CompareVideo.Pause(); }
-        UpdatePlayIcon(); UpdateCursor();
+        viewport.ResumeFollow(); if (!chartSeeking && viewport.Follow(AnalysisAxis())) ApplyViewport(); UpdatePlayIcon(); UpdateCursor();
     }
     void ApplyScrub()
     {
@@ -177,22 +180,23 @@ public partial class MainWindow : Window
     }
     void SyncCompare(bool force)
     {
+        double now = SeekClock; if (!force && now - compareLastSync < .1) return; compareLastSync = now;
         if (SecondVideoColumn.Width.Value <= 0 || CompareVideo.Source is null || VideoTarget(time, secondVideo) is not { } target) return;
         double difference = target - CompareVideo.Position.TotalSeconds;
         if (force || Math.Abs(difference) > .22) CompareVideo.Position = TimeSpan.FromSeconds(Math.Max(0, target));
-        if (analysis is not null && chosen.Count > 0) { var row = analysis.At(time); var a = row is null ? null : analysis.AtDistance(firstVideo, row.Distance); var b = row is null ? null : analysis.AtDistance(secondVideo, row.Distance); double ratio = a?.Packet.Speed > 1 && b?.Packet.Speed > 1 ? a.Packet.Speed / b.Packet.Speed : 1; CompareVideo.SpeedRatio = Math.Clamp(playRate * ratio, .1, 8); }
+        if (analysis is not null && chosen.Count > 0) { var row = analysis.At(time); var a = row is null ? null : analysis.AtDistance(firstVideo, row.Distance); var b = row is null ? null : analysis.AtDistance(secondVideo, row.Distance); double ratio = a?.Packet.Speed > 1 && b?.Packet.Speed > 1 ? a.Packet.Speed / b.Packet.Speed : 1; double desired = Math.Clamp(playRate * ratio, .1, 8); if (force || Math.Abs(desired - CompareVideo.SpeedRatio) > .015) CompareVideo.SpeedRatio = desired; }
     }
     void Frame()
     {
-        Dashboard.Animate(); LiveDashboard.Animate(); ApplyScrub(); if (selected is null || analysis is null || loading || !playing) return;
-        if (!videoFailed && Video.Source is not null && Video.NaturalDuration.HasTimeSpan && VideoTarget(time, firstVideo) is not null) { var mapped = Analysis.FromVideo(selected.Meta, Video.Position.TotalSeconds); if (mapped is not null) { time = ReferenceTime(mapped.Value, firstVideo); if (VideoTarget(time, firstVideo) is { } target && Math.Abs(target - Video.Position.TotalSeconds) > .15) Video.Position = TimeSpan.FromSeconds(target); } }
-        else time += frameTimer.Interval.TotalSeconds * playRate;
+        long frameTick = Stopwatch.GetTimestamp(); double clock = SeekClock, delta = lastFrameClock > 0 ? clock - lastFrameClock : 1d / 60; lastFrameClock = clock; ApplyScrub(); if (selected is null || analysis is null || loading || !playing) return;
+        if (!videoFailed && Video.Source is not null && videoReady && VideoTarget(time, firstVideo) is not null) { double seconds = Video.Position.TotalSeconds; var mapped = Analysis.FromVideo(selected.Meta, seconds); if (mapped is not null) { time = ReferenceTime(mapped.Value, firstVideo); if (VideoTarget(time, firstVideo) is { } target && Math.Abs(target - seconds) > .15) Video.Position = TimeSpan.FromSeconds(target); } }
+        else time += Math.Min(.25, delta) * playRate;
         var end = chosen.Count > 0 ? analysis.Laps.First(l => l.Id == reference).End : analysis.Duration; if (time >= end - .025) { time = end; playing = false; Video.Pause(); CompareVideo.Pause(); UpdatePlayIcon(); }
-        SyncCompare(false); UpdateCursor();
+        SyncCompare(false); if (viewport.Follow(AnalysisAxis())) ApplyViewport(); UpdateCursor(); PresentationMetrics.Record("playback-update", Stopwatch.GetElapsedTime(frameTick).TotalMilliseconds);
     }
     void UpdateCursor()
     {
-        internalTime = true; Timeline.Value = time; internalTime = false; Clock.Text = ClockText(time); foreach (var plot in Plots) plot.SetTime(time, playing); Route.SetTime(time, playing);
+        internalTime = true; Timeline.Value = time; internalTime = false; Clock.Text = ClockText(time); foreach (var plot in Plots) plot.SetTime(time); Route.SetTime(time, playing);
         var p = analysis?.At(time); if (chosen.Count == 0 && p is not null) { selectionUpdating = true; LapPicker.SelectedItem = LapPicker.Items.Cast<LapItem>().FirstOrDefault(l => l.Id == p.LapId); selectionUpdating = false; }
         RenderInstruments(p?.Packet); ObservedTime.Text = $"{(chosen.Count > 0 ? $"VUELTA {p?.Packet.Lap + 1}" : "SESIÓN")} · {SeriesView.DurationText(p?.Packet.T ?? time)}"; MapSpeed.Text = $"{p?.Packet.Speed:0} km/h"; MapDistance.Text = $"{p?.Distance:0} m";
     }
@@ -227,7 +231,7 @@ public partial class MainWindow : Window
         LapPicker.ItemsSource = available.Select(l => new LapItem(l.Id, $"Vuelta {l.Number + 1}")).ToList(); LapPicker.SelectedItem = LapPicker.Items.Cast<LapItem>().FirstOrDefault(l => l.Id == reference);
         foreach (Button tab in LapTabs.Children) { bool active = chosen.Contains((int)tab.Tag); tab.Background = active ? new SolidColorBrush(Color.FromRgb(44, 21, 29)) : Brushes.Transparent; tab.BorderBrush = active ? SeriesView.LapBrush((int)tab.Tag) : Brushes.Transparent; }
         AllTab.Foreground = chosen.Count == 0 ? Brushes.White : Brushes.Gray; AllTab.BorderBrush = chosen.Count == 0 ? Brushes.Crimson : Brushes.Transparent;
-        foreach (var plot in Plots) plot.SetSelection(analysis, chosen, reference); Route.SetSelection(analysis, chosen, reference);
+        foreach (var plot in Plots) plot.SetSelection(analysis, chosen, reference); Route.SetSelection(analysis, chosen, reference); viewport.Reset(SpeedPlot.Extent); ApplyViewport(); RefreshActivePlots();
         var choices = available.Select(l => new LapItem(l.Id, $"Vuelta {l.Number + 1}")).ToArray(); FirstVideoPicker.ItemsSource = choices; SecondVideoPicker.ItemsSource = choices;
         firstVideo = available.FirstOrDefault()?.Id ?? 0; secondVideo = available.Skip(1).FirstOrDefault()?.Id ?? firstVideo; FirstVideoPicker.SelectedIndex = 0; SecondVideoPicker.SelectedIndex = Math.Min(1, choices.Length - 1);
         VideoChoices.Visibility = chosen.Count > 1 ? Visibility.Visible : Visibility.Collapsed; Video.Stretch = CompareVideo.Stretch = chosen.Count > 1 ? Stretch.UniformToFill : Stretch.Uniform; SecondVideoColumn.Width = chosen.Count > 1 ? new GridLength(1, GridUnitType.Star) : new GridLength(0); CompareVideo.Pause();
@@ -242,23 +246,31 @@ public partial class MainWindow : Window
         if (chosen.Count > 0) { internalTime = true; Timeline.Minimum = analysis.Laps.First(l => l.Id == id).Start; Timeline.Maximum = analysis.Laps.First(l => l.Id == id).End; internalTime = false; DurationLabel.Text = ClockText(Timeline.Maximum); BuildTimeline(); Seek(analysis.AtDistance(id, distance)?.Packet.T ?? Timeline.Minimum); } else Seek(analysis.Laps.First(l => l.Id == id).Start);
     }
     void VideoSelectionChanged(object sender, SelectionChangedEventArgs e) { if (selectionUpdating || analysis is null) return; if (FirstVideoPicker.SelectedItem is LapItem { Id: { } a }) firstVideo = a; if (SecondVideoPicker.SelectedItem is LapItem { Id: { } b }) secondVideo = b; Seek(time); }
-    void BuildTimeline()
+    void BuildTimeline() { Timeline.SetSegments(analysis?.Laps.Where(l => chosen.Count == 0 || l.Id == reference) ?? []); }
+    double AnalysisAxis() => chosen.Count > 0 ? analysis?.At(time)?.Distance ?? 0 : time;
+    void ApplyViewport() { foreach (var plot in Plots) plot.SetRange(viewport.Start, viewport.End); UpdatePan(); }
+    void RefreshActivePlots()
     {
-        timelineHovered = null; TimelineSegments.Children.Clear(); TimelineSegments.ColumnDefinitions.Clear(); if (analysis is null) return; int i = 0; foreach (var lap in analysis.Laps.Where(l => chosen.Count == 0 || l.Id == reference)) { TimelineSegments.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Math.Max(.001, lap.End - lap.Start), GridUnitType.Star) }); var segment = new Border { Background = SeriesView.LapBrush(lap.Id), Tag = lap, RenderTransformOrigin = new Point(.5, .5), RenderTransform = new ScaleTransform(1, 1) }; Grid.SetColumn(segment, i++); TimelineSegments.Children.Add(segment); }
+        if (ChartScroll is null || SpeedPlot is null) return; double top = -ChartScroll.VerticalOffset, height = Math.Max(1, ChartScroll.ViewportHeight);
+        foreach (var plot in Plots) { plot.Active = plot.Visibility == Visibility.Visible && top < height && top + plot.Height > 0; if (plot.Visibility == Visibility.Visible) top += plot.Height; }
     }
-    int? timelineHovered;
-    void TimelineHover(double? x)
+    void UpdateSessionWidth()
     {
-        if (analysis is null) return;
-        double at = x is { } position ? Timeline.Minimum + Math.Clamp(position / Math.Max(1, Timeline.ActualWidth), 0, 1) * (Timeline.Maximum - Timeline.Minimum) : -1;
-        int? next = at < 0 ? null : analysis.At(at)?.LapId; if (next == timelineHovered) return; timelineHovered = next;
-        foreach (Border segment in TimelineSegments.Children) { if (segment.Tag is not LapInfo lap) continue; bool active = lap.Id == next; var scale = (ScaleTransform)segment.RenderTransform; scale.BeginAnimation(ScaleTransform.ScaleYProperty, new System.Windows.Media.Animation.DoubleAnimation(active ? 1.6 : 1, TimeSpan.FromMilliseconds(UiMotion.Enabled ? 160 : 0))); }
-        if (next is { } id && analysis.Laps.FirstOrDefault(l => l.Id == id) is { } hoveredLap) Timeline.ToolTip = $"Vuelta {hoveredLap.Number + 1} · {ClockText(hoveredLap.Time)}"; else Timeline.ToolTip = null;
+        if (SessionTitle is null || SessionColumn is null) return;
+        var text = new FormattedText(SessionTitle.Text, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface((FontFamily)FindResource("DisplayFont"), FontStyles.Italic, FontWeights.Bold, FontStretches.Normal), 21, Brushes.White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        double limit = Math.Max(360, Math.Min(650, ActualWidth * .45)); SessionColumn.Width = new GridLength(Math.Clamp(text.WidthIncludingTrailingWhitespace + 115, 360, limit));
     }
+    void UpdateLapOverflow()
+    {
+        if (LapNavigation is null || NextLapsButton is null) return; double available = Math.Max(0, LapNavigation.ActualWidth - AllTab.ActualWidth);
+        bool more = LapTabs.DesiredSize.Width > available + 1 && LapScroll.HorizontalOffset < LapScroll.ScrollableWidth - .5;
+        NextLapsButton.Visibility = more ? Visibility.Visible : Visibility.Collapsed;
+    }
+    void AnimateNextArrow(double x) => ((TranslateTransform)NextLapsIcon.RenderTransform).BeginAnimation(TranslateTransform.XProperty, new System.Windows.Media.Animation.DoubleAnimation(x, TimeSpan.FromMilliseconds(UiMotion.Enabled ? 180 : 0)));
     void LapWheel(object sender, MouseWheelEventArgs e) { LapScroll.ScrollToHorizontalOffset(LapScroll.HorizontalOffset - e.Delta); e.Handled = true; }
     void MoreLaps(object sender, RoutedEventArgs e) => LapScroll.ScrollToHorizontalOffset(LapScroll.HorizontalOffset + 300);
-    void ExpandPlot(SeriesView plot) { expanded = expanded == plot ? null : plot; ResizeCharts(); UiMotion.Enter(ChartStack, 6, 220); chartScrollTarget = 0; Dispatcher.BeginInvoke(() => ChartScroll.ScrollToVerticalOffset(0), DispatcherPriority.Loaded); }
-    void ResizeCharts() { if (ChartScroll is null || SpeedPlot is null) return; double height = Math.Max(100, ChartScroll.ActualHeight / (expanded is null ? 2 : 1)); foreach (var plot in Plots) { plot.Height = height; plot.Visibility = expanded is null || plot == expanded ? Visibility.Visible : Visibility.Collapsed; } }
+    void ExpandPlot(SeriesView plot) { expanded = expanded == plot ? null : plot; ResizeCharts(); UiMotion.Enter(ChartStack, 6, 220); chartScrollTarget = 0; Dispatcher.BeginInvoke(() => { ChartScroll.ScrollToVerticalOffset(0); RefreshActivePlots(); }, DispatcherPriority.Loaded); }
+    void ResizeCharts() { if (ChartScroll is null || SpeedPlot is null) return; double height = Math.Max(100, ChartScroll.ActualHeight / (expanded is null ? 2 : 1)); foreach (var plot in Plots) { plot.Height = height; plot.Visibility = expanded is null || plot == expanded ? Visibility.Visible : Visibility.Collapsed; } RefreshActivePlots(); }
     void ChartSizeChanged(object sender, SizeChangedEventArgs e) => ResizeCharts();
     double chartScrollTarget;
     void ChartWheel(object sender, MouseWheelEventArgs e)
@@ -267,11 +279,11 @@ public partial class MainWindow : Window
         if (expanded is null) { double step = SpeedPlot.ActualHeight; chartScrollTarget = Math.Clamp(Math.Round(chartScrollTarget / Math.Max(1, step)) * step + (e.Delta > 0 ? -step : step), 0, ChartScroll.ScrollableHeight); UiMotion.ScrollTo(ChartScroll, chartScrollTarget); }
         e.Handled = true;
     }
-    void UpdatePan() { panUpdating = true; ChartPan.Maximum = Math.Max(0, SpeedPlot.Extent - (SpeedPlot.End - SpeedPlot.Start)); ChartPan.Value = SpeedPlot.Start; panUpdating = false; }
-    void PanChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (panUpdating || analysis is null) return; double span = SpeedPlot.End - SpeedPlot.Start; foreach (var plot in Plots) plot.SetRange(e.NewValue, e.NewValue + span); }
-    void ZoomIn(object sender, RoutedEventArgs e) => SpeedPlot.ZoomAtCursor(1.5);
-    void ZoomOut(object sender, RoutedEventArgs e) => SpeedPlot.ZoomAtCursor(1 / 1.5);
-    void ResetPlots(object sender, RoutedEventArgs e) { foreach (var plot in Plots) plot.Fit(); UpdatePan(); }
+    void UpdatePan() { ChartPan.SetRange(viewport.Extent, viewport.Start, viewport.Span); }
+    void PanChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (analysis is null) return; viewport.Pan(e.NewValue); ApplyViewport(); }
+    void ZoomIn(object sender, RoutedEventArgs e) { viewport.Zoom(2, AnalysisAxis()); ApplyViewport(); }
+    void ZoomOut(object sender, RoutedEventArgs e) { viewport.Zoom(.5, AnalysisAxis()); ApplyViewport(); }
+    void ResetPlots(object sender, RoutedEventArgs e) { viewport.Reset(SpeedPlot.Extent); ApplyViewport(); }
     void MapIn(object sender, RoutedEventArgs e) => Route.ZoomMap(1.5);
     void MapOut(object sender, RoutedEventArgs e) => Route.ZoomMap(1 / 1.5);
     void FitRoute(object sender, RoutedEventArgs e) => Route.Fit();

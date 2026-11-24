@@ -24,15 +24,23 @@ public sealed class DrivingDashboard : FrameworkElement
     static VisualTween[] Make(double duration) => Enumerable.Range(0, 4).Select(_ => new VisualTween(duration)).ToArray();
     static double Now => Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency;
     static readonly FontFamily Numbers = new(new Uri("pack://application:,,,/"), "./Assets/#Rajdhani"), Display = new(new Uri("pack://application:,,,/"), "./Assets/#Barlow Condensed");
+    static readonly Dictionary<string, Brush> brushCache = [];
+    static readonly Dictionary<string, Geometry> geometryCache = [];
+    static readonly Dictionary<(string, string, double), Brush> gradientCache = [];
+    static readonly Dictionary<Color, Brush> glowCache = [];
+    static readonly Typeface NumberFace = new(Numbers, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal), HeadingFace = new(Display, FontStyles.Italic, FontWeights.SemiBold, FontStretches.Normal);
+    readonly Dictionary<string, FormattedText> textCache = []; readonly Queue<string> textKeys = [];
     static readonly Brush White = B("#F4F1F3"), Muted = B("#A0A0AC"), Red = B("#FF4657"), Line = B("#2B2B32"), Panel = B("#101013");
     static readonly Geometry Wheel = G("M17 3.34a10 10 0 1 1 -15 8.66l.005 -.324a10 10 0 0 1 14.995 -8.336m-13 8.66a8 8 0 0 0 7 7.937v-5.107a3 3 0 0 1 -1.898 -2.05l-5.07 -1.504q -.031 .36 -.032 .725m15.967 -.725l-5.069 1.503a3 3 0 0 1 -1.897 2.051v5.108a8 8 0 0 0 6.985 -8.422zm-11.967 -6.204a8 8 0 0 0 -3.536 4.244l4.812 1.426a3 3 0 0 1 5.448 0l4.812 -1.426a8 8 0 0 0 -11.536 -4.244");
     static readonly Geometry Shoulder = G("M8 7v50M28 7v50"), Groove = G("M14 4v56M22 4v56"), Tread = G("m4 12 9-5m-9 17 9-5m-9 17 9-5m-9 17 9-5m10-36 9 5m-9 7 9 5m-9 7 9 5m-9 7 9 5"), Sipes = G("M16 12h4M16 22h4M16 32h4M16 42h4M16 52h4");
-    static Geometry G(string value) { var g = Geometry.Parse(value); g.Freeze(); return g; }
-    static Brush B(string value) { var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(value)); b.Freeze(); return b; }
-    static Brush Mix(string a, string b, double fraction) => new SolidColorBrush(VisualTween.Blend((Color)ColorConverter.ConvertFromString(a), (Color)ColorConverter.ConvertFromString(b), fraction));
+    static Geometry G(string value) { if (geometryCache.TryGetValue(value, out var existing)) return existing; var g = Geometry.Parse(value); g.Freeze(); return geometryCache[value] = g; }
+    static Brush B(string value) { if (brushCache.TryGetValue(value, out var existing)) return existing; var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(value)); b.Freeze(); return brushCache[value] = b; }
+    static Color Of(string value) => ((SolidColorBrush)B(value)).Color;
+    static Brush Gradient(string a, string b, double angle) { if (gradientCache.TryGetValue((a, b, angle), out var existing)) return existing; var g = new LinearGradientBrush(Of(a), Of(b), angle); g.Freeze(); return gradientCache[(a, b, angle)] = g; }
+    static Brush Mix(string a, string b, double fraction) => fraction <= 0 ? B(a) : fraction >= 1 ? B(b) : new SolidColorBrush(VisualTween.Blend(Of(a), Of(b), fraction));
     public DrivingDashboard()
     {
-        ClipToBounds = true;foreach(var tween in hover.Concat(panelHover))tween.Set(0,Now);
+        ClipToBounds = true; foreach (var tween in hover.Concat(panelHover)) tween.Set(0, Now);
         Loaded += (_, _) => CompositionTarget.Rendering += Rendering; Unloaded += (_, _) => CompositionTarget.Rendering -= Rendering;
         MouseMove += (_, e) => SetHover(e.GetPosition(this));
         MouseLeave += (_, _) => SetHover(null);
@@ -66,7 +74,7 @@ public sealed class DrivingDashboard : FrameworkElement
     public void Reset()
     {
         peak = 0; gear = null; shifted = -1; blue = false; packet = null;
-        foreach (var tween in AllTweens()) tween.Reset();foreach(var tween in hover.Concat(panelHover))tween.Set(0,Now); InvalidateVisual();
+        foreach (var tween in AllTweens()) tween.Reset(); foreach (var tween in hover.Concat(panelHover)) tween.Set(0, Now); InvalidateVisual();
     }
     IEnumerable<VisualTween> AllTweens() => new[] { steer, throttle, brake, gx, gy, gOpacity }.Concat(hue).Concat(slip).Concat(warning).Concat(hover).Concat(panelHover).Concat(leds);
     public void Animate()
@@ -76,22 +84,23 @@ public sealed class DrivingDashboard : FrameworkElement
     }
     void Text(DrawingContext dc, string value, double x, double y, double size, Brush? brush = null, bool centered = false, bool heading = false)
     {
-        var text = new FormattedText(value, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface(heading ? Display : Numbers, heading ? FontStyles.Italic : FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal), size, brush ?? White, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        string key = $"{size}:{heading}:{brush?.ToString()}:{value}:{VisualTreeHelper.GetDpi(this).PixelsPerDip}";
+        if (!textCache.TryGetValue(key, out var text)) { text = new FormattedText(value, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, heading ? HeadingFace : NumberFace, size, brush ?? White, VisualTreeHelper.GetDpi(this).PixelsPerDip); textCache[key] = text; textKeys.Enqueue(key); if (textKeys.Count > 256) textCache.Remove(textKeys.Dequeue()); }
         dc.DrawText(text, new Point(centered ? x - text.Width / 2 : x, y));
     }
     protected override void OnRender(DrawingContext dc)
     {
-        double w = ActualWidth, h = ActualHeight; if (w <= 0 || h <= 0) return; double now = Now;
-        dc.DrawRectangle(Large ? new RadialGradientBrush((Color)ColorConverter.ConvertFromString("#201116"), (Color)ColorConverter.ConvertFromString("#070708")) { Center = new Point(.5, .12), GradientOrigin = new Point(.5, .12) } : Panel, null, new Rect(0, 0, w, h));
+        long renderTick = Stopwatch.GetTimestamp(); double w = ActualWidth, h = ActualHeight; if (w <= 0 || h <= 0) return; double now = Now;
+        dc.DrawRectangle(Large ? new RadialGradientBrush(Of("#201116"), Of("#070708")) { Center = new Point(.5, .12), GradientOrigin = new Point(.5, .12) } : Panel, null, new Rect(0, 0, w, h));
         if (Large) { double pad = 24, top = Math.Max(220, h * .46); panelBounds[2] = new Rect(w * .16, pad, w * .68, Math.Max(180, top - pad)); double col = Math.Max(1, (w - pad * 4) / 3); panelBounds[0] = new Rect(pad, top + 16, col, Math.Max(1, h - top - 40)); panelBounds[1] = new Rect(pad * 2 + col, top + 16, col, Math.Max(1, h - top - 40)); panelBounds[3] = new Rect(pad * 3 + col * 2, top + 16, col, Math.Max(1, h - top - 40)); }
         else { double unit = w / 5.5; panelBounds[0] = new Rect(0, 0, unit, h); panelBounds[1] = new Rect(unit, 0, unit, h); panelBounds[2] = new Rect(unit * 2, 0, unit * 1.5, h); panelBounds[3] = new Rect(unit * 3.5, 0, unit * 2, h); }
-        DrawPanel(dc, 0, "DIRECCIÓN", Steering, now); DrawPanel(dc, 1, "FUERZAS G", Forces, now); DrawPanel(dc, 2, "MOTOR", Motor, now); DrawPanel(dc, 3, "NEUMÁTICOS", Tires, now);
+        DrawPanel(dc, 0, "DIRECCIÓN", Steering, now); DrawPanel(dc, 1, "FUERZAS G", Forces, now); DrawPanel(dc, 2, "MOTOR", Motor, now); DrawPanel(dc, 3, "NEUMÁTICOS", Tires, now); PresentationMetrics.Record(Large ? "live-dashboard" : "dashboard", Stopwatch.GetElapsedTime(renderTick).TotalMilliseconds);
     }
     void DrawPanel(DrawingContext dc, int id, string title, Action<DrawingContext, double, double, double> content, double now)
     {
         var r = panelBounds[id]; double over = panelHover[id].Value(now);
         dc.PushClip(new RectangleGeometry(r)); dc.PushTransform(new TranslateTransform(r.X, r.Y));
-        Brush background = id == 2 ? new LinearGradientBrush((Color)ColorConverter.ConvertFromString("#24171C"), (Color)ColorConverter.ConvertFromString("#0A0A0D"), 55) : Panel;
+        Brush background = id == 2 ? Gradient("#24171C", "#0A0A0D", 55) : Panel;
         dc.DrawRectangle(background, new Pen(id == 2 ? B("#66313E") : Mix("#2B2B32", "#68404E", over), 1), new Rect(0, 0, r.Width, r.Height));
         Text(dc, title, 12, 9, Large ? 14 : 11, Muted, heading: true);
         double header = Large ? 38 : 30;
@@ -105,7 +114,7 @@ public sealed class DrivingDashboard : FrameworkElement
         dc.DrawEllipse(null, new Pen(B("#3A2A32"), 1) { DashStyle = new DashStyle([2d, 4d], 0) }, new Point(60, 60), 55, 55);
         dc.DrawGeometry(null, new Pen(B("#8F3D4B"), 2), G("M60 1v7M1 60h7M112 60h7"));
         dc.PushTransform(new RotateTransform(steer.Value(now), 60, 60)); dc.PushTransform(new ScaleTransform(5, 5));
-        dc.DrawGeometry(new LinearGradientBrush((Color)ColorConverter.ConvertFromString("#E1E4EB"), (Color)ColorConverter.ConvertFromString("#818895"), 45), null, Wheel); dc.Pop();
+        dc.DrawGeometry(Gradient("#E1E4EB", "#818895", 45), null, Wheel); dc.Pop();
         dc.DrawLine(new Pen(Red, 5) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round }, new Point(55, 11), new Point(65, 11)); dc.DrawEllipse(B("#252832"), null, new Point(60, 60), 5, 5); dc.DrawEllipse(Red, null, new Point(60, 60), 2, 2); dc.Pop(); dc.Pop(); dc.Pop();
         string label = packet?.Steer is { } s ? Math.Abs(s) < 2 ? "Centrado · 0%" : $"{(s < 0 ? "Izq." : "Der.")} · {Math.Abs(s / 127d * 100):0}%" : "Sin datos";
         Text(dc, label, cx, h - 61, Large ? 18 : 14, B("#ECD7DF"), true);
@@ -123,7 +132,7 @@ public sealed class DrivingDashboard : FrameworkElement
         var center = new Point(cx, cy); foreach (double r in new[] { radius, radius / 2 }) dc.DrawEllipse(null, new Pen(B("#3C353F"), 1), center, r, r);
         dc.DrawLine(new Pen(B("#302A33"), 1), new Point(cx - radius, cy), new Point(cx + radius, cy)); dc.DrawLine(new Pen(B("#302A33"), 1), new Point(cx, cy - radius), new Point(cx, cy + radius));
         Text(dc, "2G", cx + 5, cy - radius, Large ? 11 : 8, B("#8D788C")); Text(dc, "1G", cx + 5, cy - radius / 2, Large ? 11 : 8, B("#8D788C"));
-        dc.PushOpacity(gOpacity.Value(now)); var point = new Point(cx + gx.Value(now) * radius, cy + gy.Value(now) * radius); Glow(dc, point, 10, (Color)ColorConverter.ConvertFromString("#FF4657"), .35); dc.DrawEllipse(Red, null, point, Large ? 5 : 3.5, Large ? 5 : 3.5); dc.Pop();
+        dc.PushOpacity(gOpacity.Value(now)); var point = new Point(cx + gx.Value(now) * radius, cy + gy.Value(now) * radius); Glow(dc, point, 10, Of("#FF4657"), .35); dc.DrawEllipse(Red, null, point, Large ? 5 : 3.5, Large ? 5 : 3.5); dc.Pop();
         bool valid = packet?.AccelX is not null && packet.AccelZ is not null; double x = (packet?.AccelX ?? 0) / 9.80665, z = (packet?.AccelZ ?? 0) / 9.80665;
         Text(dc, valid ? $"{Math.Sqrt(x * x + z * z):0.00} G" : "Sin datos", cx, h - 62, Large ? 27 : 19, B("#F0B0B9"), true);
         Text(dc, "Lateral", w * .25, h - 36, Large ? 13 : 10, Muted, true); Text(dc, "Longitudinal", w * .75, h - 36, Large ? 13 : 10, Muted, true);
@@ -139,8 +148,8 @@ public sealed class DrivingDashboard : FrameworkElement
         for (int i = 0; i < 16; i++)
         {
             int rank = Math.Min(i, 15 - i); double level = Math.Clamp(shown / .8 * 8 - rank, 0, 1); leds[i].Set(level, now); double strength = leds[i].Value(now);
-            Color color = (Color)ColorConverter.ConvertFromString(rank < 4 ? "#59E2BA" : rank < 6 ? "#FFC66E" : "#F77D94");
-            if (blue) { strength = !UiMotion.Enabled || ((int)(now * 8) % 2 == 0) ? 1 : .2; color = (Color)ColorConverter.ConvertFromString("#409FFF"); }
+            Color color = Of(rank < 4 ? "#59E2BA" : rank < 6 ? "#FFC66E" : "#F77D94");
+            if (blue) { strength = !UiMotion.Enabled || ((int)(now * 8) % 2 == 0) ? 1 : .2; color = Of("#409FFF"); }
             var rect = new Rect(i * (ledWidth + gap), 3, ledWidth, ledHeight); if (strength > .03) Glow(dc, new Point(rect.X + rect.Width / 2, rect.Y + rect.Height / 2), Math.Max(8, ledWidth), color, strength * .23);
             dc.PushOpacity(.16 + .84 * strength); dc.DrawRoundedRectangle(new SolidColorBrush(color), null, rect, 2, 2); dc.Pop();
         }
@@ -151,7 +160,7 @@ public sealed class DrivingDashboard : FrameworkElement
         Text(dc, packet is { } p ? $"{p.Rpm:N0}" : "—", rpmLeft, bodyTop + 6, rpmSize, B("#B4F1DB")); Text(dc, "RPM", rpmLeft, bodyTop + rpmSize + 8, Large ? 14 : 10, Muted);
         double speedTop = bodyTop + rpmSize + (Large ? 33 : 26); string speed = packet is { } q ? $"{q.Speed:0}" : "—";
         Text(dc, speed, rpmLeft, speedTop, speedSize, White); double unitX = Math.Min(w - 30, rpmLeft + speed.Length * speedSize * .48 + 6); Text(dc, "km/h", unitX, speedTop + speedSize * .45, Large ? 18 : 12, Muted);
-        dc.DrawRectangle(B("#2B292F"), null, new Rect(0, h - 19, w, 4)); dc.DrawRectangle(new LinearGradientBrush((Color)ColorConverter.ConvertFromString("#B4F1DB"), (Color)ColorConverter.ConvertFromString("#F77D94"), 0), null, new Rect(0, h - 19, w * Math.Clamp(ratio, 0, 1), 4));
+        dc.DrawRectangle(B("#2B292F"), null, new Rect(0, h - 19, w, 4)); dc.DrawRectangle(Gradient("#B4F1DB", "#F77D94", 0), null, new Rect(0, h - 19, w * Math.Clamp(ratio, 0, 1), 4));
         Text(dc, max > 0 ? $"{(packet?.EngineMaxRpm > 0 ? "Máximo del motor" : "Pico medido")} · {max:N0} RPM" : "Esperando datos del motor", 0, h - 11, Large ? 13 : 9, B("#7F8C88"));
     }
     void Tires(DrawingContext dc, double w, double h, double now)
@@ -163,9 +172,9 @@ public sealed class DrivingDashboard : FrameworkElement
             tireBounds[i] = new Rect(panelBounds[3].X + 10 + x, panelBounds[3].Y + (Large ? 38 : 30) + y, tileWidth, tileHeight);
             Brush border = Mix("#33333C", "#B54F3F", warn); if (over > 0) border = Mix(warn > .5 ? "#B54F3F" : "#33333C", "#F28DA0", over);
             dc.DrawRoundedRectangle(Mix("#151519", "#281816", warn), new Pen(border, 1), new Rect(x, y, tileWidth, tileHeight), 3, 3);
-            bool hasTemp = packet?.TireTempsC.Length == 4, hasSlip = packet?.TireSlipCombined.Length == 4; Color color = hasTemp ? VisualTween.TemperatureColorFromHue(hue[i].Value(now)) : (Color)ColorConverter.ConvertFromString("#526174"); var tempBrush = new SolidColorBrush(color);
+            bool hasTemp = packet?.TireTempsC.Length == 4, hasSlip = packet?.TireSlipCombined.Length == 4; Color color = hasTemp ? VisualTween.TemperatureColorFromHue(hue[i].Value(now)) : Of("#526174"); var tempBrush = new SolidColorBrush(color);
             double tyreHeight = Math.Min(Large ? 76 : 52, Math.Max(28, tileHeight - 11)), tyreScale = tyreHeight / 64, tyreWidth = 36 * tyreScale, tyreX = x + 7, tyreY = y + (tileHeight - tyreHeight) / 2 - 2;
-            if (warn > .01) Glow(dc, new Point(tyreX + tyreWidth / 2, tyreY + tyreHeight / 2), tyreHeight * .55, (Color)ColorConverter.ConvertFromString("#FF976F"), warn * .18);
+            if (warn > .01) Glow(dc, new Point(tyreX + tyreWidth / 2, tyreY + tyreHeight / 2), tyreHeight * .55, Of("#FF976F"), warn * .18);
             dc.PushTransform(new TranslateTransform(tyreX, tyreY)); dc.PushTransform(new ScaleTransform(tyreScale, tyreScale));
             dc.DrawRoundedRectangle(B("#09090C"), new Pen(tempBrush, 1.5), new Rect(3, 2, 30, 60), 9, 9); dc.DrawGeometry(null, new Pen(B("#5A5A64"), 1.2), Shoulder); dc.DrawGeometry(null, new Pen(B("#41414C"), 1.5), Groove); dc.PushOpacity(.85); dc.DrawGeometry(null, new Pen(tempBrush, 1.4), Tread); dc.Pop(); dc.DrawGeometry(null, new Pen(B("#62626D"), 1.2), Sipes); dc.Pop(); dc.Pop();
             double textX = tyreX + tyreWidth + 7;
@@ -178,6 +187,7 @@ public sealed class DrivingDashboard : FrameworkElement
     }
     static void Glow(DrawingContext dc, Point center, double radius, Color color, double strength)
     {
-        var brush = new RadialGradientBrush(Color.FromArgb((byte)(Math.Clamp(strength, 0, 1) * 255), color.R, color.G, color.B), Color.FromArgb(0, color.R, color.G, color.B)); dc.DrawEllipse(brush, null, center, radius, radius);
+        var key = Color.FromArgb((byte)(Math.Clamp(strength, 0, 1) * 255), color.R, color.G, color.B); if (!glowCache.TryGetValue(key, out var brush)) { var gradient = new RadialGradientBrush(key, Color.FromArgb(0, color.R, color.G, color.B)); gradient.Freeze(); glowCache[key] = brush = gradient; }
+        dc.DrawEllipse(brush, null, center, radius, radius);
     }
 }

@@ -12,10 +12,10 @@
 <Style TargetType="Window"><Setter Property="Background" Value="#070708"/><Setter Property="Foreground" Value="#F4F1F3"/><Setter Property="FontFamily" Value="{StaticResource NumberFont}"/><Setter Property="FontSize" Value="14"/></Style>
 <Style TargetType="Button">
 <Setter Property="Background" Value="#19191E"/><Setter Property="Foreground" Value="#EEEEEF"/><Setter Property="BorderBrush" Value="#34343D"/><Setter Property="Padding" Value="12,7"/><Setter Property="Margin" Value="4"/><Setter Property="Cursor" Value="Hand"/>
-<Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Grid x:Name="Root" RenderTransformOrigin=".5,.5"><Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
+<Setter Property="HorizontalContentAlignment" Value="Center"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Grid x:Name="Root" RenderTransformOrigin=".5,.5"><Grid.RenderTransform><TranslateTransform/></Grid.RenderTransform>
 <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="3"/>
 <Border x:Name="Hover" Background="#292024" BorderBrush="#FF3945" BorderThickness="1" CornerRadius="3" Opacity="0"/>
-<ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+<ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" VerticalAlignment="Center"/>
 </Grid><ControlTemplate.Triggers>
 <Trigger Property="IsMouseOver" Value="True"><Trigger.EnterActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="Hover" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:.18"/></Storyboard></BeginStoryboard></Trigger.EnterActions><Trigger.ExitActions><BeginStoryboard><Storyboard><DoubleAnimation Storyboard.TargetName="Hover" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:.18"/></Storyboard></BeginStoryboard></Trigger.ExitActions></Trigger>
 <Trigger Property="IsPressed" Value="True"><Setter TargetName="Root" Property="RenderTransform"><Setter.Value><TranslateTransform Y="1"/></Setter.Value></Setter></Trigger>

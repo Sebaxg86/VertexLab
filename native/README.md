@@ -1,10 +1,10 @@
-# VertexLab Desktop — 0.3.1 alpha interna
+# VertexLab Desktop — 0.3.2 alpha interna
 
 Aplicación nativa **exclusiva para Windows x64**, escrita en C#/.NET 10 y WPF. No usa navegador, WebView ni un servidor HTTP para su interfaz. El MVP web y Python se conserva en la raíz y en el tag `v0.1.0-mvp`.
 
 ## Probar
 
-El instalador generado está en `native/artifacts/VertexLab-0.3.1-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
+El instalador generado está en `native/artifacts/VertexLab-0.3.2-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
 
 También se puede ejecutar `start-native.cmd` o `native/artifacts/app/VertexLab.Desktop.exe`. En configuración se elige el puerto UDP (5301 por defecto), la detección automática y la conexión local con OBS WebSocket v5. La detección automática empieza desactivada en una instalación nueva. Configura Data Out de Forza con IP `127.0.0.1` y el puerto elegido. No ejecutes simultáneamente el MVP y Native sobre el mismo puerto.
 
@@ -86,3 +86,18 @@ Se comprobó con una copia aislada de la sesión real Toyota GR86 (10 vueltas, 1
 Los instrumentos usan los mismos trazos SVG, colores y escalas de temperatura que el MVP web. El color del neumático interpola durante 150 ms; slip, dirección, G y pedales durante 70 ms; la alerta de deslizamiento cambia fondo y borde durante 100 ms. Las cifras siempre salen directamente de la muestra observada. Las transiciones visuales no suavizan, rellenan ni cambian los datos almacenados.
 
 El tablero se distribuye en píxeles disponibles, conservando las medidas tipográficas del original en lugar de reducir juntos texto y dibujos dentro de un lienzo. El motor permanece centrado. Se añadieron estados hover progresivos, scroll animado con ajuste por fila, subrayados, brillo de LED, iconos vectoriales de reproducción y el indicador de carga del MVP. La captura y el coordinador de arrastre de video se conservan.
+
+
+### Interacción de editor 0.3.2
+
+La barra de reproducción es un único control de segmentos de vuelta y cabezal. Captura el puntero desde cualquier punto, permite arrastrar y previsualizar y conserva el coordinador de búsqueda a 80 ms. Admite teclado y RangeValue de accesibilidad.
+
+El zoom de las gráficas usa una ventana compartida por tiempo o distancia. La barra representa el ancho real del tramo visible. El zoom de la barra de herramientas centra el cabezal; la reproducción sigue de forma continua. El desplazamiento manual separa temporalmente la ventana del seguimiento y no cambia el instante del video. Buscar, volver a reproducir o pulsar zoom al cursor recupera el seguimiento. El arrastre sobre una gráfica conserva su ventana hasta soltar.
+
+Las trazadas se conservan en una capa visual independiente. Los movimientos del mouse se agrupan una vez por cuadro; el mapa consulta un índice de segmentos cercano al puntero en lugar de recorrer todas las muestras. Solo se presentan las gráficas visibles. Desplazar una ventana reutiliza geometrías mientras permanezca dentro de su margen cacheado. Se evita reconstruir las curvas y sus escalas en cada actualización del cursor.
+
+La comprobación con la sesión real de diez vueltas incluyó tres vueltas seleccionadas y dos videos. En la medición local de CPU de la presentación, el percentil 95 fue aproximadamente 0.073 ms por gráfica y 0.016 ms para el mapa. Son tiempos de preparación de esas capas, no una medición de latencia del video ni una garantía de FPS bajo la carga del juego. El video original y la decodificación observada fueron 1920×1080; se activa el escalado de mayor calidad y el video no se incluye en transiciones de opacidad o desenfoque.
+
+El selector de referencia está alineado a la derecha de Al volante. Los indicadores del recorrido comparten el estilo de su etiqueta temporal. El header calcula el espacio del nombre y permite envolver nombres largos; el botón para ver más vueltas aparece solo cuando hay contenido a la derecha. Las pruebas nativas suman 30, incluyendo desplazamiento/seguimiento/zoom y búsqueda local en trazadas extensas y con huecos.
+
+También se reutilizan pinceles, geometrías, gradientes y textos de los instrumentos para limitar asignaciones durante la reproducción. La posición del video principal se consulta una vez por actualización; el control de deriva del segundo video se limita a diez comprobaciones por segundo. Estas optimizaciones no modifican los archivos ni las referencias temporales guardadas.
