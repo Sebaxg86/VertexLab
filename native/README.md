@@ -1,10 +1,10 @@
-# VertexLab Desktop — 0.2.1 alpha interna
+# VertexLab Desktop — 0.2.2 alpha interna
 
 Aplicación nativa **exclusiva para Windows x64**, escrita en C#/.NET 10 y WPF. No usa navegador, WebView ni un servidor HTTP para su interfaz. El MVP web y Python se conserva en la raíz y en el tag `v0.1.0-mvp`.
 
 ## Probar
 
-El instalador generado está en `native/artifacts/VertexLab-0.2.1-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
+El instalador generado está en `native/artifacts/VertexLab-0.2.2-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
 
 También se puede ejecutar `start-native.cmd` o `native/artifacts/app/VertexLab.Desktop.exe`. En configuración se elige el puerto UDP (5301 por defecto), la detección automática y la conexión local con OBS WebSocket v5. La detección automática empieza desactivada en una instalación nueva. Configura Data Out de Forza con IP `127.0.0.1` y el puerto elegido. No ejecutes simultáneamente el MVP y Native sobre el mismo puerto.
 
@@ -66,6 +66,9 @@ La captura nunca escribe desde el hilo de la interfaz. La cola está acotada; lo
 
 ### Arrastre y búsqueda de video
 
-Durante el arrastre de la línea de tiempo o de una gráfica se pausa la reproducción y los instrumentos siguen inmediatamente el cursor. Se conserva únicamente el destino más reciente. Una breve detención del puntero permite una vista previa; al soltar se aplica el destino final y, tras un breve margen para el decodificador, se reanuda solo si la sesión estaba reproduciéndose. Los cambios de sesión cancelan búsquedas pendientes. Esto evita acumular órdenes Position/Play y que el reloj del video sobrescriba la posición que se está buscando.
+Durante el arrastre de la línea de tiempo o de una gráfica se pausa la reproducción y los instrumentos siguen inmediatamente el cursor. Se conserva únicamente el destino más reciente. Mientras el puntero se mueve, la vista previa se actualiza como máximo cada 80 ms, usando siempre el destino más reciente; al soltar se aplica el destino final y, tras un breve margen para el decodificador, se reanuda solo si la sesión estaba reproduciéndose. Los cambios de sesión cancelan búsquedas pendientes. Esto evita acumular órdenes Position/Play y que el reloj del video sobrescriba la posición que se está buscando.
 
 Para construir una actualización sin tocar los ejecutables que estén abiertos: `./native/tools/build.ps1 -OutputRoot native/artifacts/scrub-fix`. La salida contiene su propio directorio app y el MSI; no detiene el motor en ejecución.
+
+
+La vista previa no espera a que el puntero se detenga: moverse despacio permite ver sucesivos fotogramas con el video pausado. Los eventos más rápidos se agrupan para no saturar el decodificador; al soltar se aplica el punto final sin esperar al siguiente intervalo. La precisión temporal sigue dependiendo de la búsqueda del reproductor y de las referencias OBS; no se declara un modo de edición con exactitud garantizada de un fotograma.
