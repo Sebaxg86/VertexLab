@@ -6,6 +6,15 @@ public sealed class SessionAnalysis
     public required IReadOnlyList<AnalysisPoint> Points { get; init; }
     public required IReadOnlyList<LapInfo> Laps { get; init; }
     public double Duration => Points.Count>0?Points[^1].Packet.T:0;
+    Dictionary<int,AnalysisPoint[]>? byLap;
+    public IReadOnlyList<AnalysisPoint> LapPoints(int id) => (byLap??=Points.GroupBy(p=>p.LapId).ToDictionary(g=>g.Key,g=>g.ToArray())).GetValueOrDefault(id)??[];
+    public AnalysisPoint? AtDistance(int id,double distance)
+    {
+        var rows=LapPoints(id);int lo=0,hi=rows.Count;
+        while(lo<hi){int m=(lo+hi)/2;if(rows[m].Distance<=distance)lo=m+1;else hi=m;}
+        return rows.Count==0?null:rows[Math.Max(0,lo-1)];
+    }
+    public LapInfo? Fastest => Laps.Where(l=>!l.Partial&&l.Time>0).MinBy(l=>l.Time);
     public AnalysisPoint? At(double time)
     {
         int lo=0,hi=Points.Count;while(lo<hi){int m=(lo+hi)/2;if(Points[m].Packet.T<=time)lo=m+1;else hi=m;}

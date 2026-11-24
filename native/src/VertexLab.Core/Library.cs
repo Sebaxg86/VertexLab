@@ -30,6 +30,10 @@ public sealed class Library
         using var db=Open();using var cmd=db.CreateCommand();cmd.CommandText="SELECT meta_json,telemetry_path,state FROM sessions ORDER BY created DESC";using var r=cmd.ExecuteReader();var rows=new List<SessionEntry>();
         while(r.Read())rows.Add(new(Wire.Decode<SessionMeta>(r.GetString(0)),r.GetString(1),r.GetString(2)));return rows;
     }
+    public void Remove(string id)
+    {
+        using var db=Open();using var cmd=db.CreateCommand();cmd.CommandText="DELETE FROM sessions WHERE id=$id";cmd.Parameters.AddWithValue("$id",id);cmd.ExecuteNonQuery();
+    }
     public void RecoverInterrupted()
     {
         foreach(var entry in List().Where(s=>s.Meta.Ended is null)){

@@ -16,4 +16,11 @@
 <Target Name="CopyCaptureEngine" AfterTargets="Build"><ItemGroup><CaptureFiles Include="$(MSBuildProjectDirectory)\..\VertexLab.Capture\bin\$(Configuration)\net10.0-windows\VertexLab.Capture.*" /></ItemGroup><Copy SourceFiles="@(CaptureFiles)" DestinationFolder="$(TargetDir)" /></Target>
 <ItemGroup><Content Include="..\..\..\cars.json" Link="cars.json" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 <ItemGroup><Content Include="..\..\..\THIRD_PARTY_NOTICES.md" Link="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
-</Project>
+<ItemGroup>
+<Resource Include="../../../public/font-racing-*.ttf" Link="Assets/%(Filename)%(Extension)" />
+<Content Include="../../../public/brand-*.png" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+<Content Include="../../../public/emblem-*.svg" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+<Content Include="../../../public/OFL-*.txt" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+<Content Include="../../../public/LICENSE-Cardog.txt" Link="Assets/LICENSE-Cardog.txt" CopyToOutputDirectory="PreserveNewest" />
+<Content Include="../../../car-brands.json" Link="car-brands.json" CopyToOutputDirectory="PreserveNewest" />
+</ItemGroup></Project>

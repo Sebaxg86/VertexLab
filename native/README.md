@@ -1,10 +1,10 @@
-# VertexLab Desktop — 0.2.2 alpha interna
+# VertexLab Desktop — 0.3.0 alpha interna
 
 Aplicación nativa **exclusiva para Windows x64**, escrita en C#/.NET 10 y WPF. No usa navegador, WebView ni un servidor HTTP para su interfaz. El MVP web y Python se conserva en la raíz y en el tag `v0.1.0-mvp`.
 
 ## Probar
 
-El instalador generado está en `native/artifacts/VertexLab-0.2.2-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
+El instalador generado está en `native/artifacts/VertexLab-0.3.0-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
 
 También se puede ejecutar `start-native.cmd` o `native/artifacts/app/VertexLab.Desktop.exe`. En configuración se elige el puerto UDP (5301 por defecto), la detección automática y la conexión local con OBS WebSocket v5. La detección automática empieza desactivada en una instalación nueva. Configura Data Out de Forza con IP `127.0.0.1` y el puerto elegido. No ejecutes simultáneamente el MVP y Native sobre el mismo puerto.
 
@@ -20,12 +20,14 @@ La contraseña de OBS se transmite exclusivamente por IPC local del usuario y se
 - Biblioteca SQLite con WAL y metadatos JSON; filas JSONL compatibles con el MVP. Se vacían buffers periódicamente y al pausar/finalizar.
 - Recuperación de sesiones interrumpidas conservando filas completas. No garantiza recuperar el video ni controlar una grabación OBS tras un fallo del proceso.
 - Importación de `.vrtx` verificada por SHA-256 y exportación sin recodificar el video; transferencia por bloques. También se puede importar el JSON de una sesión finalizada del MVP, junto a su JSONL. En ese caso se copia la telemetría y el video queda referenciado en su ubicación original.
-- Análisis inicial: reproductor nativo, reloj basado en video, línea de tiempo, selección de una vuelta o toda la sesión, gráficas de velocidad/RPM/pedales y mapa con zoom y navegación al pulsar una trazada.
-- Instrumentos numéricos de dirección, pedales, G, marcha, RPM, velocidad y temperaturas.
+- Análisis con la distribución racing del MVP: selector superior de sesiones, pestañas de vueltas, video principal y controles flotantes. Todo el recorrido colorea sus segmentos por vuelta; la selección múltiple compara por distancia y permite hasta dos videos simultáneos, con selectores independientes de la vuelta de referencia.
+- Tablero nativo Al volante y LIVE ampliado: volante, pedales, fuerzas G, marcha, velocidad, luces RPM progresivas desde los extremos y aviso azul al 88%, temperaturas y deslizamiento de los cuatro neumáticos.
+- Siete gráficas con zoom compartido, desplazamiento horizontal, seguimiento durante la reproducción, dos filas visibles y ampliación al pulsar el nombre. Recorrido con zoom bajo el puntero y seguimiento del vehículo; resumen de vueltas y mejor vuelta destacada.
+- Sesiones destacadas, miniatura de trazada, emblemas y eliminación confirmada a la papelera. Si otra sesión referencia el mismo video, este se conserva. La configuración de captura/OBS se abre desde el engranaje en LIVE.
 
 ## Límites de esta alpha
 
-No es todavía la migración completa de la interfaz. Falta la comparación avanzada de múltiples vueltas y dos videos, el acabado de instrumentos y accesibilidad, ajustes de ubicación desde la interfaz, diagnósticos y rendimiento bajo carga del juego, y una estrategia de actualización firmada. La telemetría se lee en segundo plano pero el análisis conserva sus muestras en memoria; el almacenamiento indexado por bloques llegará después. Las geometrías de gráficas se reducen por píxel y se conservan mientras se mueve el cursor.
+La experiencia de análisis y LIVE ya se trasladó a controles y dibujos WPF. Quedan para fases posteriores las pantallas dedicadas de gestión de sesiones, el inicio de sesión, ajustes de ubicación desde la interfaz, accesibilidad completa, medición de rendimiento bajo carga del juego y una estrategia de actualización firmada. La telemetría se lee en segundo plano pero el análisis conserva sus muestras en memoria; el almacenamiento indexado por bloques llegará después. Las geometrías de gráficas se reducen por píxel y se conservan mientras se mueve el cursor.
 
 La reproducción usa MediaElement de WPF y depende de los codecs disponibles en Windows. La versión de prueba abrió la grabación real H.264/AAC de unos 2.8 GB. No hay garantía de decodificación por hardware en todos los equipos. La sincronización OBS sigue siendo estimada, sin garantía de un fotograma.
 
@@ -33,7 +35,7 @@ La recuperación tolera una última fila incompleta; una fila dañada antes del 
 
 ## Cuenta y nube
 
-Esta es una **compilación interna local**, identificada así en pantalla. No simula un login ni una cuenta. SQLite reserva `owner_id` y `sync_state=LocalOnly`; el contrato de cuentas se implementará antes de distribuir el producto con acceso obligatorio.
+Esta es una **compilación interna local**. No simula un login ni una cuenta. SQLite reserva `owner_id` y `sync_state=LocalOnly`; el contrato de cuentas se implementará antes de distribuir el producto con acceso obligatorio.
 
 La biblioteca central, autenticación, autorización sin conexión y Google Drive todavía no están implementados. El visor web permanece independiente. La compatibilidad `.vrtx` permite intercambiar sesiones durante la transición.
 
@@ -72,3 +74,8 @@ Para construir una actualización sin tocar los ejecutables que estén abiertos:
 
 
 La vista previa no espera a que el puntero se detenga: moverse despacio permite ver sucesivos fotogramas con el video pausado. Los eventos más rápidos se agrupan para no saturar el decodificador; al soltar se aplica el punto final sin esperar al siguiente intervalo. La precisión temporal sigue dependiendo de la búsqueda del reproductor y de las referencias OBS; no se declara un modo de edición con exactitud garantizada de un fotograma.
+
+
+### Comprobación de la interfaz 0.3.0
+
+Se comprobó con una copia aislada de la sesión real Toyota GR86 (10 vueltas, 17 minutos y video H.264/AAC de aproximadamente 2.8 GB): apertura, búsqueda, comparación de vueltas 3 y 5 con ambos videos, reproducción hasta el final de la vuelta, arrastre pausado, desplazamiento de gráficas por una fila y ampliación. Las pruebas nativas son 23; incluyen límites de comparación por distancia, exclusión de vueltas parciales para la mejor vuelta y los casos de arrastre previos. La prueba UDP/IPC del paquete recibió 40 muestras, sin descartes, y excluyó la pausa del reloj. No se ha medido todavía bajo la carga simultánea de una carrera y OBS en este cambio.
