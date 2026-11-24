@@ -1,10 +1,10 @@
-# VertexLab Desktop — 0.3.2 alpha interna
+# VertexLab Desktop — 0.3.3 alpha interna
 
 Aplicación nativa **exclusiva para Windows x64**, escrita en C#/.NET 10 y WPF. No usa navegador, WebView ni un servidor HTTP para su interfaz. El MVP web y Python se conserva en la raíz y en el tag `v0.1.0-mvp`.
 
 ## Probar
 
-El instalador generado está en `native/artifacts/VertexLab-0.3.2-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
+El instalador generado está en `native/artifacts/VertexLab-0.3.3-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
 
 También se puede ejecutar `start-native.cmd` o `native/artifacts/app/VertexLab.Desktop.exe`. En configuración se elige el puerto UDP (5301 por defecto), la detección automática y la conexión local con OBS WebSocket v5. La detección automática empieza desactivada en una instalación nueva. Configura Data Out de Forza con IP `127.0.0.1` y el puerto elegido. No ejecutes simultáneamente el MVP y Native sobre el mismo puerto.
 
@@ -29,7 +29,7 @@ La contraseña de OBS se transmite exclusivamente por IPC local del usuario y se
 
 La experiencia de análisis y LIVE ya se trasladó a controles y dibujos WPF. Quedan para fases posteriores las pantallas dedicadas de gestión de sesiones, el inicio de sesión, ajustes de ubicación desde la interfaz, accesibilidad completa, medición de rendimiento bajo carga del juego y una estrategia de actualización firmada. La telemetría se lee en segundo plano pero el análisis conserva sus muestras en memoria; el almacenamiento indexado por bloques llegará después. Las geometrías de gráficas se reducen por píxel y se conservan mientras se mueve el cursor.
 
-La reproducción usa MediaElement de WPF y depende de los codecs disponibles en Windows. La versión de prueba abrió la grabación real H.264/AAC de unos 2.8 GB. No hay garantía de decodificación por hardware en todos los equipos. La sincronización OBS sigue siendo estimada, sin garantía de un fotograma.
+La reproducción usa LibVLC incluido con salida nativa y decodificación por hardware habilitada; su disponibilidad efectiva depende de la GPU y del códec. La versión de prueba abrió la grabación real H.264/AAC de unos 2.8 GB. La sincronización OBS sigue siendo estimada, sin garantía de un fotograma.
 
 La recuperación tolera una última fila incompleta; una fila dañada antes del final provoca un error visible. No inventa ni rellena muestras perdidas.
 
@@ -88,7 +88,7 @@ Los instrumentos usan los mismos trazos SVG, colores y escalas de temperatura qu
 El tablero se distribuye en píxeles disponibles, conservando las medidas tipográficas del original en lugar de reducir juntos texto y dibujos dentro de un lienzo. El motor permanece centrado. Se añadieron estados hover progresivos, scroll animado con ajuste por fila, subrayados, brillo de LED, iconos vectoriales de reproducción y el indicador de carga del MVP. La captura y el coordinador de arrastre de video se conservan.
 
 
-### Interacción de editor 0.3.2
+### Interacción de editor 0.3.3
 
 La barra de reproducción es un único control de segmentos de vuelta y cabezal. Captura el puntero desde cualquier punto, permite arrastrar y previsualizar y conserva el coordinador de búsqueda a 80 ms. Admite teclado y RangeValue de accesibilidad.
 
@@ -101,3 +101,13 @@ La comprobación con la sesión real de diez vueltas incluyó tres vueltas selec
 El selector de referencia está alineado a la derecha de Al volante. Los indicadores del recorrido comparten el estilo de su etiqueta temporal. El header calcula el espacio del nombre y permite envolver nombres largos; el botón para ver más vueltas aparece solo cuando hay contenido a la derecha. Las pruebas nativas suman 30, incluyendo desplazamiento/seguimiento/zoom y búsqueda local en trazadas extensas y con huecos.
 
 También se reutilizan pinceles, geometrías, gradientes y textos de los instrumentos para limitar asignaciones durante la reproducción. La posición del video principal se consulta una vez por actualización; el control de deriva del segundo video se limita a diez comprobaciones por segundo. Estas optimizaciones no modifican los archivos ni las referencias temporales guardadas.
+
+## Reproducción nativa 0.3.3
+
+El video utiliza LibVLC 3.0.24 / LibVLCSharp 3.10.2 con salida nativa Direct3D y decodificación por hardware habilitada. Ambos paneles conservan el encuadre completo, con bandas cuando cambia la proporción; no recortan ni recomprimen la grabación. Las llamadas al decodificador se ejecutan en un trabajador por reproductor, con una sola búsqueda pendiente que conserva el último destino del arrastre.
+
+El video audible es el reloj principal y nunca se reposiciona por un recorrido de ida y vuelta a distancia. La comparación interpola únicamente la relación distancia/tiempo entre muestras reales, respeta huecos y ajusta gradualmente la velocidad del segundo video; las lecturas de telemetría siguen siendo muestras originales. Las discontinuidades pueden requerir una búsqueda puntual.
+
+Las dependencias de video vienen incluidas en el instalador, con sus avisos y licencia LGPL. No es necesario instalar VLC. El tiempo de búsqueda depende del códec, los fotogramas clave y el almacenamiento del video original.
+
+Validación de 0.3.3: 36 pruebas unitarias correctas y prueba UDP/IPC del paquete con 40 muestras, sin descartes y pausa excluida. En una biblioteca aislada se abrió la sesión real Toyota GR86 de 2.8 GB, se reprodujeron simultáneamente vueltas 2 y 3 con salida Direct3D11, se verificó el encuadre completo y se arrastró desde un punto cualquiera de la barra durante la reproducción. Ambas salidas reportaron 1920×1080. El percentil 95 de playback-update fue 0.090 ms (2222 actualizaciones); mide trabajo del hilo de interfaz, no el tiempo total de decodificación ni los FPS. No es una garantía de ausencia de fotogramas perdidos en todas las GPU.

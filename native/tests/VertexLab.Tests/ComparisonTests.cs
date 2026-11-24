@@ -9,4 +9,38 @@ public class ComparisonTests
     [Fact] public void MappingCannotFallIntoTheFollowingLap() { var s = Session(); Assert.Equal(19, LapComparison.MapTime(s, 12, 0, 1)); Assert.Equal(11, LapComparison.MapTime(s, -10, 0, 1)); Assert.Null(LapComparison.MapTime(s, 5, 0, 99)); }
     [Fact] public void FastestExcludesPartialLaps() { Assert.Equal(1, Session().Fastest?.Id); }
     [Fact] public void DistanceLookupStaysOnRequestedLap() { var s = Session(); Assert.Equal(0, s.AtDistance(0, 1000)?.LapId); Assert.Equal(19, s.AtDistance(1, 1000)?.Packet.T); Assert.Null(s.AtDistance(3, 10)); }
+    [Fact] public void ComparisonClockInterpolatesBetweenPackets()
+    {
+        Assert.Equal(13, LapComparison.MapTime(Session(), 2.5, 0, 1));
+        Assert.Equal(7.5, LapComparison.MapTime(Session(), 17, 1, 0));
+    }
+    [Fact] public void MasterClockRetainsTimeDuringStationaryDistancePlateau()
+    {
+        var s = new SessionAnalysis { Points = [new(new() { T = 0 }, 0, 0, false), new(new() { T = 5 }, 0, 0, false), new(new() { T = 10 }, 0, 50, false)], Laps = [new(0, 0, 0, 10, 50, 10, false)] };
+        Assert.Equal(2.345, LapComparison.MapTime(s, 2.345, 0, 0));
+    }
+    [Fact] public void ComparisonDoesNotInventAlignmentAcrossMissingData()
+    {
+        var s = Session(); var rows = s.Points.ToArray(); rows[1] = rows[1] with { Gap = true };
+        s = new() { Points = rows, Laps = s.Laps };
+        Assert.Null(LapComparison.MapTime(s, 2.5, 0, 1));
+        Assert.Null(LapComparison.MapTime(s, 13, 1, 0));
+    }
+    [Fact] public void SmallDriftAdjustsSpeedWithoutRepeatedSeeks()
+    {
+        var clock = new ComparisonClock(); clock.Update(10, 10, 0, 1, true, false);
+        for (int i = 1; i <= 20; i++) { var c = clock.Update(10 + i * .1, 9.85 + i * .1, i * .1, 1, false, false); Assert.False(c.Seek); Assert.InRange(c.Rate, 1, 1.12); }
+    }
+    [Fact] public void DiscontinuitiesSeekOnceAndRespectDecoderBackpressure()
+    {
+        var clock = new ComparisonClock(); Assert.True(clock.Update(50, 0, 0, 1, false, false).Seek);
+        Assert.False(clock.Update(50.1, 0, .1, 1, false, false).Seek);
+        Assert.False(clock.Update(52, 0, 2, 1, false, true).Seek);
+        Assert.True(clock.Update(53, 0, 3, 1, false, false).Seek);
+    }
+    [Fact] public void StationaryComparisonPausesInsteadOfSeekingBackContinuously()
+    {
+        var clock = new ComparisonClock(); clock.Update(10, 10, 0, 1, true, false);
+        var c = clock.Update(10, 10, .1, 1, false, false); Assert.True(c.Pause); Assert.False(c.Seek);
+    }
 }

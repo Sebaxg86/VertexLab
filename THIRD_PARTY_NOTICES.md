@@ -53,3 +53,13 @@ Copyright / MIT notice: public/LICENSE-Cardog.txt. Trademarks remain their owner
 - hash-wasm 4.13.0 — Dániel Németh — MIT. Source: https://github.com/Daninet/hash-wasm . SHA-256 bundle `public/vendor-sha256-4.13.0.js`; license beside it.
 
 Packages were pinned and their npm tarball SRI verified before vendoring. No third-party scripts are fetched when a user opens a session.
+
+## Native desktop video
+
+- LibVLCSharp / LibVLCSharp.WPF 3.10.2 — VideoLAN contributors — LGPL-2.1-or-later.
+  Corresponding source: https://code.videolan.org/videolan/LibVLCSharp/-/tree/3082c09ca955131c705fc4767fde03e9c4a14999
+- VideoLAN.LibVLC.Windows 3.0.24 — VideoLAN / VLC authors — LGPL-2.1-or-later (NuGet distribution).
+  Corresponding source: https://download.videolan.org/pub/videolan/vlc/3.0.24/vlc-3.0.24.tar.xz
+  Windows packaging/build recipes: https://code.videolan.org/videolan/libvlc-nuget
+
+These unmodified libraries are dynamically linked and remain replaceable in the installation directory (LibVLCSharp*.dll and libvlc/win-x64/). The license text is included in native/licenses/LGPL-2.1.txt and installed beside the program. VertexLab does not restrict reverse engineering for debugging modifications to these LGPL components. No separate VLC installation is required.
