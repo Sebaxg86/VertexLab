@@ -8,6 +8,8 @@ namespace VertexLab.Desktop;
 // Static traces are cached; playback redraws only the cursor and current values.
 public sealed class SeriesView : FrameworkElement
 {
+    readonly VisualTween inspect = new(.140);
+    static double Now => System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency;
     public string Metric { get; set; } = "speed"; public bool IsMap { get; set; }
     SessionAnalysis? data; HashSet<int> laps = []; bool comparing; int reference;
     double start, end = 1, extent = 1, time, maxValue = 1, xmin, xmax, zmin, zmax, zoom = 1; Vector pan, builtPan; Point? drag, hover; bool dragged;
@@ -16,7 +18,8 @@ public sealed class SeriesView : FrameworkElement
     public static Brush LapBrush(int id) => new SolidColorBrush(Colors[Math.Abs(id) % Colors.Length]);
     public event Action<double>? Seek; public event Action<double, double>? RangeChanged; public event Action? Expand;
     public double Start => start; public double End => end; public double Extent => extent;
-    public SeriesView() { ClipToBounds = true; Cursor = Cursors.Cross; SizeChanged += (_, _) => Rebuild(); MouseWheel += Wheel; MouseLeftButtonDown += Down; MouseMove += Move; MouseLeftButtonUp += Up; MouseLeave += (_, _) => { hover = null; hovered = null; InvalidateVisual(); }; }
+    public SeriesView() { ClipToBounds = true;inspect.Set(0,Now); Cursor = Cursors.Cross; SizeChanged += (_, _) => Rebuild(); MouseWheel += Wheel; MouseLeftButtonDown += Down; MouseMove += Move; MouseLeftButtonUp += Up; MouseLeave += (_, _) => { hover = null; inspect.Set(0, Now); InvalidateVisual(); }; Loaded += (_, _) => CompositionTarget.Rendering += RenderMotion; Unloaded += (_, _) => CompositionTarget.Rendering -= RenderMotion; }
+    void RenderMotion(object? sender, EventArgs e) { if (IsVisible && inspect.Active(Now)) InvalidateVisual(); }
     public void SetData(SessionAnalysis? value, int? lap = null) => SetSelection(value, lap is { } id ? [id] : [], lap ?? 0);
     public void SetSelection(SessionAnalysis? value, IEnumerable<int> selected, int referenceId)
     {
@@ -90,16 +93,20 @@ public sealed class SeriesView : FrameworkElement
     protected override void OnRender(DrawingContext dc)
     {
         dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(16, 17, 20)), null, new Rect(RenderSize));
-        if (!IsMap) { var gridPen = new Pen(new SolidColorBrush(Color.FromRgb(37, 40, 47)), 1); for (int i = 0; i < 3; i++) { double y = 40 + i * Math.Max(1, ActualHeight - 65) / 2; dc.DrawLine(gridPen, new Point(30, y), new Point(ActualWidth - 18, y)); } Text(dc, Label, new Point(12, 9), 14); if (Current() is { } current) Text(dc, Format(current), new Point(Math.Max(125, ActualWidth - 155), 7), 19, Brushes.White); }
+        if (!IsMap) { var gridPen = new Pen(new SolidColorBrush(Color.FromRgb(37, 40, 47)), 1); for (int i = 0; i < 3; i++) { double y = 40 + i * Math.Max(1, ActualHeight - 65) / 2; dc.DrawLine(gridPen, new Point(30, y), new Point(ActualWidth - 18, y)); } Text(dc, Label, new Point(12, 9), 14, hover is { } titlePoint && titlePoint.Y < 32 ? new SolidColorBrush(Color.FromRgb(255, 137, 153)) : Brushes.LightGray); if (Current() is { } current) Text(dc, Format(current), new Point(Math.Max(125, ActualWidth - 155), 5), 25, Brushes.White); }
         if (IsMap) dc.PushTransform(new TranslateTransform(pan.X - builtPan.X, pan.Y - builtPan.Y)); foreach (var trace in traces) dc.DrawGeometry(null, trace.Pen, trace.Shape); if (IsMap) dc.Pop();
         if (!IsMap) { double x = 30 + (CurrentAxis() - start) / Math.Max(.001, end - start) * Math.Max(1, ActualWidth - 48); dc.DrawLine(new Pen(Brushes.White, .8), new Point(x, 35), new Point(x, ActualHeight - 24)); Text(dc, comparing ? $"{start:0} m" : DurationText(start), new Point(30, ActualHeight - 19), 10); Text(dc, comparing ? $"{end:0} m" : DurationText(end), new Point(Math.Max(70, ActualWidth - 92), ActualHeight - 19), 10); }
         else if (Current() is { } sample) { foreach (int id in comparing ? groups.Keys : (IEnumerable<int>)[sample.LapId]) { var marker = comparing ? data?.AtDistance(id, sample.Distance) : sample; if (marker is null) continue; double radius = id == reference ? 4.5 : 3.5; dc.DrawEllipse(LapBrush(id), new Pen(Brushes.White, id == reference ? 2 : 1), Map(marker.Packet), radius, radius); } }
-        if (hovered is { } nearest && (IsMap || hover?.Y >= 32)) { var p = Position(nearest); dc.DrawEllipse(LapBrush(nearest.LapId), new Pen(Brushes.White, 1.5), p, 4, 4); string info = $"V{nearest.Packet.Lap + 1} · {Format(nearest)}"; double x = Math.Clamp(p.X + 10, 8, Math.Max(8, ActualWidth - 190)), y = Math.Clamp(p.Y - 30, 34, Math.Max(34, ActualHeight - 48)); dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(240, 30, 30, 36)), new Pen(LapBrush(nearest.LapId), 1), new Rect(x, y, 180, 25), 2, 2); Text(dc, info, new Point(x + 6, y + 5), 12, Brushes.White); }
+        if (inspect.Value(Now) > .001 && hovered is { } nearest && (IsMap || hover is null || hover?.Y >= 32))
+        {
+            dc.PushOpacity(inspect.Value(Now)); var trace = traces.FirstOrDefault(t => t.Id == nearest.LapId); if (trace.Shape is not null) { if (IsMap) dc.PushTransform(new TranslateTransform(pan.X - builtPan.X, pan.Y - builtPan.Y)); dc.DrawGeometry(null, new Pen(LapBrush(nearest.LapId), 2.4), trace.Shape); if (IsMap) dc.Pop(); }
+            var p = Position(nearest); dc.DrawEllipse(LapBrush(nearest.LapId), new Pen(Brushes.White, 1.5), p, 4, 4); string info = $"V{nearest.Packet.Lap + 1} · {Format(nearest)}"; double x = Math.Clamp(p.X + 10, 8, Math.Max(8, ActualWidth - 190)), y = Math.Clamp(p.Y - 30, 34, Math.Max(34, ActualHeight - 48)); dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(240, 30, 30, 36)), new Pen(LapBrush(nearest.LapId), 1), new Rect(x, y, 180, 25), 2, 2); Text(dc, info, new Point(x + 6, y + 4 + (1 - inspect.Value(Now)) * 5), 14, Brushes.White); dc.Pop();
+        }
     }
     void ZoomMapAt(Point mouse, double factor) { double next = Math.Clamp(zoom * factor, 1, 200), ratio = next / zoom; var center = new Point(ActualWidth / 2, ActualHeight / 2); pan = (Vector)(mouse - center) - ((Vector)(mouse - center) - pan) * ratio; zoom = next; Rebuild(); }
     void Wheel(object sender, MouseWheelEventArgs e) { if (data is null) return; if (IsMap) ZoomMapAt(e.GetPosition(this), e.Delta > 0 ? 1.3 : 1 / 1.3); else { var mouse = e.GetPosition(this); double width = Math.Clamp((end - start) / (e.Delta > 0 ? 1.3 : 1 / 1.3), .05, extent), fraction = Math.Clamp((mouse.X - 30) / Math.Max(1, ActualWidth - 48), 0, 1), anchor = start + (end - start) * fraction, a = Math.Clamp(anchor - width * fraction, 0, extent - width); SetRange(a, a + width); RangeChanged?.Invoke(start, end); } e.Handled = true; }
     void Down(object sender, MouseButtonEventArgs e) { if (!IsMap && e.GetPosition(this).Y < 32) { Expand?.Invoke(); e.Handled = true; return; } drag = e.GetPosition(this); dragged = false; CaptureMouse(); if (!IsMap) SeekAt(drag.Value); }
-    void Move(object sender, MouseEventArgs e) { hover = e.GetPosition(this); hovered = Nearest(hover.Value); Cursor = !IsMap && hover.Value.Y < 32 ? Cursors.Hand : Cursors.Cross; if (drag is { } last && e.LeftButton == MouseButtonState.Pressed) { if (IsMap) { if ((hover.Value - last).Length > 1) dragged = true; pan += hover.Value - last; drag = hover; InvalidateVisual(); } else SeekAt(hover.Value); } else InvalidateVisual(); }
+    void Move(object sender, MouseEventArgs e) { hover = e.GetPosition(this); hovered = Nearest(hover.Value); inspect.Set(1, Now); Cursor = !IsMap && hover.Value.Y < 32 ? Cursors.Hand : Cursors.Cross; if (drag is { } last && e.LeftButton == MouseButtonState.Pressed) { if (IsMap) { if ((hover.Value - last).Length > 1) dragged = true; pan += hover.Value - last; drag = hover; InvalidateVisual(); } else SeekAt(hover.Value); } else InvalidateVisual(); }
     void Up(object sender, MouseButtonEventArgs e) { if (IsMap && !dragged) SeekAt(e.GetPosition(this)); drag = null; ReleaseMouseCapture(); }
     void SeekAt(Point point) { if (Nearest(point) is { } nearest) Seek?.Invoke(nearest.Packet.T); }
 }

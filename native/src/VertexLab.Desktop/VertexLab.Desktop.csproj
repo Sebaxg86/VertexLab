@@ -21,6 +21,7 @@
 <Content Include="../../../public/brand-*.png" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
 <Content Include="../../../public/emblem-*.svg" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
 <Content Include="../../../public/OFL-*.txt" Link="Assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+<Content Include="../../../public/LICENSE-Tabler.txt" Link="Assets/LICENSE-Tabler.txt" CopyToOutputDirectory="PreserveNewest" />
 <Content Include="../../../public/LICENSE-Cardog.txt" Link="Assets/LICENSE-Cardog.txt" CopyToOutputDirectory="PreserveNewest" />
 <Content Include="../../../car-brands.json" Link="car-brands.json" CopyToOutputDirectory="PreserveNewest" />
 </ItemGroup></Project>

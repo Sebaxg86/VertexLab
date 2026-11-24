@@ -1,10 +1,10 @@
-# VertexLab Desktop — 0.3.0 alpha interna
+# VertexLab Desktop — 0.3.1 alpha interna
 
 Aplicación nativa **exclusiva para Windows x64**, escrita en C#/.NET 10 y WPF. No usa navegador, WebView ni un servidor HTTP para su interfaz. El MVP web y Python se conserva en la raíz y en el tag `v0.1.0-mvp`.
 
 ## Probar
 
-El instalador generado está en `native/artifacts/VertexLab-0.3.0-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
+El instalador generado está en `native/artifacts/VertexLab-0.3.1-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
 
 También se puede ejecutar `start-native.cmd` o `native/artifacts/app/VertexLab.Desktop.exe`. En configuración se elige el puerto UDP (5301 por defecto), la detección automática y la conexión local con OBS WebSocket v5. La detección automática empieza desactivada en una instalación nueva. Configura Data Out de Forza con IP `127.0.0.1` y el puerto elegido. No ejecutes simultáneamente el MVP y Native sobre el mismo puerto.
 
@@ -79,3 +79,10 @@ La vista previa no espera a que el puntero se detenga: moverse despacio permite 
 ### Comprobación de la interfaz 0.3.0
 
 Se comprobó con una copia aislada de la sesión real Toyota GR86 (10 vueltas, 17 minutos y video H.264/AAC de aproximadamente 2.8 GB): apertura, búsqueda, comparación de vueltas 3 y 5 con ambos videos, reproducción hasta el final de la vuelta, arrastre pausado, desplazamiento de gráficas por una fila y ampliación. Las pruebas nativas son 23; incluyen límites de comparación por distancia, exclusión de vueltas parciales para la mejor vuelta y los casos de arrastre previos. La prueba UDP/IPC del paquete recibió 40 muestras, sin descartes, y excluyó la pausa del reloj. No se ha medido todavía bajo la carga simultánea de una carrera y OBS en este cambio.
+
+
+### Acabado visual 0.3.1
+
+Los instrumentos usan los mismos trazos SVG, colores y escalas de temperatura que el MVP web. El color del neumático interpola durante 150 ms; slip, dirección, G y pedales durante 70 ms; la alerta de deslizamiento cambia fondo y borde durante 100 ms. Las cifras siempre salen directamente de la muestra observada. Las transiciones visuales no suavizan, rellenan ni cambian los datos almacenados.
+
+El tablero se distribuye en píxeles disponibles, conservando las medidas tipográficas del original en lugar de reducir juntos texto y dibujos dentro de un lienzo. El motor permanece centrado. Se añadieron estados hover progresivos, scroll animado con ajuste por fila, subrayados, brillo de LED, iconos vectoriales de reproducción y el indicador de carga del MVP. La captura y el coordinador de arrastre de video se conservan.
