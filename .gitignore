@@ -5,3 +5,10 @@ __pycache__/
 .env
 
 _site/
+
+# Native Windows build products
+native/**/bin/
+native/**/obj/
+native/artifacts/
+native/.tools/
+native/**/TestResults/

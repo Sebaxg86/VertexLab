@@ -1,5 +1,7 @@
 # VertexLab
 
+La nueva aplicación nativa de Windows se desarrolla en `feature/windows-native`. Consulta [la guía de Desktop](native/README.md). `start-native.cmd` abre esa versión; `start.cmd` conserva el MVP descrito abajo.
+
 Aplicación web local para FH6: telemetría LIVE, registro automático por vehículo,
 grabación de OBS con pausas y análisis de video, trazadas y entradas por distancia.
 
