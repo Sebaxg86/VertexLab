@@ -1,9 +1,7 @@
 @echo off
 cd /d "%~dp0"
-if exist "native\artifacts\app\VertexLab.Desktop.exe" (
-    start "" "native\artifacts\app\VertexLab.Desktop.exe"
-    exit /b 0
-)
+powershell -NoProfile -Command "$app=Get-ChildItem -LiteralPath 'native\artifacts' -Filter 'VertexLab.Desktop.exe' -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1; if($app){Start-Process -FilePath $app.FullName; exit 0}; exit 1"
+if not errorlevel 1 exit /b 0
 where dotnet >nul 2>nul
 if errorlevel 1 (
     echo Instala el MSI de VertexLab o el SDK .NET 10 para compilar la version de desarrollo.

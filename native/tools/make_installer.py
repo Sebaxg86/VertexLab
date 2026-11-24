@@ -2,14 +2,18 @@
 from pathlib import Path
 import hashlib
 import sys
+import argparse
 import xml.etree.ElementTree as E
 root=Path(__file__).resolve().parents[1]
-source=root/'artifacts/app'
+parser=argparse.ArgumentParser()
+parser.add_argument('--output',type=Path,default=root/'artifacts')
+output=parser.parse_args().output.resolve()
+source=output/'app'
 ns='http://wixtoolset.org/schemas/v4/wxs'
 E.register_namespace('',ns)
 def add(parent,tag,**attrs):return E.SubElement(parent,'{'+ns+'}'+tag,attrs)
 wix=E.Element('{'+ns+'}Wix')
-package=add(wix,'Package',Name='VertexLab Desktop Preview',Manufacturer='VertexLab',Version='0.2.0',UpgradeCode='B0296852-545A-4584-8F41-576D09FFBF67',Scope='perUser')
+package=add(wix,'Package',Name='VertexLab Desktop Preview',Manufacturer='VertexLab',Version='0.2.1',UpgradeCode='B0296852-545A-4584-8F41-576D09FFBF67',Scope='perUser')
 add(package,'MajorUpgrade',DowngradeErrorMessage='Ya está instalada una versión más reciente de VertexLab.')
 add(package,'MediaTemplate',EmbedCab='yes',CompressionLevel='high')
 add(package,'Property',Id='ARPNOMODIFY',Value='1')
@@ -42,4 +46,4 @@ add(shortcut,'RemoveFolder',Id='RemoveMenu',On='uninstall')
 add(shortcut,'RegistryValue',Root='HKCU',Key=r'Software\VertexLab',Name='DesktopInstalled',Type='integer',Value='1',KeyPath='yes')
 add(feature,'ComponentRef',Id='ApplicationShortcuts')
 E.indent(wix)
-E.ElementTree(wix).write(root/'artifacts/VertexLab.wxs',encoding='utf-8',xml_declaration=True)
+E.ElementTree(wix).write(output/'VertexLab.wxs',encoding='utf-8',xml_declaration=True)
