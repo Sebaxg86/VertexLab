@@ -201,13 +201,13 @@ const A=require('./public/analysis-model.js'),T=require('./public/timeline.js'),
 let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end',()=>{
  const {rows,meta,laps}=JSON.parse(input),replay=A.sessionRows(laps);
  for(const row of [rows[0],rows[2],rows[3]]){
-  const sample=A.sampleAtTime(replay,row.t);
+  const sample=A.instrumentSample(A.sampleAtTime(replay,row.t));
   assert.equal(sample.steer,row.steer);assert.equal(sample.accelX,row.accelX);
   assert.deepEqual(sample.tireTempsC,row.tireTempsC);
   assert.ok(Math.abs(T.toVideo(meta,row.t)-row.videoTime)<1e-8);
   assert.ok(Math.abs(I.values(sample).lateral-row.accelX/9.80665)<1e-8);
  }
- assert.equal(A.sampleAtTime(replay,.11).steer,127);
+ assert.equal(A.instrumentSample(A.sampleAtTime(replay,.11)).steer,127);
  assert.ok(Math.abs(T.toVideo(meta,.15)-.85)<1e-8);
 });
 """
