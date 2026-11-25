@@ -1,11 +1,9 @@
-using System.Diagnostics;
-using MediaPlayer = LibVLCSharp.Shared.MediaPlayer;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Forms.Integration;
 using System.Windows.Media;
-using LibVLCSharp.Shared;
-using LibVLCSharp.WPF;
-using VertexLab.Core;
+using VertexLab.Playback;
 
 namespace VertexLab.Desktop;
 
@@ -14,128 +12,120 @@ public sealed class VideoErrorEventArgs(Exception exception) : EventArgs
     public Exception ErrorException { get; } = exception;
 }
 
-/// <summary>Native GPU video output. The dispatcher only publishes desired state;
-/// a serial worker owns decoder calls and coalesces pending seeks.</summary>
+/// <summary>Windows media clock for the audible video; a timestamp-driven GPU
+/// frame queue for the silent comparison. No polling worker estimates time.</summary>
 public sealed class NativeVideoSurface : UserControl, IDisposable
 {
-    static readonly Lazy<LibVLC> Engine = new(() => { LibVLCSharp.Shared.Core.Initialize(); return new LibVLC("--no-video-title-show", "--no-osd"); });
-    readonly VideoView view = new(); readonly object gate = new();
-    readonly CancellationTokenSource stop = new();
-    Uri? source; int revision, releasedRevision = -1; bool desiredPlaying, muted, disposed, suppressed;
-    double volume = 1, rate = 1, position, positionClock; bool advancing, seeking;
-    double? pendingSeek; long seekSerial; int width, height;
-    Task? worker;
-    static double Now => Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency;
+    readonly WindowsFormsHost host = new();
+    readonly Popup overlay = new() { AllowsTransparency = true, StaysOpen = true, Placement = PlacementMode.Relative, Focusable = false };
+    MediaEnginePane? player; ScheduledVideoPane? scheduled;
+    Window? owner; Uri? source; double? pendingSeek; double target, rate = 1, volume = 1;
+    bool muted, suppressed, opened, failed, disposed, ended, desiredPlaying, appliedPlaying;
     public event RoutedEventHandler? MediaOpened, MediaEnded;
     public event EventHandler<VideoErrorEventArgs>? MediaFailed;
-    public static readonly DependencyProperty OverlayProperty = DependencyProperty.Register(nameof(Overlay), typeof(object), typeof(NativeVideoSurface), new PropertyMetadata(null, (d, e) => ((NativeVideoSurface)d).view.Content = e.NewValue));
+    public bool FrameScheduled { get; set; }
+    public static readonly DependencyProperty OverlayProperty = DependencyProperty.Register(nameof(Overlay), typeof(object), typeof(NativeVideoSurface), new PropertyMetadata(null, (d, e) => ((NativeVideoSurface)d).overlay.Child = e.NewValue as UIElement));
     public object Overlay { get => GetValue(OverlayProperty); set => SetValue(OverlayProperty, value); }
     public NativeVideoSurface()
     {
-        Background = Brushes.Black; Content = view;
-        Loaded += (_, _) => { worker ??= Run(); };
+        Background = Brushes.Black; HorizontalContentAlignment = HorizontalAlignment.Stretch; VerticalContentAlignment = VerticalAlignment.Stretch;
+        var grid = new Grid(); grid.Children.Add(host); grid.Children.Add(overlay); Content = grid; overlay.PlacementTarget = this;
+        Loaded += (_, _) =>
+        {
+            CompositionTarget.Rendering -= Render; CompositionTarget.Rendering += Render;
+            owner = Window.GetWindow(this);
+            if (owner is not null) { owner.LocationChanged += Reposition; owner.SizeChanged += Reposition; owner.Deactivated += Reposition; owner.Activated += Reposition; owner.StateChanged += Reposition; }
+            if (source is not null && player is null && scheduled is null) Open();
+        };
+        Unloaded += (_, _) => { CompositionTarget.Rendering -= Render; overlay.IsOpen = false; DetachOwner(); };
+        SizeChanged += Reposition;
     }
-    public Uri? Source { get { lock (gate) return source; } set { lock (gate) { if (source == value) return; source = value; revision++; desiredPlaying = false; position = 0; advancing = false; seeking = value is not null; pendingSeek = null; } } }
-    public TimeSpan Position
+    void DetachOwner()
     {
-        get { lock (gate) return TimeSpan.FromSeconds(Math.Max(0, position + (advancing && !seeking ? Math.Min(.3, Now - positionClock) * rate : 0))); }
-        set { lock (gate) { pendingSeek = Math.Max(0, value.TotalSeconds); seekSerial++; position = pendingSeek.Value; positionClock = Now; seeking = true; } }
+        if (owner is null) return;
+        owner.LocationChanged -= Reposition; owner.SizeChanged -= Reposition; owner.Deactivated -= Reposition; owner.Activated -= Reposition; owner.StateChanged -= Reposition; owner = null;
     }
-    public bool IsSeeking { get { lock (gate) return seeking; } }
-    public double SpeedRatio { get { lock (gate) return rate; } set { lock (gate) rate = Math.Clamp(value, .25, 4); } }
-    public double Volume { get { lock (gate) return volume; } set { lock (gate) volume = Math.Clamp(value, 0, 1); } }
-    public bool IsMuted { get { lock (gate) return muted; } set { lock (gate) muted = value; } }
-    public int NaturalVideoWidth => width;
-    public int NaturalVideoHeight => height;
-    public bool Suppressed { get => suppressed; set { suppressed = value; view.Visibility = value ? Visibility.Hidden : Visibility.Visible; } }
-    public void Play() { lock (gate) desiredPlaying = true; }
-    public void Pause() { lock (gate) { position = Position.TotalSeconds; positionClock = Now; desiredPlaying = false; advancing = false; } }
-    public void Close() => Source = null;
-    public async Task ReleaseAsync()
+    void Reposition(object? sender, EventArgs e)
     {
-        Close(); int expected = revision;
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        while (Volatile.Read(ref releasedRevision) < expected && worker is { IsCompleted: false }) await Task.Delay(16, timeout.Token);
+        if (overlay.Child is FrameworkElement child) { child.Width = Math.Max(0, ActualWidth); child.Height = Math.Max(0, ActualHeight); }
+        if (overlay.IsOpen) { overlay.HorizontalOffset = .01; overlay.HorizontalOffset = 0; }
+        RefreshOverlay();
     }
-    void Dispatch(int version, Action action) => Dispatcher.BeginInvoke(() => { if (!disposed && revision == version) action(); });
-
-    async Task Run()
+    void RefreshOverlay() => overlay.IsOpen = !disposed && !suppressed && IsVisible && owner?.IsActive == true && Overlay is not null && ActualWidth > 0;
+    public Uri? Source
     {
-        MediaPlayer? player = null; Media? media = null;
+        get => source;
+        set { if (source == value) return; Release(); source = value; pendingSeek = null; target = 0; desiredPlaying = appliedPlaying = opened = failed = ended = false; if (IsLoaded && value is not null) Open(); }
+    }
+    void Open()
+    {
         try
         {
-            player = await Task.Run(() => new MediaPlayer(Engine.Value) { EnableHardwareDecoding = true });
-            if (disposed) { player.Dispose(); return; }
-            view.MediaPlayer = player;
-            var decoder = player;
-            await Task.Run(async () =>
-            {
-                int current = -1; bool ready = false, announced = false; bool? appliedPlaying = null;
-                long appliedSeek = -1, issuedSeek = -1; double seekTarget = 0, seekStarted = 0, lastNative = -1, clockBase = Now, lastStats = 0;
-                int seekCount = 0;
-                double appliedRate = -1, appliedVolume = -1; bool? appliedMuted = null;
-                // Callbacks never call LibVLC (which may hold its own decoder lock).
-                decoder.Playing += (_, _) => Volatile.Write(ref ready, true);
-                decoder.EndReached += (_, _) => { int v = current; lock (gate) advancing = false; Dispatch(v, () => MediaEnded?.Invoke(this, new RoutedEventArgs())); };
-                decoder.EncounteredError += (_, _) => { int v = current; Dispatch(v, () => MediaFailed?.Invoke(this, new(new InvalidOperationException("El motor de video no pudo decodificar este archivo.")))); };
-                while (!stop.IsCancellationRequested)
-                {
-                    Uri? file; int version; bool play, mute; double speed, level; double? seek; long serial;
-                    lock (gate) { file = source; version = revision; play = desiredPlaying; mute = muted; speed = rate; level = volume; seek = pendingSeek; serial = seekSerial; }
-                    if (current != version)
-                    {
-                        decoder.Stop(); media?.Dispose(); media = null; current = version; Volatile.Write(ref releasedRevision, version); Volatile.Write(ref ready, false); announced = false; appliedPlaying = null; appliedSeek = issuedSeek = -1; lastNative = -1; width = height = 0; seekCount = 0;
-                        if (file is not null) { media = new Media(Engine.Value, file); decoder.Media = media; decoder.Mute = true; appliedMuted = true; decoder.Play(); }
-                    }
-                    if (file is not null && Volatile.Read(ref ready))
-                    {
-                        // Playing is raised before the renderer has a frame. Wait for
-                        // decoded output before pausing the newly opened video.
-                        if (!announced && decoder.Time <= 0 && media!.Statistics.DisplayedPictures == 0) { await Task.Delay(16, stop.Token); continue; }
-                        if (appliedVolume != level) { decoder.Volume = (int)(level * 100); appliedVolume = level; }
-                        if (appliedMuted != mute) { decoder.Mute = mute; appliedMuted = mute; }
-                        if (Math.Abs(appliedRate - speed) > .015) { decoder.SetRate((float)speed); appliedRate = speed; }
-                        if (appliedPlaying != play) { decoder.SetPause(!play); appliedPlaying = play; lastNative = -1; }
-                        if (seek is { } target && serial != appliedSeek)
-                        {
-                            // One latest request replaces all intermediate pointer positions.
-                            decoder.Time = (long)(target * 1000); seekTarget = target; seekStarted = Now; issuedSeek = serial; appliedSeek = serial; lastNative = -1;
-                            seekCount++;
-                            lock (gate) { if (seekSerial == serial) pendingSeek = null; }
-                        }
-                        double actual = Math.Max(0, decoder.Time / 1000d), now = Now;
-                        lock (gate)
-                        {
-                            if (revision == version && pendingSeek is null)
-                            {
-                                if (seeking && (issuedSeek < 0 || Math.Abs(actual - seekTarget) < .12)) seeking = false;
-                                // LibVLC reports coarse timestamps. Advance the displayed clock
-                                // between reports without ever seeking the audible master.
-                                if (!seeking && actual != lastNative) { position = actual; positionClock = clockBase = now; lastNative = actual; }
-                                bool moving = play && !seeking && now - clockBase < .4;
-                                if (advancing && !moving && !seeking) { position += Math.Min(.3, now - positionClock) * speed; positionClock = now; }
-                                advancing = moving;
-                            }
-                        }
-                        if (width == 0 || height == 0) { uint w = 0, h = 0; if (decoder.Size(0, ref w, ref h) && w > 0) { width = (int)w; height = (int)h; } }
-                        if (!announced) { announced = true; int v = version; Dispatch(v, () => MediaOpened?.Invoke(this, new RoutedEventArgs())); }
-                        if (now - lastStats > 1)
-                        {
-                            lastStats = now; var stats = media!.Statistics; int v = version, count = seekCount; string size = $"{width}x{height}";
-                            Dispatch(v, () => { PresentationMetrics.Info(Name + "-frames", $"displayed={stats.DisplayedPictures}; lost={stats.LostPictures}; seeks={count}; decoded={size}"); });
-                        }
-                        if (seeking && issuedSeek >= 0 && now - seekStarted > 5) { int v = version; issuedSeek = -1; Dispatch(v, () => MediaFailed?.Invoke(this, new(new TimeoutException("El video tardó demasiado en buscar el fotograma.")))); }
-                    }
-                    await Task.Delay(16, stop.Token);
-                }
-            });
+            if (FrameScheduled) { scheduled = new ScheduledVideoPane(); host.Child = scheduled; scheduled.Open(source!.LocalPath); }
+            else { player = new MediaEnginePane(); host.Child = player; player.Open(source!.LocalPath, muted); player.Engine.Volume = volume; }
         }
-        catch (OperationCanceledException) { }
-        catch (Exception ex) { if (!disposed) MediaFailed?.Invoke(this, new(ex)); }
-        finally { if (player is not null) await Task.Run(() => { player.Stop(); media?.Dispose(); player.Dispose(); }); }
+        catch (Exception ex) { Fail(ex); }
+    }
+    public TimeSpan Position
+    {
+        get => TimeSpan.FromSeconds(Math.Max(0, player?.Ready == true ? player.Engine.CurrentTime : scheduled?.PresentedTime ?? target));
+        set { target = Math.Max(0, value.TotalSeconds); pendingSeek = target; ended = false; }
+    }
+    public bool IsSeeking => source is not null && !failed && (!opened || pendingSeek is not null || player?.Seeking == true || (player?.Ready == true && player.Engine.IsSeeking) || scheduled?.Seeking == true);
+    public double SpeedRatio { get => rate; set { rate = Math.Clamp(value, .25, 4); if (player?.Ready == true) player.SetRate(rate); } }
+    public double Volume { get => volume; set { volume = Math.Clamp(value, 0, 1); if (player is not null) player.Engine.Volume = volume; } }
+    public bool IsMuted { get => muted; set { muted = value; if (player is not null) player.Engine.Muted = value; } }
+    public int NaturalVideoWidth => player?.Ready == true ? player.Engine.NativeVideoSize.Width : scheduled?.VideoWidth ?? 0;
+    public int NaturalVideoHeight => player?.Ready == true ? player.Engine.NativeVideoSize.Height : scheduled?.VideoHeight ?? 0;
+    public bool Suppressed { get => suppressed; set { suppressed = value; host.Visibility = value ? Visibility.Hidden : Visibility.Visible; RefreshOverlay(); } }
+    public void Play() => desiredPlaying = true;
+    public void Pause() { desiredPlaying = appliedPlaying = false; if (player?.Ready == true) player.Engine.Pause(); }
+    public void Follow(double seconds)
+    {
+        target = seconds;
+        if (scheduled?.Ready != true) return;
+        if (failed) return;
+        try
+        {
+            scheduled.PresentAt(seconds);
+            if (!scheduled.Seeking && scheduled.PresentedTime is { } pts) PresentationMetrics.Record("comparison-frame-error-ms", Math.Abs(pts - seconds) * 1000);
+        }
+        catch (Exception ex) { Fail(ex); }
+    }
+    void Render(object? sender, EventArgs e)
+    {
+        if (disposed) return;
+        RefreshOverlay(); if (source is null || failed) return;
+        try
+        {
+            if ((player?.Failure ?? scheduled?.Failure) is { } error) { Fail(new InvalidOperationException(error)); return; }
+            bool ready = player?.Ready == true || scheduled?.Ready == true;
+            if (!ready) return;
+            if (!opened) { opened = true; player?.SetRate(rate); MediaOpened?.Invoke(this, new RoutedEventArgs()); }
+            if (pendingSeek is { } seek)
+            {
+                pendingSeek = null;
+                if (scheduled is not null) scheduled.Request(seek, true); else player!.Seek(seek);
+            }
+            if (scheduled is not null) scheduled.PresentAt(target);
+            else if (desiredPlaying != appliedPlaying && !player!.Seeking && !player.Engine.IsSeeking)
+            {
+                if (desiredPlaying) player.Engine.Play(); else player.Engine.Pause(); appliedPlaying = desiredPlaying;
+            }
+            if (player?.Ready == true && player.Engine.IsEnded && !ended) { ended = true; desiredPlaying = appliedPlaying = false; MediaEnded?.Invoke(this, new RoutedEventArgs()); }
+        }
+        catch (Exception ex) { Fail(ex); }
+    }
+    void Fail(Exception exception) { if (failed || disposed) return; failed = true; desiredPlaying = false; MediaFailed?.Invoke(this, new(exception)); }
+    public void Close() => Source = null;
+    public Task ReleaseAsync() { Close(); return Task.CompletedTask; }
+    void Release()
+    {
+        if (scheduled is not null) PresentationMetrics.Info(Name + "-frames", $"submitted={scheduled.Presented}; decoded={scheduled.Decoded}; seeks={scheduled.Seeks}; late={scheduled.Late}; GPU={scheduled.VideoWidth}x{scheduled.VideoHeight}");
+        host.Child = null; player?.Dispose(); scheduled?.Dispose(); player = null; scheduled = null;
     }
     public void Dispose()
     {
-        if (disposed) return; disposed = true; stop.Cancel(); view.MediaPlayer = null; view.Dispose();
+        if (disposed) return; disposed = true; CompositionTarget.Rendering -= Render; DetachOwner(); overlay.IsOpen = false; Release(); host.Dispose();
     }
 }

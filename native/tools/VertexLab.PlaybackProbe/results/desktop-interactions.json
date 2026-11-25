@@ -1,0 +1,45 @@
+{
+  "operations": {
+    "live-dashboard": {
+      "count": 5,
+      "medianMs": 1.5768,
+      "p95Ms": 17.5679,
+      "maxMs": 17.5679
+    },
+    "dashboard": {
+      "count": 18327,
+      "medianMs": 0.4612,
+      "p95Ms": 0.6311,
+      "maxMs": 2.7322
+    },
+    "chart-present": {
+      "count": 13490,
+      "medianMs": 0.0352,
+      "p95Ms": 0.067,
+      "maxMs": 30.8085
+    },
+    "map-present": {
+      "count": 6745,
+      "medianMs": 0.0086,
+      "p95Ms": 0.0131,
+      "maxMs": 19.2492
+    },
+    "comparison-frame-error-ms": {
+      "count": 6736,
+      "medianMs": 4.901518666770244,
+      "p95Ms": 7.810830616477915,
+      "maxMs": 8.332902890629157
+    },
+    "playback-update": {
+      "count": 6736,
+      "medianMs": 0.2298,
+      "p95Ms": 0.3225,
+      "maxMs": 1.4329
+    }
+  },
+  "details": {
+    "decoded-video": "1920x1080",
+    "render-tier": "2",
+    "CompareVideo-frames": "submitted=5140; decoded=8090; seeks=5; late=0; GPU=1920x1080"
+  }
+}

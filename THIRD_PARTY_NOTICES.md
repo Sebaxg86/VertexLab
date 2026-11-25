@@ -54,12 +54,19 @@ Copyright / MIT notice: public/LICENSE-Cardog.txt. Trademarks remain their owner
 
 Packages were pinned and their npm tarball SRI verified before vendoring. No third-party scripts are fetched when a user opens a session.
 
-## Native desktop video
+## Native desktop video (0.3.4 and later)
 
-- LibVLCSharp / LibVLCSharp.WPF 3.10.2 â€” VideoLAN contributors â€” LGPL-2.1-or-later.
-  Corresponding source: https://code.videolan.org/videolan/LibVLCSharp/-/tree/3082c09ca955131c705fc4767fde03e9c4a14999
-- VideoLAN.LibVLC.Windows 3.0.24 â€” VideoLAN / VLC authors â€” LGPL-2.1-or-later (NuGet distribution).
-  Corresponding source: https://download.videolan.org/pub/videolan/vlc/3.0.24/vlc-3.0.24.tar.xz
-  Windows packaging/build recipes: https://code.videolan.org/videolan/libvlc-nuget
+- Vortice.MediaFoundation, Vortice.Direct3D11, Vortice.DXGI and Vortice.D3DCompiler 3.8.3 — Amer Koleci and contributors — MIT.
+  Source: https://github.com/amerkoleci/Vortice.Windows
+  Full notice: native/licenses/Vortice.Windows-MIT.txt.
+- Vortice.Mathematics 2.1.0 — Amer Koleci and contributors — MIT.
+  Source: https://github.com/amerkoleci/Vortice.Mathematics
+  Full notice: native/licenses/Vortice.Mathematics-MIT.txt.
+- SharpGen.Runtime 2.4.2-beta — Alexandre Mutel, Jeremy Koritzinsky and contributors — MIT.
+  Source: https://github.com/SharpGenTools/SharpGenTools
+  Full notice: native/licenses/SharpGenTools-MIT.txt.
 
-These unmodified libraries are dynamically linked and remain replaceable in the installation directory (LibVLCSharp*.dll and libvlc/win-x64/). The license text is included in native/licenses/LGPL-2.1.txt and installed beside the program. VertexLab does not restrict reverse engineering for debugging modifications to these LGPL components. No separate VLC installation is required.
+Windows Media Foundation / Media Engine and Direct3D are operating system components.
+LibVLC is no longer bundled in 0.3.4. Older native releases used LibVLCSharp.WPF
+3.10.2 and VideoLAN.LibVLC.Windows 3.0.24 under LGPL-2.1-or-later;
+the historical license remains at native/licenses/LGPL-2.1.txt.

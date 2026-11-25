@@ -1,12 +1,12 @@
-# VertexLab Desktop — 0.3.3 alpha interna
+# VertexLab Desktop — 0.3.4 alpha interna
 
 Aplicación nativa **exclusiva para Windows x64**, escrita en C#/.NET 10 y WPF. No usa navegador, WebView ni un servidor HTTP para su interfaz. El MVP web y Python se conserva en la raíz y en el tag `v0.1.0-mvp`.
 
 ## Probar
 
-El instalador generado está en `native/artifacts/VertexLab-0.3.3-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
+El instalador generado está en `native/artifacts/media-foundation-final/VertexLab-0.3.4-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
 
-También se puede ejecutar `start-native.cmd` o `native/artifacts/app/VertexLab.Desktop.exe`. En configuración se elige el puerto UDP (5301 por defecto), la detección automática y la conexión local con OBS WebSocket v5. La detección automática empieza desactivada en una instalación nueva. Configura Data Out de Forza con IP `127.0.0.1` y el puerto elegido. No ejecutes simultáneamente el MVP y Native sobre el mismo puerto.
+También se puede ejecutar `start-native.cmd` o `native/artifacts/media-foundation-final/app/VertexLab.Desktop.exe`. En configuración se elige el puerto UDP (5301 por defecto), la detección automática y la conexión local con OBS WebSocket v5. La detección automática empieza desactivada en una instalación nueva. Configura Data Out de Forza con IP `127.0.0.1` y el puerto elegido. No ejecutes simultáneamente el MVP y Native sobre el mismo puerto.
 
 Cerrar la ventana **no detiene la captura**. El icono de la bandeja abre otra ventana o cierra el motor cuando no hay una sesión/orden OBS pendiente. Para finalizar, usa Guardar; después puedes cerrar el motor desde configuración o su menú de bandeja. Antes de actualizar o desinstalar, finaliza las grabaciones y cierra el motor.
 
@@ -29,7 +29,7 @@ La contraseña de OBS se transmite exclusivamente por IPC local del usuario y se
 
 La experiencia de análisis y LIVE ya se trasladó a controles y dibujos WPF. Quedan para fases posteriores las pantallas dedicadas de gestión de sesiones, el inicio de sesión, ajustes de ubicación desde la interfaz, accesibilidad completa, medición de rendimiento bajo carga del juego y una estrategia de actualización firmada. La telemetría se lee en segundo plano pero el análisis conserva sus muestras en memoria; el almacenamiento indexado por bloques llegará después. Las geometrías de gráficas se reducen por píxel y se conservan mientras se mueve el cursor.
 
-La reproducción usa LibVLC incluido con salida nativa y decodificación por hardware habilitada; su disponibilidad efectiva depende de la GPU y del códec. La versión de prueba abrió la grabación real H.264/AAC de unos 2.8 GB. La sincronización OBS sigue siendo estimada, sin garantía de un fotograma.
+La reproducción usa Windows Media Engine para el video principal y su reloj real. La comparación usa Media Foundation SourceReader y una cola de seis texturas Direct3D 11, seleccionadas por sus marcas de tiempo según la distancia de la vuelta de referencia. El segundo video no cambia continuamente de velocidad ni se corrige con búsquedas durante la reproducción normal. Se verificó H.264/AAC 1920×1080 a 60 FPS; otros formatos y GPU requieren verificación. La sincronización de origen OBS sigue siendo estimada, sin garantía de un fotograma.
 
 La recuperación tolera una última fila incompleta; una fila dañada antes del final provoca un error visible. No inventa ni rellena muestras perdidas.
 
@@ -60,6 +60,7 @@ El workflow `Native Windows Preview` compila, prueba, empaqueta y ejecuta la pru
 
 - `VertexLab.Core`: modelos, decodificación, biblioteca, análisis, `.vrtx`, control OBS e IPC cliente.
 - `VertexLab.Capture`: proceso WinForms sin ventana principal, bandeja, receptor UDP y actor serializado de captura.
+- `VertexLab.Playback`: Windows Media Engine, SourceReader y presentación Direct3D 11.
 - `VertexLab.Desktop`: WPF, reproducción local, visualizaciones e interacción. Se conecta al motor mediante Named Pipes.
 - `VertexLab.Tests`: protocolo, ciclo de captura, sincronización, recuperación, integridad y compatibilidad con el lector web.
 
@@ -68,7 +69,7 @@ La captura nunca escribe desde el hilo de la interfaz. La cola está acotada; lo
 
 ### Arrastre y búsqueda de video
 
-Durante el arrastre de la línea de tiempo o de una gráfica se pausa la reproducción y los instrumentos siguen inmediatamente el cursor. Se conserva únicamente el destino más reciente. Mientras el puntero se mueve, la vista previa se actualiza como máximo cada 80 ms, usando siempre el destino más reciente; al soltar se aplica el destino final y, tras un breve margen para el decodificador, se reanuda solo si la sesión estaba reproduciéndose. Los cambios de sesión cancelan búsquedas pendientes. Esto evita acumular órdenes Position/Play y que el reloj del video sobrescriba la posición que se está buscando.
+Durante el arrastre de la línea de tiempo o de una gráfica se pausa la reproducción y los instrumentos siguen inmediatamente el cursor. Se conserva únicamente el destino más reciente. Mientras el puntero se mueve, la vista previa se actualiza como máximo cada 80 ms, usando siempre el destino más reciente; al soltar se aplica el destino final y, cuando ambos reproductores confirman la búsqueda, se reanuda solo si la sesión estaba reproduciéndose. Los cambios de sesión cancelan búsquedas pendientes. Esto evita acumular órdenes Position/Play y que el reloj del video sobrescriba la posición que se está buscando.
 
 Para construir una actualización sin tocar los ejecutables que estén abiertos: `./native/tools/build.ps1 -OutputRoot native/artifacts/scrub-fix`. La salida contiene su propio directorio app y el MSI; no detiene el motor en ejecución.
 
@@ -111,3 +112,11 @@ El video audible es el reloj principal y nunca se reposiciona por un recorrido d
 Las dependencias de video vienen incluidas en el instalador, con sus avisos y licencia LGPL. No es necesario instalar VLC. El tiempo de búsqueda depende del códec, los fotogramas clave y el almacenamiento del video original.
 
 Validación de 0.3.3: 36 pruebas unitarias correctas y prueba UDP/IPC del paquete con 40 muestras, sin descartes y pausa excluida. En una biblioteca aislada se abrió la sesión real Toyota GR86 de 2.8 GB, se reprodujeron simultáneamente vueltas 2 y 3 con salida Direct3D11, se verificó el encuadre completo y se arrastró desde un punto cualquiera de la barra durante la reproducción. Ambas salidas reportaron 1920×1080. El percentil 95 de playback-update fue 0.090 ms (2222 actualizaciones); mide trabajo del hilo de interfaz, no el tiempo total de decodificación ni los FPS. No es una garantía de ausencia de fotogramas perdidos en todas las GPU.
+
+### Base de reproducción 0.3.4
+
+Se sustituyó LibVLC conservando los controles y el diseño. El reloj principal se lee de Media Engine, sin extrapolarlo desde el tiempo de la interfaz. La pausa vuelve a leer ese reloj; las búsquedas conservan únicamente el destino más reciente y esperan su confirmación antes de reanudar. La cola GPU permite volver a buscar tras alcanzar el final del archivo y redibuja al cambiar el tamaño de la ventana.
+
+La prueba aislada de 60 s sobre la grabación real, comparando por distancia, produjo un error de selección de fotograma p95 de 7.84 ms, máximo 8.64 ms, una búsqueda inicial en cada video y cero fotogramas perdidos reportados por Media Engine en el principal. Es una medida de marcas de tiempo solicitadas/seleccionadas, no de la latencia física del monitor. No demuestra un multiplicador de rendimiento respecto al visor web ni funcionamiento bajo carga de Forza + OBS. Método y reporte: [PlaybackProbe](tools/VertexLab.PlaybackProbe/README.md).
+
+En esa grabación se identificó además una diferencia de origen de aproximadamente 100 ms entre imagen OBS y telemetría. Esta versión conserva sus referencias temporales y los datos originales; cambiar el reproductor no calibra esa diferencia de captura.

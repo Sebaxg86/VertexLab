@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\VertexLab.Core\VertexLab.Core.csproj" />
+    <ProjectReference Include="..\VertexLab.Playback\VertexLab.Playback.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -10,9 +11,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <VlcWindowsX86Enabled>false</VlcWindowsX86Enabled>
-    <VlcWindowsX64Enabled>true</VlcWindowsX64Enabled>
-    <VlcWindowsArm64Enabled>false</VlcWindowsArm64Enabled>
+    <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
 
 <ItemGroup><ProjectReference Include="..\VertexLab.Capture\VertexLab.Capture.csproj" ReferenceOutputAssembly="false" /></ItemGroup>
@@ -30,6 +29,6 @@
 <Content Include="../../../car-brands.json" Link="car-brands.json" CopyToOutputDirectory="PreserveNewest" />
 </ItemGroup>
 <ItemGroup>
-  <PackageReference Include="LibVLCSharp.WPF" Version="3.10.2" />
-  <PackageReference Include="VideoLAN.LibVLC.Windows" Version="3.0.24" />
+  <Using Remove="System.Windows.Forms" />
+  <Using Remove="System.Drawing" />
 </ItemGroup></Project>
