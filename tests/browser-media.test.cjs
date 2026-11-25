@@ -42,3 +42,19 @@ test('media service worker recovers metadata after restart and reads through the
  const res=await context.localVideoResponse(new Request('https://example.test/__vertex_media/id/video',{headers:{Range:'bytes=1-2'}}),'id','page');
  assert.equal(res.status,206);assert.deepEqual([...new Uint8Array(await res.arrayBuffer())],[2,3]);assert.equal(reads,1);
 });
+
+
+test('telemetry clock follows the presented frame and invalidates stale seek/source frames',()=>{
+ const events={};let callback,source='/first.mp4',registrations=0;
+ const video={currentTime:12.05,seeking:false,getAttribute:()=>source,addEventListener:(name,fn)=>events[name]=fn,requestVideoFrameCallback:fn=>{callback=fn;registrations++;}};
+ playback.observe(video);playback.observe(video);assert.equal(registrations,1);
+ callback(0,{mediaTime:12.033});assert.equal(playback.presentationTime(video),12.033);
+ video.seeking=true;events.seeking();assert.equal(playback.presentationTime(video),12.05);
+ video.currentTime=20;video.seeking=false;assert.equal(playback.presentationTime(video),20);
+ callback(0,{mediaTime:20});assert.equal(playback.presentationTime(video),20);
+ source='/second.mp4';video.currentTime=20.04;assert.equal(playback.presentationTime(video),20.04);
+ events.emptied();assert.equal(playback.presentationTime(video),20.04);
+});
+test('browsers without presented-frame callbacks retain the media clock fallback',()=>{
+ const video={currentTime:4};playback.observe(video);assert.equal(playback.presentationTime(video),4);
+});

@@ -82,7 +82,7 @@ function videoPlaybackClock(){
   const video=$('video');
   return RaceAnalysis.videoClock({current:t,meta:currentMeta(),allMode,
     sourceLap:session.laps.find(lap=>lap.id===videoChoices[0]),referenceLap:session.laps.find(lap=>lap.id===reference),
-    video:{error:video.error,ended:video.ended,duration:video.duration,seeking:video.seeking,readyState:video.readyState,currentTime:video.currentTime}},RaceTimeline);
+    video:{error:video.error,ended:video.ended,duration:video.duration,seeking:video.seeking,readyState:video.readyState,currentTime:video.currentTime,presentedTime:VertexPlayback.presentationTime(video)}},RaceTimeline);
 }
 function syncVideoPanes(force=false,dt=0){
   if(!session||!hasVideo)return;
@@ -100,7 +100,10 @@ function syncVideoPanes(force=false,dt=0){
     const available=target!==null&&target>=0&&Number.isFinite(video.duration)&&target<=video.duration;
     warning.hidden=available;
     warning.textContent=targetTime===null?'Sin cobertura a esta distancia':target===null?'Sin video sincronizado en este tramo':Number.isFinite(video.duration)?'Fuera del video grabado':'Cargando video…';
-    if(!available){video.pause();videoTargets.delete(index);return;}
+    if(!available){
+      if(allMode&&target===null&&targetTime!==null){const next=RaceTimeline.nextPlayable(currentMeta(),targetTime,playbackBounds().end,video.duration);if(next!==null&&next>targetTime)warning.textContent=`Video disponible desde ${RaceAnalysis.clock(next)} · Reproducir avanzará al tramo sincronizado.`;}
+      video.pause();videoTargets.delete(index);return;
+    }
     if(force||(!video.seeking&&Math.abs(video.currentTime-target)>(globalThis.VertexBrowser?.mobileApple ? .35 : .12)))video.currentTime=Math.max(0,Math.min(video.duration,target));
     const previous=videoTargets.get(index);
     if(playing){

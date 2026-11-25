@@ -17,3 +17,19 @@ test('legacy sessions retain offset mapping', () => {
   assert.equal(toVideo({offset:2},3),5);
   assert.equal(fromVideo({offset:2},5),3);
 });
+
+
+test('opening or replaying starts at the first actual synchronized image',()=>{
+  const {nextPlayable}=require('../public/timeline.js');
+  assert.equal(nextPlayable(meta,0,20),.2);
+  assert.equal(nextPlayable(meta,10.05,20),10.1);
+  assert.equal(nextPlayable(meta,5,20),5);
+  assert.equal(nextPlayable(meta,21,30),null);
+  assert.equal(nextPlayable({version:2,syncSegments:[]},0,20),null);
+});
+test('playable start respects correction, bounds and the video duration',()=>{
+ const {nextPlayable}=require('../public/timeline.js');
+ assert.equal(nextPlayable({offset:-2},0,20,10),2);
+ assert.equal(nextPlayable({...meta,offset:-1},0,20,30),1.18);
+ assert.equal(nextPlayable(meta,15,20,1),null);
+});

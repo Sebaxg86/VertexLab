@@ -1,4 +1,5 @@
 const $ = id => document.getElementById(id);
+VertexPlayback.observe($('video'));
 const colors = ['#ff414c', '#b8c4d2', '#ffb65b', '#69baff', '#bc91ff'];
 let session = null, selected = new Set(), reference = null, t = 0, playing = false;
 let last = 0, zoom = 1, pan = [0, 0], drag = null, objectUrl = null, hasVideo = false;
@@ -114,8 +115,9 @@ async function loadSession(id) {
     : session.meta.syncState === 'recovered' ? 'Sincronización recuperada del registro real de OBS; alineación estimada.'
     : session.meta.syncState === 'error' ? 'Hubo un error de OBS. Revisa la grabación; la sincronización puede estar incompleta.' : 'Sin referencias automáticas de OBS.';
   if (videoOnly()) $('sync-status').textContent = 'El video está disponible, pero no tiene referencias de sincronización. Puedes reproducirlo por separado; las gráficas no moverán el video.';
-  renderVideoControls(); seek(0);
+  renderVideoControls(); seek(hasVideo&&!videoOnly()?RaceTimeline.nextPlayable(currentMeta(),0,playbackBounds().end)??0:0);
   restorePortableView(session.meta.portableView);
+  if(hasVideo&&allMode&&!videoOnly()&&t===0&&toVideo(t)===null)seek(RaceTimeline.nextPlayable(currentMeta(),0,playbackBounds().end)??0);
   await list();
 }
 
@@ -209,7 +211,12 @@ $('play').onclick = () => {
   if (!session) return;
   const bounds=playbackBounds();
   if(t>=bounds.end)seek(bounds.start);
-  setPlaying(!playing);
+  if(!playing&&hasVideo&&allMode&&!videoOnly()){
+    const next=RaceTimeline.nextPlayable(currentMeta(),t,bounds.end,$('video').duration);
+    if(next!==null&&next>t)seek(next);
+  }
+  if(playing){const shown=videoPlaybackClock();if(Number.isFinite(shown))t=Math.max(bounds.start,Math.min(bounds.end,shown));}
+  setPlaying(!playing);refreshTransport();draw();
   syncVideoPanes(true);
 };
 $('rate').onchange = () => { $('video').playbackRate = Number($('rate').value); };

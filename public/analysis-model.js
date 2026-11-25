@@ -36,7 +36,7 @@
     const target=sourceTime===null?null:timeline.toVideo(meta,sourceTime);
     if(target===null||target<0||target>video.duration)return null;
     if(video.seeking||video.readyState<2)return current;
-    const measured=timeline.fromVideo(meta,video.currentTime);
+    const measured=timeline.fromVideo(meta,Number.isFinite(video.presentedTime)?video.presentedTime:video.currentTime);
     if(!Number.isFinite(measured))return null;
     if(allMode||sourceLap?.id===referenceLap?.id)return measured;
     const sample=sampleAtTime(sourceLap?.rows||[],measured);

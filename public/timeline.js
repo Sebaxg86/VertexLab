@@ -20,7 +20,19 @@
     }
     return (meta.syncSegments || []).at(-1)?.tEnd ?? null;
   }
-  const api = {toVideo, fromVideo};
+  // Find real coverage, including a negative correction or a video shorter than telemetry.
+  function nextPlayable(meta, time, end=Infinity, duration=Infinity) {
+    const offset=Number(meta.offset)||0;
+    const segments=meta.version===2?(meta.syncSegments||[]):[{tStart:0,tEnd:end,videoStart:0}];
+    let result=null;
+    for(const s of segments){
+      const start=Math.max(time,s.tStart,s.tStart-s.videoStart-offset);
+      const limit=Math.min(end,s.tEnd,s.tStart+duration-s.videoStart-offset);
+      if(start<=limit&&(result===null||start<result))result=start;
+    }
+    return result;
+  }
+  const api = {toVideo, fromVideo, nextPlayable};
   root.RaceTimeline = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(globalThis);

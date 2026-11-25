@@ -62,3 +62,10 @@ test('irregular rendering and repeated buffering never accumulate catch-up drift
   assert.ok(Math.abs(state.current-state.video.currentTime)<1e-9);
  }
 });
+
+
+test('visible readings use the image PTS even when the media clock is slightly ahead',()=>{
+ const {videoClock}=require('../public/analysis-model.js'),timeline=require('../public/timeline.js');
+ const state={current:10,meta:{version:1,offset:.058},allMode:true,video:{duration:100,currentTime:10.1,presentedTime:10.066,readyState:4,seeking:false}};
+ assert.ok(Math.abs(videoClock(state,timeline)-10.008)<1e-9);
+});
