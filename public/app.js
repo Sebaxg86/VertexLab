@@ -109,7 +109,7 @@ async function loadSession(id) {
   } else {
     $('video-status').textContent = 'Sin video asociado. Puedes abrir uno local; las sesiones antiguas admiten ajuste manual.';
   }
-  $('sync-status').textContent = session.meta.syncState === 'estimated'
+  $('sync-status').textContent = session.meta.syncState === 'video-verified' ? (session.meta.syncMessage || 'Sincronización verificada contra el cronómetro grabado.') : session.meta.syncState === 'estimated'
     ? 'Sincronización automática por tramos de OBS; precisión estimada, pendiente de calibrar con una captura real.'
     : session.meta.syncState === 'recovered' ? 'Sincronización recuperada del registro real de OBS; alineación estimada.'
     : session.meta.syncState === 'error' ? 'Hubo un error de OBS. Revisa la grabación; la sincronización puede estar incompleta.' : 'Sin referencias automáticas de OBS.';

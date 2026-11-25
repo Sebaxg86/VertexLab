@@ -1,0 +1,64 @@
+{
+  "id": "verification-report",
+  "name": "Recording verification report",
+  "duration": 244.99711149999348,
+  "version": 2,
+  "offset": 0,
+  "automatic": true,
+  "featured": false,
+  "syncState": "video-verified",
+  "syncMessage": "Cronómetro del video: 1/1 tramos verificados. Corrección aplicada a las referencias; muestras originales conservadas.",
+  "syncSegments": [
+    {
+      "tStart": 0.3118161499951384,
+      "tEnd": 244.99711149999348,
+      "videoStart": 0.09546038690760916,
+      "uncertainty": 0.023258505260085688,
+      "verification": {
+        "state": "verified",
+        "method": "recorded-race-clock",
+        "correctionSeconds": 0.09546038690760916,
+        "residualSeconds": 0.013925171926752355,
+        "observations": [
+          {
+            "videoTime": 14.0333333,
+            "raceTime": 14.278
+          },
+          {
+            "videoTime": 41.1166667,
+            "raceTime": 41.407
+          },
+          {
+            "videoTime": 68.1833333,
+            "raceTime": 68.568
+          },
+          {
+            "videoTime": 95.2666667,
+            "raceTime": 95.734
+          },
+          {
+            "videoTime": 122.35,
+            "raceTime": 122.869
+          },
+          {
+            "videoTime": 149.4166666,
+            "raceTime": 150.014
+          },
+          {
+            "videoTime": 176.4999999,
+            "raceTime": 177.155
+          },
+          {
+            "videoTime": 203.5666667,
+            "raceTime": 204.308
+          },
+          {
+            "videoTime": 230.65,
+            "raceTime": 231.427
+          }
+        ],
+        "message": "Cronómetro verificado en 9 imágenes; dispersión máxima 13.9 ms. La precisión está limitada por los fotogramas y el envío UDP."
+      }
+    }
+  ]
+}

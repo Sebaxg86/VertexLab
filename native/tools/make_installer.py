@@ -13,7 +13,7 @@ ns='http://wixtoolset.org/schemas/v4/wxs'
 E.register_namespace('',ns)
 def add(parent,tag,**attrs):return E.SubElement(parent,'{'+ns+'}'+tag,attrs)
 wix=E.Element('{'+ns+'}Wix')
-package=add(wix,'Package',Name='VertexLab Desktop Preview',Manufacturer='VertexLab',Version='0.3.4',UpgradeCode='B0296852-545A-4584-8F41-576D09FFBF67',Scope='perUser')
+package=add(wix,'Package',Name='VertexLab Desktop Preview',Manufacturer='VertexLab',Version='0.3.5',UpgradeCode='B0296852-545A-4584-8F41-576D09FFBF67',Scope='perUser')
 add(package,'MajorUpgrade',DowngradeErrorMessage='Ya está instalada una versión más reciente de VertexLab.')
 add(package,'MediaTemplate',EmbedCab='yes',CompressionLevel='high')
 add(package,'Property',Id='ARPNOMODIFY',Value='1')

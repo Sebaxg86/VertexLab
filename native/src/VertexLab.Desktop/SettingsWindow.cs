@@ -11,7 +11,7 @@ public sealed class SettingsWindow : Window
         Style=(Style)FindResource(typeof(Window));Title="VertexLab · Configuración";Width=510;Height=620;ResizeMode=ResizeMode.NoResize;WindowStartupLocation=WindowStartupLocation.CenterOwner;
         var panel=new StackPanel{Margin=new Thickness(24)};Content=panel;
         void Text(string text,int size=14){panel.Children.Add(new TextBlock{Text=text,FontSize=size,Margin=new Thickness(4,8,4,4),TextWrapping=TextWrapping.Wrap,Foreground=Brushes.LightGray});}
-        Text("CAPTURA INDEPENDIENTE",23);Text("El motor permanece en la bandeja del sistema al cerrar la ventana.");
+        Text("CAPTURA INDEPENDIENTE",23);if(status is not null&&status.EngineVersion is null)Text("El motor anterior sigue abierto. Finaliza cualquier grabación, pulsa Cerrar motor y vuelve a abrir esta app para activar la nueva sincronización.",16);Text("El motor permanece en la bandeja del sistema al cerrar la ventana.");
         var auto=new CheckBox{Content="Detectar carreras automáticamente",IsChecked=status?.Automatic??false};panel.Children.Add(auto);
         var result=new TextBlock{TextWrapping=TextWrapping.Wrap,Foreground=Brushes.LightPink,Margin=new Thickness(4,10,4,4)};
         async Task<bool> Send(Command command){try{var reply=await CaptureClient.SendAsync(paths,command);result.Text=reply.Ok?"Configuración aplicada.":reply.Error;return reply.Ok;}catch(Exception ex){result.Text=ex.Message;return false;}}

@@ -37,6 +37,7 @@ public sealed record SyncSegment
 {
     public double TStart { get; set; } public double TEnd { get; set; } public double VideoStart { get; set; }
     public double Uncertainty { get; set; }
+    public VideoSyncVerification? Verification { get; set; }
 }
 public sealed record SessionMeta
 {
@@ -49,12 +50,13 @@ public sealed record SessionMeta
     public bool Automatic { get; set; } public bool Featured { get; set; }
     public string? VideoPath { get; set; }
     public string SyncState { get; set; } = "none";
+    public string? SyncMessage { get; set; }
     public List<SyncSegment> SyncSegments { get; set; } = [];
 }
 public sealed record SessionEntry(SessionMeta Meta, string TelemetryPath, string State);
 public sealed record EngineSettings { public int UdpPort { get; set; } = 5301; public bool Automatic { get; set; } = false; }
 public sealed record EngineStatus(string Mode, SessionMeta? Session, TelemetryPacket? Packet, double PacketAge,
-    long Packets, long Rejected, long Dropped, int UdpPort, bool Automatic, bool ObsConnected, bool ObsOwned, string? Error);
+    long Packets, long Rejected, long Dropped, int UdpPort, bool Automatic, bool ObsConnected, bool ObsOwned, string? Error) { public string? EngineVersion { get; init; } }
 public sealed record Command(string Action, string? Name = null, int? Port = null, bool? Enabled = null, string? Password = null);
 public sealed record Reply(bool Ok, string? Error = null, EngineStatus? Status = null);
 public sealed class AppPaths

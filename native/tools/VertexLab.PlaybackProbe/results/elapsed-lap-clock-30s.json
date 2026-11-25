@@ -1,0 +1,378 @@
+{
+  "outcome": "completed",
+  "error": null,
+  "backend": "Media Engine master / SourceReader GPU scheduled follower",
+  "mode": "elapsed-lap-clock",
+  "elapsedSeconds": 30.0045499,
+  "cpuSeconds": 4.609375,
+  "workingSetBytes": 317825024,
+  "driftMilliseconds": {
+    "count": 1922,
+    "median": 3.995301860499012,
+    "p95": 7.920068812865111,
+    "max": 8.562068959633962
+  },
+  "uiTickMilliseconds": {
+    "count": 1921,
+    "median": 15.75990000856109,
+    "p95": 20.904499979224056,
+    "max": 29.665700014447793
+  },
+  "samples": [
+    {
+      "elapsed": 0.0001787,
+      "master": 82.2916442,
+      "follower": 164,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 1,
+      "dropped": 0
+    },
+    {
+      "elapsed": 1.0052948,
+      "master": 83.2875385,
+      "follower": 165,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 56,
+      "dropped": 0
+    },
+    {
+      "elapsed": 2.0050117,
+      "master": 84.2872662,
+      "follower": 166,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 112,
+      "dropped": 0
+    },
+    {
+      "elapsed": 3.0058142,
+      "master": 85.2880771,
+      "follower": 167,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 164,
+      "dropped": 0
+    },
+    {
+      "elapsed": 4.0218738,
+      "master": 86.304138,
+      "follower": 168.0166667,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 223,
+      "dropped": 0
+    },
+    {
+      "elapsed": 5.0360374,
+      "master": 87.3183123,
+      "follower": 169.0333333,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 278,
+      "dropped": 0
+    },
+    {
+      "elapsed": 6.0510482,
+      "master": 88.3333315,
+      "follower": 170.0666667,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 337,
+      "dropped": 0
+    },
+    {
+      "elapsed": 7.0554425,
+      "master": 89.3377258,
+      "follower": 171.05,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 388,
+      "dropped": 0
+    },
+    {
+      "elapsed": 8.056554,
+      "master": 90.3388492,
+      "follower": 172.05,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 445,
+      "dropped": 0
+    },
+    {
+      "elapsed": 9.0559245,
+      "master": 91.3382227,
+      "follower": 173.05,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 500,
+      "dropped": 0
+    },
+    {
+      "elapsed": 10.0675857,
+      "master": 92.3499086,
+      "follower": 174.05,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 555,
+      "dropped": 0
+    },
+    {
+      "elapsed": 11.084317,
+      "master": 93.3666245,
+      "follower": 175.0833333,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 610,
+      "dropped": 0
+    },
+    {
+      "elapsed": 12.0972798,
+      "master": 94.3796021,
+      "follower": 176.0833333,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 668,
+      "dropped": 0
+    },
+    {
+      "elapsed": 13.0979924,
+      "master": 95.3803089,
+      "follower": 177.1,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 727,
+      "dropped": 0
+    },
+    {
+      "elapsed": 14.1175057,
+      "master": 96.399849,
+      "follower": 178.1166667,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 783,
+      "dropped": 0
+    },
+    {
+      "elapsed": 15.12823,
+      "master": 97.4105557,
+      "follower": 179.1166667,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 837,
+      "dropped": 0
+    },
+    {
+      "elapsed": 16.1480547,
+      "master": 98.4303875,
+      "follower": 180.15,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 892,
+      "dropped": 0
+    },
+    {
+      "elapsed": 17.1595185,
+      "master": 99.4418742,
+      "follower": 181.15,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 949,
+      "dropped": 0
+    },
+    {
+      "elapsed": 18.1600109,
+      "master": 100.4423727,
+      "follower": 182.15,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 1006,
+      "dropped": 0
+    },
+    {
+      "elapsed": 19.1757509,
+      "master": 101.4581211,
+      "follower": 183.1833333,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 1063,
+      "dropped": 0
+    },
+    {
+      "elapsed": 20.1833636,
+      "master": 102.4657237,
+      "follower": 184.1833333,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 1118,
+      "dropped": 0
+    },
+    {
+      "elapsed": 21.1919357,
+      "master": 103.4743263,
+      "follower": 185.1666667,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 1173,
+      "dropped": 0
+    },
+    {
+      "elapsed": 22.1920417,
+      "master": 104.474408,
+      "follower": 186.1833333,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 1231,
+      "dropped": 0
+    },
+    {
+      "elapsed": 23.1920657,
+      "master": 105.4744573,
+      "follower": 187.2,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 1288,
+      "dropped": 0
+    },
+    {
+      "elapsed": 24.1925714,
+      "master": 106.4749766,
+      "follower": 188.2,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 1343,
+      "dropped": 0
+    },
+    {
+      "elapsed": 25.1927475,
+      "master": 107.4751417,
+      "follower": 189.1833333,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 1401,
+      "dropped": 0
+    },
+    {
+      "elapsed": 26.2059789,
+      "master": 108.4883901,
+      "follower": 190.2333333,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 1459,
+      "dropped": 0
+    },
+    {
+      "elapsed": 27.2238652,
+      "master": 109.5062844,
+      "follower": 191.2166667,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 1515,
+      "dropped": 0
+    },
+    {
+      "elapsed": 28.2417836,
+      "master": 110.5241995,
+      "follower": 192.2333333,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 1573,
+      "dropped": 0
+    },
+    {
+      "elapsed": 29.2530017,
+      "master": 111.5354362,
+      "follower": 193.25,
+      "rate": 0,
+      "paused": false,
+      "seeking": false,
+      "ready": true,
+      "rendered": 1629,
+      "dropped": 0
+    }
+  ],
+  "master": {
+    "rendered": 1806,
+    "dropped": 0,
+    "Seeks": 1,
+    "RateChanges": 0,
+    "seeksMilliseconds": {
+      "count": 1,
+      "median": 25.998400000389665,
+      "p95": 25.998400000389665,
+      "max": 25.998400000389665
+    }
+  },
+  "follower": {
+    "Presented": 1673,
+    "Decoded": 1843,
+    "Seeks": 1,
+    "Late": 0,
+    "frameErrorMilliseconds": {
+      "count": 1922,
+      "median": 3.984740810750509,
+      "p95": 7.985538383650237,
+      "max": 8.328944910260816
+    },
+    "Failure": null
+  }
+}

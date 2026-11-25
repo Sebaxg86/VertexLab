@@ -11,7 +11,7 @@ public sealed class ObsProtocolTests
     [Fact] public async Task AuthenticationAndDelayedRecordStatesAreConfirmed()
     {
         await using var server=new ObsFixture(false);using var client=new ObsClient();await client.ConnectAsync(server.Port,"test-password");
-        var start=await client.StartAsync();Assert.True(client.Owned);Assert.Equal(1.234,start!.Video,6);await client.PauseAsync();await client.ResumeAsync();Assert.Equal("C:\\Tests\\Synthetic.mp4",await client.StopAsync());Assert.False(client.Owned);Assert.True(server.Authenticated);Assert.Contains("PauseRecord",server.Requests);Assert.True(server.Requests.Count(r=>r=="GetRecordStatus")>=10);
+        var start=await client.StartAsync();Assert.True(client.Owned);Assert.Equal(1.234,start!.Video,6);Assert.True(start.Uncertainty>=1d/60);await client.PauseAsync();await client.ResumeAsync();Assert.Equal("C:\\Tests\\Synthetic.mp4",await client.StopAsync());Assert.False(client.Owned);Assert.True(server.Authenticated);Assert.Contains("PauseRecord",server.Requests);Assert.True(server.Requests.Count(r=>r=="GetRecordStatus")>=10);
     }
     [Fact] public async Task AnExistingObsRecordingIsNeverClaimedOrStopped()
     {
@@ -19,7 +19,7 @@ public sealed class ObsProtocolTests
     }
     sealed class ObsFixture : IAsyncDisposable
     {
-        readonly TcpListener listener=new(IPAddress.Loopback,0);readonly CancellationTokenSource cancellation=new();readonly Task server;bool active,paused;string? pending;int polls;
+        readonly TcpListener listener=new(IPAddress.Loopback,0);readonly CancellationTokenSource cancellation=new();readonly Task server;bool active,paused;double duration=1234;string? pending;int polls;
         public int Port{get;}public bool Authenticated{get;private set;}public List<string> Requests=[];
         public ObsFixture(bool active){this.active=active;listener.Start();Port=((IPEndPoint)listener.LocalEndpoint).Port;server=Run();}
         async Task Run()
@@ -35,9 +35,9 @@ public sealed class ObsProtocolTests
                 while(!cancellation.IsCancellationRequested){var message=await Read();var data=message.GetProperty("d");string name=data.GetProperty("requestType").GetString()!;Requests.Add(name);
                     object response=new{};
                     if(name=="GetRecordStatus"){
-                        if(pending is not null&&++polls>=3){switch(pending){case "StartRecord":active=true;paused=false;break;case "PauseRecord":paused=true;break;case "ResumeRecord":paused=false;break;case "StopRecord":active=false;paused=false;break;}pending=null;}
-                        response=new{outputActive=active,outputPaused=paused,outputDuration=1234};
-                    }else{pending=name;polls=0;if(name=="StopRecord")response=new{outputPath="C:\\Tests\\Synthetic.mp4"};}
+                        if(pending is not null&&++polls>=3){switch(pending){case "StartRecord":active=true;paused=false;break;case "PauseRecord":paused=true;break;case "ResumeRecord":paused=false;duration+=100;break;case "StopRecord":active=false;paused=false;break;}pending=null;}
+                        response=new{outputActive=active,outputPaused=paused,outputDuration=duration};
+                    }else if(name=="GetVideoSettings"){response=new{fpsNumerator=60,fpsDenominator=1};}else{pending=name;polls=0;if(name=="StopRecord")response=new{outputPath="C:\\Tests\\Synthetic.mp4"};}
                     await Send(new{op=7,d=new{requestType=name,requestId=data.GetProperty("requestId").GetString(),requestStatus=new{result=true,code=100},responseData=response}});
                 }
             }catch(Exception ex)when(ex is OperationCanceledException or IOException or WebSocketException or ObjectDisposedException){}

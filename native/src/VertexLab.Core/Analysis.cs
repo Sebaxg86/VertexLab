@@ -6,7 +6,8 @@ public sealed class SessionAnalysis
     public required IReadOnlyList<AnalysisPoint> Points { get; init; }
     public required IReadOnlyList<LapInfo> Laps { get; init; }
     public double Duration => Points.Count>0?Points[^1].Packet.T:0;
-    Dictionary<int,AnalysisPoint[]>? byLap;
+    Dictionary<int,AnalysisPoint[]>? byLap; Dictionary<int,bool>? lapClocks;
+    public bool HasLapClock(int id) => (lapClocks ??= Laps.ToDictionary(l=>l.Id,l=> { var a=LapPoints(l.Id);return a.Count>1&&a[^1].Packet.LapTime>a[0].Packet.LapTime+.001&&a.Zip(a.Skip(1)).All(p=>p.Second.Packet.LapTime>=p.First.Packet.LapTime); })).GetValueOrDefault(id);
     public IReadOnlyList<AnalysisPoint> LapPoints(int id) => (byLap??=Points.GroupBy(p=>p.LapId).ToDictionary(g=>g.Key,g=>g.ToArray())).GetValueOrDefault(id)??[];
     public AnalysisPoint? AtDistance(int id,double distance)
     {

@@ -1,1 +1,1 @@
-<Project><PropertyGroup><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><LangVersion>latest</LangVersion><Version>0.3.4-alpha.1</Version><Company>VertexLab</Company><Product>VertexLab</Product></PropertyGroup></Project>
+<Project><PropertyGroup><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><LangVersion>latest</LangVersion><Version>0.3.5-alpha.1</Version><WindowsSdkPackageVersion>10.0.19041.57</WindowsSdkPackageVersion><Company>VertexLab</Company><Product>VertexLab</Product></PropertyGroup></Project>

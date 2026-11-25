@@ -27,7 +27,7 @@ public sealed class SeriesView : FrameworkElement
     static readonly Brush[] BrushesByLap = Colors.Select(c => { var b = new SolidColorBrush(c); b.Freeze(); return (Brush)b; }).ToArray();
     public static Brush LapBrush(int id) => BrushesByLap[Math.Abs(id) % BrushesByLap.Length];
     static Brush Frozen(string color) { var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color)); b.Freeze(); return b; }
-    SessionAnalysis? data; bool comparing; int reference;
+    SessionAnalysis? data; bool comparing; int reference; Dictionary<int,double> origins = []; Dictionary<int,double> clocks = []; double elapsed;
     AnalysisPoint[] rows = []; Dictionary<int, AnalysisPoint[]> groups = []; RouteHitIndex? hitIndex;
     readonly List<(int Id, Geometry Shape)> traces = [];
     double start, end = 1, extent = 1, time, maxValue = 1, xmid, zmid, baseMapScale = 1, zoom = 1, baseStart, baseSpan = 1, cacheStart, cacheEnd;
@@ -57,18 +57,24 @@ public sealed class SeriesView : FrameworkElement
     public void SetData(SessionAnalysis? value, int? lap = null) => SetSelection(value, lap is { } id ? [id] : [], lap ?? 0);
     public void SetSelection(SessionAnalysis? value, IEnumerable<int> selected, int referenceId)
     {
-        data = value; var chosen = selected.ToHashSet(); comparing = chosen.Count > 0; reference = referenceId;
+        data = value; origins = (data?.Laps ?? []).ToDictionary(l=>l.Id,l=>l.Start); clocks = (data?.Laps ?? []).Where(l=>data!.HasLapClock(l.Id)).ToDictionary(l=>l.Id,l=>data!.LapPoints(l.Id)[0].Packet.LapTime); var chosen = selected.ToHashSet(); comparing = chosen.Count > 0; reference = referenceId;
         groups = (data?.Points ?? []).Where(p => chosen.Count == 0 || chosen.Contains(p.LapId)).GroupBy(p => p.LapId).ToDictionary(g => g.Key, g => g.ToArray()); rows = groups.Values.SelectMany(g => g).ToArray();
-        extent = comparing ? Math.Max(1, rows.Select(p => p.Distance).DefaultIfEmpty(1).Max()) : Math.Max(1, data?.Duration ?? 1); start = 0; end = extent; zoom = 1; pan = new(); current = null; hovered = null; mouse = null; inspect.Reset(); inspect.Set(0, Now);
+        extent = comparing ? Math.Max(1, rows.Select(Axis).DefaultIfEmpty(1).Max()) : Math.Max(1, data?.Duration ?? 1); start = 0; end = extent; zoom = 1; pan = new(); current = null; hovered = null; mouse = null; inspect.Reset(); inspect.Set(0, Now);
         if (rows.Length > 0) { xmid = (rows.Min(p => p.Packet.X) + rows.Max(p => p.Packet.X)) / 2; zmid = (rows.Min(p => p.Packet.Z) + rows.Max(p => p.Packet.Z)) / 2; maxValue = Metric is "throttle" or "brake" ? 100 : Math.Max(1, rows.Max(Value)); }
         hitIndex = IsMap ? new RouteHitIndex(rows) : null; cacheDirty = dirty = true;
     }
     public void SetReference(int id) { reference = id; dirty = true; }
     public void SetTime(double value, bool follow = false)
     {
-        time = value; var row = data?.At(value); current = comparing && row is not null && row.LapId != reference ? data?.AtDistance(reference, row.Distance) : row;
+        time = value; current = data?.At(value);
         if (IsMap && follow && zoom > 1 && current is not null && drag is null) { var point = Map(current.Packet); pan += new Vector(ActualWidth / 2 - point.X, ActualHeight / 2 - point.Y); if (mouse is not null) pointerDirty = true; }
         dirty = true;
+    }
+    public void SetElapsed(double value,bool follow=false)
+    {
+        elapsed=value; var point=AtElapsed(reference,value,true);time=point?.Packet.T??0;current=point;
+        if(IsMap&&follow&&zoom>1&&current is not null&&drag is null){var p=Map(current.Packet);pan+=new Vector(ActualWidth/2-p.X,ActualHeight/2-p.Y);if(mouse is not null)pointerDirty=true;}
+        dirty=true;
     }
     public void SetRange(double a, double b)
     {
@@ -77,8 +83,13 @@ public sealed class SeriesView : FrameworkElement
     public void ZoomAtCursor(double factor) { double span = Math.Clamp((end - start) / factor, .05, extent), anchor = CurrentAxis(), a = Math.Clamp(anchor - span * .5, 0, extent - span); SetRange(a, a + span); RangeChanged?.Invoke(start, end); }
     public void ZoomMap(double factor) => ZoomMapAt(new Point(ActualWidth / 2, ActualHeight / 2), factor);
     public void Fit() { zoom = 1; pan = new(); if (IsMap) { traceStyleDirty = dirty = true; } else { SetRange(0, extent); RangeChanged?.Invoke(start, end); } }
-    double CurrentAxis() => comparing ? current?.Distance ?? 0 : time;
-    double Axis(AnalysisPoint p) => comparing ? p.Distance : p.Packet.T;
+    double CurrentAxis() => comparing ? elapsed : time;
+    double Axis(AnalysisPoint p) => !comparing ? p.Packet.T : clocks.TryGetValue(p.LapId,out double origin) ? p.Packet.LapTime-origin : p.Packet.T-origins.GetValueOrDefault(p.LapId);
+    AnalysisPoint? AtElapsed(int id, double elapsed, bool clamp = false)
+    {
+        if(data is null || LapComparison.TimeAtElapsed(data,id,elapsed,clamp) is not {} t)return null;
+        var row=data.At(t);return row?.LapId==id?row:null;
+    }
     double Value(AnalysisPoint p) => Metric switch { "rpm" => p.Packet.Rpm, "throttle" => p.Packet.Throttle, "brake" => p.Packet.Brake, "lapTime" => p.Packet.LapTime, "raceTime" => p.Packet.RaceTime, "distance" => p.Distance, _ => p.Packet.Speed };
     public static string DurationText(double s) => s < 60 ? $"{s:0.000} s" : $"{s / 60:0.000} min";
     string Label => Metric switch { "rpm" => "Revoluciones", "throttle" => "Acelerador", "brake" => "Freno", "lapTime" => "Tiempo de vuelta", "raceTime" => "Tiempo de carrera", "distance" => "Distancia", _ => "Velocidad" };
@@ -134,7 +145,7 @@ public sealed class SeriesView : FrameworkElement
     {
         if (IsMap) { double x = xmid + (point.X - ActualWidth / 2 - pan.X) / Math.Max(.0001, Scale), z = zmid - (point.Y - ActualHeight / 2 - pan.Y) / Math.Max(.0001, Scale); long hitTick = Stopwatch.GetTimestamp(); var hit = hitIndex?.Find(x, z, 12 / Math.Max(.0001, Scale)); PresentationMetrics.Record("map-hit", Stopwatch.GetElapsedTime(hitTick).TotalMilliseconds); return hit; }
         double target = Math.Clamp(start + (point.X - 30) / PlotWidth * (end - start), start, end), best = double.PositiveInfinity; AnalysisPoint? result = null;
-        foreach (var (id, _) in groups) { var p = comparing ? data?.AtDistance(id, target) : data?.At(target); if (p is null || p.LapId != id) continue; double distance = Math.Abs(Plot(p).Y - point.Y); if (distance < best) { best = distance; result = p; } }
+        foreach (var (id, _) in groups) { var p = comparing ? AtElapsed(id, target) : data?.At(target); if (p is null || p.LapId != id) continue; double distance = Math.Abs(Plot(p).Y - point.Y); if (distance < best) { best = distance; result = p; } }
         return result;
     }
     void Text(DrawingContext dc, string text, Point at, double size, Brush? brush = null)
@@ -148,9 +159,9 @@ public sealed class SeriesView : FrameworkElement
         {
             Text(dc, Label, new Point(12, 9), 14, mouse is { } title && title.Y < 32 ? Pink : TitleBrush); if (current is not null) Text(dc, Format(current), new Point(Math.Max(125, ActualWidth - 155), 5), 25, Brushes.White);
             double x = 30 + (CurrentAxis() - start) / Math.Max(.001, end - start) * PlotWidth; if (x >= 30 && x <= ActualWidth - 18) dc.DrawLine(new Pen(Brushes.White, .8), new Point(x, 35), new Point(x, ActualHeight - 24));
-            Text(dc, comparing ? $"{start:0} m" : DurationText(start), new Point(30, ActualHeight - 19), 10, Muted); Text(dc, comparing ? $"{end:0} m" : DurationText(end), new Point(Math.Max(70, ActualWidth - 92), ActualHeight - 19), 10, Muted);
+            Text(dc, DurationText(start), new Point(30, ActualHeight - 19), 10, Muted); Text(dc, DurationText(end), new Point(Math.Max(70, ActualWidth - 92), ActualHeight - 19), 10, Muted);
         }
-        else if (current is { } sample) { foreach (int id in comparing ? groups.Keys : (IEnumerable<int>)[sample.LapId]) { var marker = comparing ? data?.AtDistance(id, sample.Distance) : sample; if (marker is not null) dc.DrawEllipse(LapBrush(id), new Pen(Brushes.White, id == reference ? 2 : 1), Map(marker.Packet), id == reference ? 4.5 : 3.5, id == reference ? 4.5 : 3.5); } }
+        else if (current is { } sample) { foreach (int id in comparing ? groups.Keys : (IEnumerable<int>)[sample.LapId]) { var marker = comparing ? AtElapsed(id, elapsed,true) : sample; if (marker is not null) dc.DrawEllipse(LapBrush(id), new Pen(Brushes.White, id == reference ? 2 : 1), Map(marker.Packet), id == reference ? 4.5 : 3.5, id == reference ? 4.5 : 3.5); } }
         if (inspect.Value(Now) > .001 && hovered is { } nearest && (IsMap || mouse is null || mouse?.Y >= 32))
         {
             dc.PushOpacity(inspect.Value(Now)); var trace = traces.FirstOrDefault(t => t.Id == nearest.LapId); if (trace.Shape is not null) { dc.PushClip(new RectangleGeometry(IsMap ? new Rect(RenderSize) : new Rect(30, 35, PlotWidth, Math.Max(1, ActualHeight - 59)))); dc.PushTransform(traceTransform); dc.DrawGeometry(null, new Pen(LapBrush(nearest.LapId), IsMap ? 2.3 / zoom : 2.3), trace.Shape); dc.Pop(); dc.Pop(); }
@@ -161,5 +172,5 @@ public sealed class SeriesView : FrameworkElement
     void Wheel(object sender, MouseWheelEventArgs e) { if (data is null) return; if (IsMap) ZoomMapAt(e.GetPosition(this), e.Delta > 0 ? 1.3 : 1 / 1.3); else { double factor = e.Delta > 0 ? 1.3 : 1 / 1.3, span = Math.Clamp((end - start) / factor, .05, extent), part = Math.Clamp((e.GetPosition(this).X - 30) / PlotWidth, 0, 1), anchor = start + (end - start) * part, a = Math.Clamp(anchor - span * part, 0, extent - span); RangeChanged?.Invoke(a, a + span); } e.Handled = true; }
     void Down(object sender, MouseButtonEventArgs e) { if (!IsMap && e.GetPosition(this).Y < 32) { Expand?.Invoke(); e.Handled = true; return; } drag = e.GetPosition(this); dragged = false; CaptureMouse(); if (!IsMap) SeekAt(drag.Value); e.Handled = true; }
     void Up(object sender, MouseButtonEventArgs e) { if (drag is not null) { if (IsMap && !dragged) SeekAt(e.GetPosition(this)); else if (!IsMap) SeekAt(e.GetPosition(this)); drag = null; pointerDirty = false; ReleaseMouseCapture(); e.Handled = true; } }
-    void SeekAt(Point point) { if(Nearest(point) is {} nearest){hovered=nearest;inspect.Set(1,Now);dirty=true;Seek?.Invoke(nearest.Packet.T);} }
+    void SeekAt(Point point) { if(Nearest(point) is {} nearest){hovered=nearest;inspect.Set(1,Now);dirty=true;Seek?.Invoke(comparing ? Axis(nearest) : nearest.Packet.T);} }
 }

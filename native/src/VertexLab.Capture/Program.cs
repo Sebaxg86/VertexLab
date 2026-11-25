@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading.Channels;
 using VertexLab.Core;
+using VertexLab.Sync;
 
 namespace VertexLab.Capture;
 internal static class Program
@@ -23,16 +24,18 @@ internal sealed class CaptureHost : IDisposable
 {
     readonly AppPaths paths;readonly Library library;readonly ObsClient obs=new();readonly CaptureEngine engine;
     readonly Channel<Work> queue=Channel.CreateBounded<Work>(new BoundedChannelOptions(2048){FullMode=BoundedChannelFullMode.Wait,SingleReader=true});
+    readonly Channel<SessionEntry> verificationQueue=Channel.CreateBounded<SessionEntry>(32);
     readonly CancellationTokenSource cancellation=new();UdpClient? udp;EngineSettings settings;TelemetryPacket? latest;double lastPacket=-1;
     long packets,rejected,dropped;string? udpError;readonly List<Task> tasks=[];
-    record Work(TelemetryPacket? Packet=null,double Wall=0,Command? Command=null,TaskCompletionSource<Reply>? Completion=null);
+    record Work(TelemetryPacket? Packet=null,double Wall=0,Command? Command=null,TaskCompletionSource<Reply>? Completion=null,SessionMeta? Verified=null);
     public CaptureHost(AppPaths paths)
     {
         this.paths=paths;library=new(paths);library.RecoverInterrupted();settings=File.Exists(paths.Settings)?Wire.Decode<EngineSettings>(File.ReadAllText(paths.Settings)):new();
         Dictionary<string,string> cars=[];var catalog=Path.Combine(AppContext.BaseDirectory,"cars.json");if(File.Exists(catalog))cars=Wire.Decode<Dictionary<string,string>>(File.ReadAllText(catalog));
         engine=new(paths,library,obs,id=>cars.GetValueOrDefault(id.ToString(),$"Vehículo #{id}")){Automatic=settings.Automatic};
+        engine.SessionSaved += QueueVerification;
     }
-    public void Start(){BindUdp();tasks.Add(Task.Run(Actor));tasks.Add(Task.Run(ListenPipe));tasks.Add(Task.Run(Ticks));}
+    public void Start(){BindUdp();tasks.Add(Task.Run(Actor));tasks.Add(Task.Run(ListenPipe));tasks.Add(Task.Run(Ticks));tasks.Add(Task.Run(VerifyRecordings));}
     void BindUdp()
     {
         udp?.Dispose();udp=null;try{var receiver=new UdpClient(AddressFamily.InterNetwork);receiver.Client.ExclusiveAddressUse=true;receiver.Client.ReceiveBufferSize=1024*1024;receiver.Client.Bind(new IPEndPoint(IPAddress.Loopback,settings.UdpPort));udp=receiver;udpError=null;tasks.Add(Task.Run(()=>Receive(receiver)));}
@@ -49,19 +52,40 @@ internal sealed class CaptureHost : IDisposable
     async Task Actor()
     {
         try{await foreach(var item in queue.Reader.ReadAllAsync(cancellation.Token)){
-            try{if(item.Command is {} command){var reply=await Execute(command);item.Completion!.TrySetResult(reply);}
+            try{if(item.Verified is {} verified){
+                    // Merge with the latest library entry so naming/star changes survive.
+                    var existing=library.List().FirstOrDefault(e=>e.Meta.Id==verified.Id);
+                    if(existing is not null && existing.Meta.Ended is not null && existing.Meta.VideoPath==verified.VideoPath){
+                        var merged=existing.Meta with{SyncSegments=verified.SyncSegments,SyncState=verified.SyncState,SyncMessage=verified.SyncMessage};library.Save(merged,existing.State);
+                    }
+                }
+                else if(item.Command is {} command){var reply=await Execute(command);item.Completion!.TrySetResult(reply);}
                 else if(item.Packet is {} packet){latest=packet;lastPacket=item.Wall;await engine.FeedAsync(packet,item.Wall);}
                 else await engine.TickAsync(item.Wall);
             }catch(Exception ex){engine.Error=ex.Message;item.Completion?.TrySetResult(new(false,ex.Message));}
         }}catch(OperationCanceledException){}
     }
+    void QueueVerification(SessionEntry entry)
+    {
+        entry.Meta.SyncMessage="Verificando el cronómetro de la grabación…";
+        library.Save(entry.Meta,entry.State);
+        if(!verificationQueue.Writer.TryWrite(entry)){entry.Meta.SyncMessage="Verificación pendiente: vuelve a solicitarla desde análisis.";library.Save(entry.Meta,entry.State);}
+    }
+    async Task VerifyRecordings()
+    {
+        try{await foreach(var entry in verificationQueue.Reader.ReadAllAsync(cancellation.Token)){
+            var verified=await RecordedClockVerifier.VerifyAsync(entry,cancellation.Token);
+            await queue.Writer.WriteAsync(new(Verified:verified),cancellation.Token);
+        }}catch(OperationCanceledException){}
+    }
     EngineStatus Snapshot()=>new(engine.Current is null?(engine.Automatic?"armed":"idle"):engine.Mode,
         engine.Current is null?null:Wire.Decode<SessionMeta>(Wire.Encode(engine.Current)),latest,lastPacket<0?1e9:Math.Max(0,ObsClient.Clock-lastPacket),
-        Interlocked.Read(ref packets),Interlocked.Read(ref rejected),Interlocked.Read(ref dropped),settings.UdpPort,engine.Automatic,obs.Connected,obs.Owned,udpError??engine.Error);
+        Interlocked.Read(ref packets),Interlocked.Read(ref rejected),Interlocked.Read(ref dropped),settings.UdpPort,engine.Automatic,obs.Connected,obs.Owned,udpError??engine.Error){EngineVersion=typeof(CaptureHost).Assembly.GetName().Version?.ToString()};
     async Task<Reply> Execute(Command command)
     {
         switch(command.Action){
             case "status":break;
+            case "verify-video":var entry=library.List().FirstOrDefault(e=>e.Meta.Id==command.Name&&e.Meta.Ended is not null)??throw new InvalidDataException("Sesión finalizada no encontrada");QueueVerification(entry);break;
             case "start":await engine.StartAsync(command.Name,latest,ObsClient.Clock);break;
             case "stop":await engine.FinishAsync();break;
             case "auto":engine.Automatic=command.Enabled??false;settings.Automatic=engine.Automatic;AppPaths.AtomicWrite(paths.Settings,Wire.Encode(settings));break;

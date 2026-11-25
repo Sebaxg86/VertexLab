@@ -6,11 +6,13 @@ Standalone Windows-only benchmark. Reads finalized JSON metadata, its sibling JS
 dotnet run --project native/tools/VertexLab.PlaybackProbe -c Release -- --session "C:/sessions/example.json" --measure --seconds 60 --report "C:/reports/playback.json"
 ```
 
-Default: comparison by distance, using the second and third recorded laps (or available laps when fewer). Main video: Media Engine HWND with audio. Silent comparison: SourceReader with a bounded GPU queue and nearest timestamp selection. Both images use contain sizing. No browser or LibVLC.
+Default: comparison by the recorded Forza lap clock, using the second and third recorded laps (or available laps when fewer). Main video: Media Engine HWND with audio. Silent comparison: SourceReader with a bounded GPU queue and nearest timestamp selection. Both images use contain sizing. No browser or LibVLC.
 
 Without `--measure`, controls permit playback/pause, dragging and ±1/60 s steps. The step buttons assume 60 FPS; the GPU queue reads the source frame rate. `--clock-only` uses two Media Engine clocks at 1×, starting 60 seconds apart. `--scheduled-follower` explicitly selects the GPU follower in either mode.
 
 `--native-follower` explicitly enables the rejected experimental approach: continuous follower rate changes and corrective seeks. Do not use it as the product backend. `--no-corrective-seeks` disables those experimental corrections. Reports are written only at the supplied `--report` path. Initialization timeout and decoder errors are reported, not replaced by generated data.
+
+`--distance` retains the previous distance-aligned diagnostic mode. Historical results below used that mode. The product now aligns elapsed lap time.
 
 ## Observed results
 
@@ -30,3 +32,8 @@ These are results on one machine without simultaneous Forza/OBS load. No web-rel
 ## Regression checks
 
 Core tests cover seek generations, preroll across distant keyframes, queue capacity on new seeks, sequential playback without repeated seeks, and rational frame rates. Manual desktop QA covers pause, arbitrary-point scrubbing, comparison/reference selectors, seeking after the end and contain layout. The capture engine and stored session data are unchanged by the playback backend.
+
+
+## Elapsed lap clock, 0.3.5
+
+[Actual 30-second report](results/elapsed-lap-clock-30s.json), same recording with its measured clock correction, aligning Forza lap clocks rather than distance: selection PTS error p95 7.92 ms, max 8.56 ms. The same measurement limitations above apply. This reports playback frame scheduling, independently from image-to-telemetry capture verification.

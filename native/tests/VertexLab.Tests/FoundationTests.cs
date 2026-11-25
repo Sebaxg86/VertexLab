@@ -54,13 +54,13 @@ public sealed class FoundationTests : IDisposable
     }
     [Fact] public async Task PortableRoundTripStreamsVideoAndRejectsExtraPaths()
     {
-        var library=new Library(paths);var meta=new SessionMeta{Name="TEST ONLY",Ended=20,VideoPath=Path.Combine(paths.Sessions,"original.mp4")};await File.WriteAllBytesAsync(meta.VideoPath,[1,2,3,4]);await File.WriteAllTextAsync(paths.RowsPath(meta.Id),Wire.Encode(Row())+"\n");library.Save(meta,"Saved");
+        var library=new Library(paths);var meta=new SessionMeta{Name="TEST ONLY",Ended=20,SyncState="video-verified",SyncSegments=[new(){TStart=0,TEnd=1,VideoStart=.095,Verification=new("verified","recorded-race-clock",.095,.01,[],"TEST ONLY") }],VideoPath=Path.Combine(paths.Sessions,"original.mp4")};await File.WriteAllBytesAsync(meta.VideoPath,[1,2,3,4]);await File.WriteAllTextAsync(paths.RowsPath(meta.Id),Wire.Encode(Row())+"\n");library.Save(meta,"Saved");
         var package=Path.Combine(paths.Root,"test.vrtx");await PortableSession.ExportAsync(Assert.Single(library.List()),package);
         var root=new DirectoryInfo(AppContext.BaseDirectory);while(root is not null&&!File.Exists(Path.Combine(root.FullName,"portable.py")))root=root.Parent;Assert.NotNull(root);
         var process=new System.Diagnostics.ProcessStartInfo("node"){WorkingDirectory=root!.FullName,UseShellExecute=false,RedirectStandardError=true,RedirectStandardOutput=true,CreateNoWindow=true};
         process.ArgumentList.Add("-e");process.ArgumentList.Add("const fs=require('node:fs'),assert=require('node:assert/strict');require('./public/vrtx-reader.js').read(new Blob([fs.readFileSync(process.argv[1])]),{zip:require('./public/vendor-zip-2.25.0.js'),hash:require('./public/vendor-sha256-4.13.0.js'),core:require('./public/browser-core.js')}).then(r=>{assert.equal(r.video.size,4);assert.equal(r.laps[0].rows[0].steer,-127);}).catch(e=>{console.error(e);process.exitCode=1;});");process.ArgumentList.Add(package);
         using var check=System.Diagnostics.Process.Start(process)!;string error=await check.StandardError.ReadToEndAsync();await check.WaitForExitAsync();Assert.True(check.ExitCode==0,error);
-        var imported=await PortableSession.ImportAsync(package,paths,library);Assert.NotEqual(meta.Id,imported.Meta.Id);Assert.Equal(new byte[]{1,2,3,4},await File.ReadAllBytesAsync(imported.Meta.VideoPath!));
+        var imported=await PortableSession.ImportAsync(package,paths,library);Assert.NotEqual(meta.Id,imported.Meta.Id);Assert.Equal("video-verified",imported.Meta.SyncState);Assert.Equal(.095,imported.Meta.SyncSegments[0].Verification!.CorrectionSeconds);Assert.Equal(.595,Analysis.ToVideo(imported.Meta,.5)!.Value,8);Assert.Equal(new byte[]{1,2,3,4},await File.ReadAllBytesAsync(imported.Meta.VideoPath!));
         using(var zip=ZipFile.Open(package,ZipArchiveMode.Update)){var extra=zip.CreateEntry("../escape");using var w=new StreamWriter(extra.Open());w.Write("bad");}
         await Assert.ThrowsAsync<InvalidDataException>(()=>PortableSession.ImportAsync(package,paths,library));Assert.Equal(2,library.List().Count);
     }
@@ -85,6 +85,14 @@ public sealed class FoundationTests : IDisposable
         await engine.StartAsync("TEST ONLY",Row(),100);await engine.FeedAsync(Row(),100.1);await engine.FinishAsync();Assert.True(obs.Owned);Assert.Null(Assert.Single(library.List()).Meta.VideoPath);
         await Assert.ThrowsAsync<InvalidOperationException>(()=>engine.StartAsync("blocked",Row(),101));
         await engine.FinishAsync();Assert.False(obs.Owned);Assert.Equal(obs.StopPath,Assert.Single(library.List()).Meta.VideoPath);Assert.Null(engine.Error);
+    }
+    [Theory][InlineData(true)][InlineData(false)] public async Task FinalizedVideoQueuesVerificationForAutomaticAndManualSessions(bool automatic)
+    {
+        var library=new Library(paths);using var engine=new CaptureEngine(paths,library,new FakeObs{StopPath="C:/Tests/Synthetic.mp4"}){Automatic=automatic};SessionEntry? saved=null;
+        engine.SessionSaved+=entry=>{saved=entry;Assert.NotNull(entry.Meta.Ended);Assert.True(File.Exists(entry.TelemetryPath));};
+        if(automatic)await engine.FeedAsync(Row(),100);else await engine.StartAsync("TEST ONLY",Row(),100);
+        await engine.FeedAsync(Row(),100.2);await engine.FinishAsync();
+        Assert.NotNull(saved);Assert.Equal(automatic,saved.Meta.Automatic);Assert.Null(engine.Current);Assert.Equal("C:/Tests/Synthetic.mp4",saved.Meta.VideoPath);
     }
     [Fact] public void OldSessionsDoNotInventMissingInstrumentsOrObsSegments()
     {

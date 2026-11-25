@@ -2,11 +2,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\VertexLab.Core\VertexLab.Core.csproj" />
+    <ProjectReference Include="..\VertexLab.Sync\VertexLab.Sync.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

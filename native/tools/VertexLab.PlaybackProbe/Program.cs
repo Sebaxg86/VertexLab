@@ -31,7 +31,7 @@ sealed class ProbeWindow : Form
     readonly List<double> drift = [], ticks = [];
     readonly List<object> samples = [];
     readonly Stopwatch wall = new(); readonly Process process = Process.GetCurrentProcess();
-    readonly string? report; readonly double seconds; readonly bool automatic, distance;
+    readonly string? report; readonly double seconds; readonly bool automatic, distance, elapsed;
     readonly bool corrections; readonly double fixedRate;
     SessionMeta? meta; SessionAnalysis? analysis;
     int first, second; bool initialized, playing, dragging, resume, preparing, saving;
@@ -44,9 +44,9 @@ sealed class ProbeWindow : Form
     {
         string? Arg(string key) { int i = Array.IndexOf(args, key); return i >= 0 && i + 1 < args.Length ? args[i + 1] : null; }
         report = Arg("--report"); seconds = double.TryParse(Arg("--seconds"), out var duration) ? duration : 60;
-        automatic = args.Contains("--measure"); distance = !args.Contains("--clock-only");
+        automatic = args.Contains("--measure"); distance = args.Contains("--distance"); elapsed = !distance && !args.Contains("--clock-only");
         corrections = !args.Contains("--no-corrective-seeks"); fixedRate = double.TryParse(Arg("--fixed-rate"), out var fixedValue) ? fixedValue : 1;
-        scheduled = (args.Contains("--scheduled-follower") || (distance && !args.Contains("--native-follower"))) ? new ScheduledVideoPane() : null;
+        scheduled = (args.Contains("--scheduled-follower") || ((distance || elapsed) && !args.Contains("--native-follower"))) ? new ScheduledVideoPane() : null;
         Text = "VertexLab · Media Engine · prueba aislada"; Width = 1400; Height = 850; BackColor = Color.FromArgb(14, 14, 18);
         var split = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50)); split.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
@@ -83,7 +83,7 @@ sealed class ProbeWindow : Form
     double FollowerTime => scheduled?.PresentedTime ?? (scheduled is not null ? 0 : follower.Engine.CurrentTime);
     void FollowerSeek(double value) { if (scheduled is not null) scheduled.Request(value, true); else follower.Seek(value); }
     double CurrentSessionTime() => meta is null ? 0 : Analysis.FromVideo(meta, master.Engine.CurrentTime) ?? 0;
-    double? Target(double sessionTime) => meta is null || analysis is null ? null : Analysis.ToVideo(meta, distance ? LapComparison.MapTime(analysis, sessionTime, first, second) ?? double.NaN : timeline.Minimum / 1000d + 60 + (sessionTime - timeline.Minimum / 1000d) * fixedRate);
+    double? Target(double sessionTime) => meta is null || analysis is null ? null : Analysis.ToVideo(meta, distance ? LapComparison.MapTime(analysis, sessionTime, first, second) ?? double.NaN : elapsed ? LapComparison.MapElapsedTime(analysis, sessionTime, first, second) ?? double.NaN : timeline.Minimum / 1000d + 60 + (sessionTime - timeline.Minimum / 1000d) * fixedRate);
     void Pause() { playing = false; if (!initialized) return; master.Engine.Pause(); if (scheduled is null) follower.Engine.Pause(); }
     void Toggle()
     {
@@ -141,7 +141,7 @@ sealed class ProbeWindow : Form
                 lastSample = now;
                 samples.Add(new { elapsed = wall.Elapsed.TotalSeconds, master = master.Engine.CurrentTime, follower = FollowerTime, rate = scheduled is null ? follower.Engine.PlaybackRate : 0, paused = scheduled is null && (bool)follower.Engine.IsPaused, seeking = FollowerSeeking, ready = FollowerReady, rendered = scheduled is null ? follower.Stat(MediaEngineStatistic.FramesRendered) : scheduled.Presented, dropped = scheduled is null ? follower.Stat(MediaEngineStatistic.FramesDropped) : scheduled.Late });
             }
-            status.Text = $"Media Engine Windows · {(distance ? "comparación por distancia · vueltas 2 / 3" : "relojes a velocidad constante")}\n" +
+            status.Text = $"Media Engine Windows · {(distance ? "comparación por distancia · vueltas 2 / 3" : elapsed ? "tiempo de vuelta Forza · vueltas 2 / 3" : "relojes a velocidad constante")}\n" +
                 $"Tiempo {current:F3} s · Telemetría {sample?.Packet.Speed:F0} km/h · {meta.SyncState} (sin recalibrar la grabación)\n" +
                 $"A {master.Engine.CurrentTime:F3}s / B {FollowerTime:F3}s · búsquedas {master.Seeks}/{(scheduled?.Seeks ?? follower.Seeks)} · presentados B {(scheduled is null ? follower.Stat(MediaEngineStatistic.FramesRendered) : scheduled.Presented)}";
             if (automatic && wall.Elapsed.TotalSeconds >= seconds) Finish("completed");
@@ -157,7 +157,7 @@ sealed class ProbeWindow : Form
     void Save(string outcome, string? error = null)
     {
         if (report is null) return;
-        var result = new { outcome, error, backend = scheduled is null ? "Windows Media Engine / HWND rendering" : "Media Engine master / SourceReader GPU scheduled follower", mode = distance ? "distance" : "clock-only", elapsedSeconds = wall.Elapsed.TotalSeconds,
+        var result = new { outcome, error, backend = scheduled is null ? "Windows Media Engine / HWND rendering" : "Media Engine master / SourceReader GPU scheduled follower", mode = distance ? "distance" : elapsed ? "elapsed-lap-clock" : "clock-only", elapsedSeconds = wall.Elapsed.TotalSeconds,
             cpuSeconds = process.TotalProcessorTime.TotalSeconds - cpuStart, workingSetBytes = process.WorkingSet64,
             driftMilliseconds = Distribution(drift), uiTickMilliseconds = Distribution(ticks), samples,
             master = new { rendered = initialized ? master.Stat(MediaEngineStatistic.FramesRendered) - renderedA : 0, dropped = initialized ? master.Stat(MediaEngineStatistic.FramesDropped) - droppedA : 0, master.Seeks, master.RateChanges, seeksMilliseconds = Distribution(master.SeekMilliseconds) },

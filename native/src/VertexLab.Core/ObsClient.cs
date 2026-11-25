@@ -13,6 +13,7 @@ public interface IObsRecorder
 public sealed class ObsClient : IObsRecorder, IDisposable
 {
     ClientWebSocket? socket;
+    double frameInterval = 1d / 60;
     public bool Connected=>socket?.State==WebSocketState.Open;
     public bool Owned {get;private set;}
     public static double Clock=>Stopwatch.GetTimestamp()/(double)Stopwatch.Frequency;
@@ -31,6 +32,8 @@ public sealed class ObsClient : IObsRecorder, IDisposable
             await Send(new{op=1,d=identify},timeout.Token);
             if((await Receive(timeout.Token)).GetProperty("op").GetInt32()!=2)throw new InvalidDataException("OBS rechazó la autenticación");
             var status=await Request("GetRecordStatus");if(pending&&status.GetProperty("outputActive").GetBoolean())throw new InvalidOperationException("Detén manualmente la grabación pendiente en OBS antes de reconectar");if(pending)Owned=false;
+            var videoSettings=await Request("GetVideoSettings");
+            if(videoSettings.TryGetProperty("fpsNumerator",out var n)&&videoSettings.TryGetProperty("fpsDenominator",out var d)&&n.GetDouble()>0&&d.GetDouble()>0)frameInterval=Math.Clamp(d.GetDouble()/n.GetDouble(),1d/240,1);
         }catch(InvalidOperationException){socket.Dispose();socket=null;throw;}catch{socket.Dispose();socket=null;throw new InvalidOperationException("No se pudo conectar con OBS. Revisa WebSocket, puerto y contraseña.");}
     }
     async Task Send(object value,CancellationToken token)=>await socket!.SendAsync(Encoding.UTF8.GetBytes(Wire.Encode(value)),WebSocketMessageType.Text,true,token);
@@ -50,22 +53,22 @@ public sealed class ObsClient : IObsRecorder, IDisposable
             return data.TryGetProperty("responseData",out var response)?response.Clone():JsonSerializer.SerializeToElement(new{});
         }
     }
-    async Task<ObsAnchor> Wait(bool active,bool? paused=null)
+    async Task<ObsAnchor> Wait(bool active,bool? paused=null,double minimumVideo=double.NegativeInfinity)
     {
         double deadline=Clock+5;
         while(true){double before=Clock;var status=await Request("GetRecordStatus");double after=Clock;
-            if(status.GetProperty("outputActive").GetBoolean()==active&&(paused is null||status.GetProperty("outputPaused").GetBoolean()==paused))return new((before+after)/2,status.GetProperty("outputDuration").GetDouble()/1000,(after-before)/2);
-            if(Clock>deadline)throw new TimeoutException("OBS no confirmó el cambio de grabación");await Task.Delay(80);
+            if(status.GetProperty("outputActive").GetBoolean()==active&&(paused is null||status.GetProperty("outputPaused").GetBoolean()==paused)&&status.GetProperty("outputDuration").GetDouble()/1000>minimumVideo)return new((before+after)/2,status.GetProperty("outputDuration").GetDouble()/1000,(after-before)/2+frameInterval+.001);
+            if(Clock>deadline)throw new TimeoutException("OBS no confirmó el cambio de grabación");await Task.Delay(20);
         }
     }
     public async Task<ObsAnchor?> StartAsync()
     {
         if(Owned)throw new InvalidOperationException("OBS conserva una grabación pendiente");if(!Connected)return null;
         if((await Request("GetRecordStatus")).GetProperty("outputActive").GetBoolean())throw new InvalidOperationException("OBS ya graba por tu cuenta; se guardará solo telemetría");
-        await Request("StartRecord");Owned=true;return await Wait(true,false);
+        await Request("StartRecord");Owned=true;return await Wait(true,false,0);
     }
     public async Task PauseAsync(){if(Owned){await Request("PauseRecord");await Wait(true,true);}}
-    public async Task<ObsAnchor?> ResumeAsync(){if(!Owned)return null;await Request("ResumeRecord");return await Wait(true,false);}
+    public async Task<ObsAnchor?> ResumeAsync(){if(!Owned)return null;var before=await Request("GetRecordStatus");double pausedVideo=before.GetProperty("outputDuration").GetDouble()/1000;await Request("ResumeRecord");return await Wait(true,false,pausedVideo);}
     public async Task<string?> StopAsync(){if(!Owned)return null;var result=await Request("StopRecord");await Wait(false);Owned=false;return result.TryGetProperty("outputPath",out var path)?path.GetString():null;}
     public void Dispose(){socket?.Dispose();}
 }

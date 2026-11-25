@@ -5,6 +5,7 @@ public sealed class CaptureEngine : IDisposable
     readonly AppPaths paths;readonly Library library;readonly IObsRecorder obs;readonly Func<int,string> carName;
     StreamWriter? writer;FileStream? stream;TelemetryPacket? lastRow;double? last,negativeSince;double elapsed,lastPersist,lastFlush;
     SyncSegment? segment;bool blocked;SessionMeta? lastSaved;
+    public event Action<SessionEntry>? SessionSaved;
     public SessionMeta? Current {get;private set;}
     public string Mode {get;private set;}="idle";
     public string? Error {get;set;}
@@ -30,10 +31,11 @@ public sealed class CaptureEngine : IDisposable
     public async Task TickAsync(double wall){if(Current is not null&&last is not null&&wall-last>=.6)await PauseAsync();}
     public async Task FinishAsync(string reason="manual")
     {
-        if(Current is null){if(obs.Owned)await Obs(async()=>{var recovered=await obs.StopAsync();if(recovered is not null&&lastSaved is not null){lastSaved.VideoPath=recovered;library.Save(lastSaved,"Saved");Error=null;}return null;});return;}
+        if(Current is null){if(obs.Owned)await Obs(async()=>{var recovered=await obs.StopAsync();if(recovered is not null&&lastSaved is not null){lastSaved.VideoPath=recovered;library.Save(lastSaved,"Saved");Error=null;SessionSaved?.Invoke(new(Wire.Decode<SessionMeta>(Wire.Encode(lastSaved)),paths.RowsPath(lastSaved.Id),"Saved"));}return null;});return;}
         Flush();var path=await Obs(async()=>{var output=await obs.StopAsync();if(output is not null)Current.VideoPath=output;return null;});
         Current.Ended=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()/1000d;Mode="Saved";Persist();writer!.Dispose();stream!.Dispose();writer=null;stream=null;
         lastSaved=Current;Current=null;lastRow=null;segment=null;negativeSince=null;Mode=Automatic?"armed":"idle";if(reason=="manual")blocked=true;
+        if(lastSaved.VideoPath is not null) SessionSaved?.Invoke(new(Wire.Decode<SessionMeta>(Wire.Encode(lastSaved)),paths.RowsPath(lastSaved.Id),"Saved"));
     }
     public async Task FeedAsync(TelemetryPacket row,double wall)
     {

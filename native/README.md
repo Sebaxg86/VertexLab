@@ -1,12 +1,12 @@
-# VertexLab Desktop — 0.3.4 alpha interna
+# VertexLab Desktop — 0.3.5 alpha interna
 
 Aplicación nativa **exclusiva para Windows x64**, escrita en C#/.NET 10 y WPF. No usa navegador, WebView ni un servidor HTTP para su interfaz. El MVP web y Python se conserva en la raíz y en el tag `v0.1.0-mvp`.
 
 ## Probar
 
-El instalador generado está en `native/artifacts/media-foundation-final/VertexLab-0.3.4-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
+El instalador generado está en `native/artifacts/lap-time-sync-final/VertexLab-0.3.5-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
 
-También se puede ejecutar `start-native.cmd` o `native/artifacts/media-foundation-final/app/VertexLab.Desktop.exe`. En configuración se elige el puerto UDP (5301 por defecto), la detección automática y la conexión local con OBS WebSocket v5. La detección automática empieza desactivada en una instalación nueva. Configura Data Out de Forza con IP `127.0.0.1` y el puerto elegido. No ejecutes simultáneamente el MVP y Native sobre el mismo puerto.
+También se puede ejecutar `start-native.cmd` o `native/artifacts/lap-time-sync-final/app/VertexLab.Desktop.exe`. En configuración se elige el puerto UDP (5301 por defecto), la detección automática y la conexión local con OBS WebSocket v5. La detección automática empieza desactivada en una instalación nueva. Configura Data Out de Forza con IP `127.0.0.1` y el puerto elegido. No ejecutes simultáneamente el MVP y Native sobre el mismo puerto.
 
 Cerrar la ventana **no detiene la captura**. El icono de la bandeja abre otra ventana o cierra el motor cuando no hay una sesión/orden OBS pendiente. Para finalizar, usa Guardar; después puedes cerrar el motor desde configuración o su menú de bandeja. Antes de actualizar o desinstalar, finaliza las grabaciones y cierra el motor.
 
@@ -20,7 +20,7 @@ La contraseña de OBS se transmite exclusivamente por IPC local del usuario y se
 - Biblioteca SQLite con WAL y metadatos JSON; filas JSONL compatibles con el MVP. Se vacían buffers periódicamente y al pausar/finalizar.
 - Recuperación de sesiones interrumpidas conservando filas completas. No garantiza recuperar el video ni controlar una grabación OBS tras un fallo del proceso.
 - Importación de `.vrtx` verificada por SHA-256 y exportación sin recodificar el video; transferencia por bloques. También se puede importar el JSON de una sesión finalizada del MVP, junto a su JSONL. En ese caso se copia la telemetría y el video queda referenciado en su ubicación original.
-- Análisis con la distribución racing del MVP: selector superior de sesiones, pestañas de vueltas, video principal y controles flotantes. Todo el recorrido colorea sus segmentos por vuelta; la selección múltiple compara por distancia y permite hasta dos videos simultáneos, con selectores independientes de la vuelta de referencia.
+- Análisis con la distribución racing del MVP: selector superior de sesiones, pestañas de vueltas, video principal y controles flotantes. Todo el recorrido colorea sus segmentos por vuelta; la selección múltiple compara por tiempo de vuelta Forza y permite hasta dos videos simultáneos, con selectores independientes de la vuelta de referencia.
 - Tablero nativo Al volante y LIVE ampliado: volante, pedales, fuerzas G, marcha, velocidad, luces RPM progresivas desde los extremos y aviso azul al 88%, temperaturas y deslizamiento de los cuatro neumáticos.
 - Siete gráficas con zoom compartido, desplazamiento horizontal, seguimiento durante la reproducción, dos filas visibles y ampliación al pulsar el nombre. Recorrido con zoom bajo el puntero y seguimiento del vehículo; resumen de vueltas y mejor vuelta destacada.
 - Sesiones destacadas, miniatura de trazada, emblemas y eliminación confirmada a la papelera. Si otra sesión referencia el mismo video, este se conserva. La configuración de captura/OBS se abre desde el engranaje en LIVE.
@@ -45,7 +45,7 @@ Por defecto: `%LOCALAPPDATA%/VertexLab/` con `library.db`, `settings.json` y `se
 
 ## Desarrollar y verificar
 
-Windows, SDK .NET 10 y Node 22 para la prueba cruzada con el lector web. Python solo se necesita al generar el XML del instalador. WiX 4.0.6 se instala en `native/.tools`, no globalmente.
+Windows 10 2004 o posterior, SDK .NET 10 y Node 22 para la prueba cruzada con el lector web. Python solo se necesita al generar el XML del instalador. WiX 4.0.6 se instala en `native/.tools`, no globalmente.
 
 ```powershell
 dotnet build native/VertexLab.sln
@@ -61,6 +61,7 @@ El workflow `Native Windows Preview` compila, prueba, empaqueta y ejecuta la pru
 - `VertexLab.Core`: modelos, decodificación, biblioteca, análisis, `.vrtx`, control OBS e IPC cliente.
 - `VertexLab.Capture`: proceso WinForms sin ventana principal, bandeja, receptor UDP y actor serializado de captura.
 - `VertexLab.Playback`: Windows Media Engine, SourceReader y presentación Direct3D 11.
+- `VertexLab.Sync`: verificación local del cronómetro grabado mediante OCR de Windows, después de guardar.
 - `VertexLab.Desktop`: WPF, reproducción local, visualizaciones e interacción. Se conecta al motor mediante Named Pipes.
 - `VertexLab.Tests`: protocolo, ciclo de captura, sincronización, recuperación, integridad y compatibilidad con el lector web.
 
@@ -120,3 +121,18 @@ Se sustituyó LibVLC conservando los controles y el diseño. El reloj principal 
 La prueba aislada de 60 s sobre la grabación real, comparando por distancia, produjo un error de selección de fotograma p95 de 7.84 ms, máximo 8.64 ms, una búsqueda inicial en cada video y cero fotogramas perdidos reportados por Media Engine en el principal. Es una medida de marcas de tiempo solicitadas/seleccionadas, no de la latencia física del monitor. No demuestra un multiplicador de rendimiento respecto al visor web ni funcionamiento bajo carga de Forza + OBS. Método y reporte: [PlaybackProbe](tools/VertexLab.PlaybackProbe/README.md).
 
 En esa grabación se identificó además una diferencia de origen de aproximadamente 100 ms entre imagen OBS y telemetría. Esta versión conserva sus referencias temporales y los datos originales; cambiar el reproductor no calibra esa diferencia de captura.
+
+
+### Comparación y verificación de captura 0.3.5
+
+Las vueltas seleccionadas comienzan en su propio cero. Video, gráficas y posiciones del recorrido comparten el tiempo transcurrido del cronómetro Forza (`LapTime`), interpolando únicamente entre muestras contiguas. La duración coincide con el reloj de vuelta; el tiempo de Windows no sustituye al del juego. Las grabaciones antiguas sin un reloj de vuelta utilizable conservan segundos transcurridos de captura. Una vuelta terminada mantiene su último fotograma mientras las demás acaban. Todo el recorrido mantiene la línea de tiempo original de la sesión.
+
+OBS confirma inicio y reanudación después de que avance su contador de video. La incertidumbre inicial incluye un fotograma y la cuantización del contador, además de la ida/vuelta de la petición; ya no presenta la latencia WebSocket como precisión de imagen. Pausa/reanudación siguen generando referencias independientes.
+
+Al guardar una grabación automática o manual con video se encola una verificación local en segundo plano. Se leen nueve imágenes distribuidas por cada tramo, se reconoce el cronómetro de carrera visible y se contrasta contra `RaceTime` real. Solo se corrigen referencias cuando existen suficientes coincidencias inequívocas y una dispersión no mayor que un fotograma. Se guardan las observaciones, corrección y dispersión en los metadatos; las muestras UDP originales permanecen intactas. El resultado viaja dentro del `.vrtx`, sin necesitar OCR en el visor móvil. El engranaje de análisis permite verificar sesiones existentes.
+
+**Límites:** no es una garantía de precisión subfotograma. El envío UDP, la imagen del juego y la cadencia del video son señales distintas. Sin cronómetro visible/legible (por ejemplo manejo libre), idioma OCR de Windows o suficientes muestras, la sincronización continúa marcada como estimada. Un tramo de menos de cuatro segundos no se calibra. Los errores de OBS no se ocultan. No se ha verificado todavía una carrera nueva bajo la carga simultánea de Forza/OBS en esta versión.
+
+En la grabación real H.264/AAC de 60 FPS: corrección medida +95.46 ms; nueve lecturas con dispersión máxima 13.93 ms. Una segunda lectura de nueve imágenes diferentes, después de corregir, produjo +1.23 ms de corrección residual y 12.24 ms de dispersión. Estas cifras verifican ese archivo, no todos los futuros archivos. Herramienta reproducible y reportes: [SyncProbe](tools/VertexLab.SyncProbe/README.md).
+
+Para adoptar esta versión, finaliza cualquier grabación, cierra el motor anterior desde su engranaje/bandeja y abre la nueva aplicación. Cerrar solamente la ventana no cambia el motor que ya está en ejecución.

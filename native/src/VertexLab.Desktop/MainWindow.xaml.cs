@@ -16,8 +16,8 @@ public partial class MainWindow : Window
     readonly DispatcherTimer statusTimer = new(DispatcherPriority.Background) { Interval = TimeSpan.FromMilliseconds(150) }, frameTimer = new(DispatcherPriority.Render) { Interval = TimeSpan.FromSeconds(1d / 60) };
     readonly PlaybackViewport viewport = new(); double lastFrameClock;double? pendingTimelineSeek;
     readonly CancellationTokenSource lifetime = new(); readonly ScrubController scrub = new();
-    bool videoReady, chartSeeking; bool liveConnected; bool polling, playing, internalTime, loading, videoFailed, selectionUpdating; SessionEntry? selected; SessionAnalysis? analysis; EngineStatus? engine;
-    double time, playRate = 1; int generation, reference, firstVideo, secondVideo; DateTime lastRefresh = DateTime.MinValue; string librarySignature = ""; readonly HashSet<int> chosen = []; SeriesView? expanded;
+    bool masterTail; bool refreshingLibrary; bool videoReady, chartSeeking; bool liveConnected; bool polling, playing, internalTime, loading, videoFailed, selectionUpdating; SessionEntry? selected; SessionAnalysis? analysis; EngineStatus? engine;
+    double time, comparisonElapsed, playRate = 1; int generation, reference, firstVideo, secondVideo; DateTime lastRefresh = DateTime.MinValue; string librarySignature = ""; readonly HashSet<int> chosen = []; SeriesView? expanded;
     static double SeekClock => Stopwatch.GetTimestamp() / (double)Stopwatch.Frequency;
     SeriesView[] Plots => [SpeedPlot, RpmPlot, ThrottlePlot, BrakePlot, LapTimePlot, RaceTimePlot, DistancePlot];
     static readonly Dictionary<string, string> Cars = ReadCars();
@@ -79,11 +79,18 @@ public partial class MainWindow : Window
     }
     void RefreshLibrary()
     {
-        var id = (SessionList.SelectedItem as LibraryItem)?.Meta.Id; var entries = library.List(); var signature = string.Join(";", entries.Select(s => $"{s.Meta.Id}:{s.Meta.Duration:R}:{s.Meta.Ended}:{s.Meta.Name}:{s.State}:{s.Meta.Featured}")); if (signature == librarySignature) return; librarySignature = signature;
-        SessionList.ItemsSource = entries.Select(e => new LibraryItem(e)).ToList(); LibraryInfo.Text = $"{entries.Count} sesiones · este equipo"; if (id is not null) SessionList.SelectedItem = SessionList.Items.Cast<LibraryItem>().FirstOrDefault(x => x.Meta.Id == id);
+        var id = (SessionList.SelectedItem as LibraryItem)?.Meta.Id; var entries = library.List();
+        if (selected is not null && !playing && !scrub.Active && entries.FirstOrDefault(x=>x.Meta.Id==selected.Meta.Id) is {} refreshed && refreshed.Meta.SyncMessage!=selected.Meta.SyncMessage)
+        { selected=refreshed; Message.Text=refreshed.Meta.SyncMessage??""; if(analysis is not null) Seek(chosen.Count>0?comparisonElapsed:time); }
+        var signature = string.Join(";", entries.Select(s => $"{s.Meta.Id}:{s.Meta.Duration:R}:{s.Meta.Ended}:{s.Meta.Name}:{s.State}:{s.Meta.Featured}")); if (signature == librarySignature) return; librarySignature = signature;
+        refreshingLibrary = true; SessionList.ItemsSource = entries.Select(e => new LibraryItem(e)).ToList(); LibraryInfo.Text = $"{entries.Count} sesiones · este equipo"; if (id is not null) SessionList.SelectedItem = SessionList.Items.Cast<LibraryItem>().FirstOrDefault(x => x.Meta.Id == id); refreshingLibrary = false;
     }
     async Task<bool> Command(Command command) { try { var reply = await CaptureClient.SendAsync(paths, command, lifetime.Token); Message.Text = reply.Ok ? "Orden confirmada. El motor continúa al cerrar la ventana." : reply.Error; await Poll(); return reply.Ok; } catch (Exception ex) { Message.Text = ex.Message; return false; } }
-    async void RecordClicked(object sender, RoutedEventArgs e) => await Command(new("start", Name: SessionName.Text));
+    async void RecordClicked(object sender,RoutedEventArgs e)
+    {
+        if(engine is {EngineVersion:null}){Message.Text="El motor anterior sigue abierto. Finaliza cualquier grabación y ciérralo desde configuración; vuelve a abrir la app.";return;}
+        await Command(new("start",Name:SessionName.Text));
+    }
     async void StopClicked(object sender, RoutedEventArgs e) { await Command(new("stop")); RefreshLibrary(); }
     void LibraryClicked(object sender, RoutedEventArgs e) { OptionsPopup.IsOpen = false; LibraryPopup.IsOpen = !LibraryPopup.IsOpen; }
     void RotateGear(double degrees)
@@ -105,7 +112,7 @@ public partial class MainWindow : Window
     }
     async void SessionSelected(object sender, SelectionChangedEventArgs e)
     {
-        if (SessionList.SelectedItem is not LibraryItem item || item.Meta.Id == selected?.Meta.Id) return;
+        if (refreshingLibrary || SessionList.SelectedItem is not LibraryItem item || item.Meta.Id == selected?.Meta.Id) return;
         if (item.Meta.Ended is null) { Message.Text = "Finaliza y guarda la captura para analizarla."; return; }
         LibraryPopup.IsOpen = false; ShowLoading(); ChartStack.Effect = new System.Windows.Media.Effects.BlurEffect { Radius = 9 };
         pendingTimelineSeek=null;scrub.Cancel(); int request = ++generation; videoReady = false; videoFailed = false; loading = true; playing = false; UpdatePlayIcon(); Video.Close(); Video.Source = null; CompareVideo.Close(); CompareVideo.Source = null; VideoHint.Visibility = Visibility.Visible; VideoHint.Text = "Cargando telemetría…";
@@ -115,7 +122,7 @@ public partial class MainWindow : Window
             SessionTitle.Text = item.Meta.Name; UpdateSessionWidth(); UpdateCar(item.Meta.CarOrdinal, item.Meta.CarClass, item.Meta.CarPI); ModeLabel.Text = "ANÁLISIS DE SESIÓN"; LiveDashboard.Visibility = CaptureControls.Visibility = Visibility.Collapsed; AnalysisLayout.Visibility = LapNavigation.Visibility = Transport.Visibility = Visibility.Visible; Dashboard.Reset(); LiveDashboard.Reset();
             chosen.Clear(); BuildLapNavigation(); BuildLapSummary(); ApplySelection(false);
             if (item.Meta.VideoPath is { } path && System.IO.File.Exists(path)) { var uri = new Uri(System.IO.Path.GetFullPath(path)); Video.Source = uri; Video.Volume = Volume.Value; Video.Play(); Video.Pause(); VideoHint.Text = "Preparando video…"; } else VideoHint.Text = "Esta sesión no tiene un video disponible.";
-            Message.Text = item.Entry.State == "Interrupted" ? "Sesión recuperada tras una interrupción." : ""; UpdateCursor();
+            Message.Text = item.Meta.SyncMessage ?? (item.Entry.State == "Interrupted" ? "Sesión recuperada tras una interrupción." : "Comparación desde el inicio de cada vuelta."); UpdateCursor();
         }
         catch (Exception ex) { Message.Text = "No se pudo abrir la sesión: " + ex.Message; VideoHint.Text = Message.Text; }
         finally { if (request == generation) { loading = false; HideLoading(request); UiMotion.Enter(Dashboard, 6, 220); UiMotion.Enter(ChartStack, 6, 220); } }
@@ -137,21 +144,21 @@ public partial class MainWindow : Window
     {
         UiMotion.Fade(LoadingOverlay, 0, 180, () => { if (request == generation) { LoadingOverlay.Visibility = Visibility.Collapsed; ChartStack.Effect = null; Video.Suppressed = CompareVideo.Suppressed = false; } });
     }
-    void VideoOpened(object sender, RoutedEventArgs e) { videoReady = true; VideoHint.Visibility = Visibility.Collapsed; PresentationMetrics.Info("decoded-video", $"{Video.NaturalVideoWidth}x{Video.NaturalVideoHeight}"); PresentationMetrics.Info("render-tier", (RenderCapability.Tier >> 16).ToString()); Seek(time); }
+    void VideoOpened(object sender, RoutedEventArgs e) { videoReady = true; VideoHint.Visibility = Visibility.Collapsed; PresentationMetrics.Info("decoded-video", $"{Video.NaturalVideoWidth}x{Video.NaturalVideoHeight}"); PresentationMetrics.Info("render-tier", (RenderCapability.Tier >> 16).ToString()); Seek(chosen.Count>0?comparisonElapsed:time); }
     void CompareOpened(object sender, RoutedEventArgs e) { CompareVideo.Pause(); SyncCompare(true); if (playing) CompareVideo.Play(); }
     void CompareFailed(object sender, VideoErrorEventArgs e) { Message.Text = "No se pudo preparar el segundo video: " + e.ErrorException.Message; }
     void VideoFailed(object sender, VideoErrorEventArgs e) { videoReady = false; videoFailed = true; VideoHint.Visibility = Visibility.Visible; VideoHint.Text = "No se pudo abrir el video. La telemetría sigue disponible."; Message.Text = e.ErrorException.Message; }
-    void VideoEnded(object sender, RoutedEventArgs e) { playing = false; CompareVideo.Pause(); UpdatePlayIcon(); }
+    void VideoEnded(object sender, RoutedEventArgs e) { if(chosen.Count>0){masterTail=true;return;} playing = false; CompareVideo.Pause(); UpdatePlayIcon(); }
     void PlayClicked(object sender, RoutedEventArgs e)
     {
         if (analysis is null) return;FlushTimelineSeek();
-        if (!playing && time >= Timeline.Maximum - .025) { time = Timeline.Minimum; if (VideoTarget(time, firstVideo) is { } restart) Video.Position = TimeSpan.FromSeconds(Math.Max(0, restart)); SyncCompare(true); UpdateCursor(); }
+        if (!playing && (chosen.Count>0?comparisonElapsed:time) >= Timeline.Maximum - .025) { masterTail = false; time = chosen.Count>0?analysis!.Laps.First(l=>l.Id==reference).Start:Timeline.Minimum; comparisonElapsed=0; if (VideoTarget(chosen.Count>0?comparisonElapsed:time, firstVideo) is { } restart) Video.Position = TimeSpan.FromSeconds(Math.Max(0, restart)); SyncCompare(true); UpdateCursor(); }
         bool next = !playing; if (scrub.Active) { scrub.End(SeekClock); ApplyScrub(); scrub.Cancel(); }
         playing = next; if (playing) viewport.ResumeFollow(); UpdatePlayIcon();
-        if (Video.Source is not null) { if (playing) { Video.Play(); if (SecondVideoColumn.Width.Value > 0) CompareVideo.Play(); } else { Video.Pause(); CompareVideo.Pause(); if (selected is not null && Analysis.FromVideo(selected.Meta, Video.Position.TotalSeconds) is { } stopped) time = ReferenceTime(stopped, firstVideo); SyncCompare(true); UpdateCursor(); } }
+        if (Video.Source is not null) { if (playing) { if(!masterTail) Video.Play(); if (SecondVideoColumn.Width.Value > 0) CompareVideo.Play(); } else { Video.Pause(); CompareVideo.Pause(); if (!masterTail && selected is not null && Analysis.FromVideo(selected.Meta, Video.Position.TotalSeconds) is { } stopped) time = ReferenceTime(stopped, firstVideo); SyncCompare(true); UpdateCursor(); } }
     }
-    void BackClicked(object sender, RoutedEventArgs e) => Seek(time - 5);
-    void ForwardClicked(object sender, RoutedEventArgs e) => Seek(time + 5);
+    void BackClicked(object sender, RoutedEventArgs e) => Seek((chosen.Count>0?comparisonElapsed:time)-5);
+    void ForwardClicked(object sender, RoutedEventArgs e) => Seek((chosen.Count>0?comparisonElapsed:time)+5);
     void TimeChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (!internalTime && !loading && analysis is not null) pendingTimelineSeek=e.NewValue; }
     void ScrubDown(object sender, MouseButtonEventArgs e) { if (e.ChangedButton != MouseButton.Left || analysis is null || loading || sender is SeriesView graph && e.GetPosition(graph).Y < 32) return; scrub.Begin(playing, SeekClock); playing = false; Video.Pause(); CompareVideo.Pause(); UpdatePlayIcon(); }
     void ScrubUp(object sender, MouseButtonEventArgs e) { if (e.ChangedButton == MouseButton.Left) Dispatcher.BeginInvoke(FinishDrag, DispatcherPriority.Input); }
@@ -160,55 +167,63 @@ public partial class MainWindow : Window
     void FinishDrag() {FlushTimelineSeek(); if (!scrub.Active) return; scrub.End(SeekClock); ApplyScrub(); }
     void Seek(double value)
     {
-        if (analysis is null || selected is null) return; time = Math.Clamp(value, 0, analysis.Duration);
-        if (chosen.Count > 0 && analysis.At(time) is { } hit) { if (hit.LapId != reference) time = analysis.AtDistance(reference, hit.Distance)?.Packet.T ?? time; var lap = analysis.Laps.First(l => l.Id == reference); time = Math.Clamp(time, lap.Start, lap.End); }
-        bool entering = !scrub.Active; scrub.Request(time, playing, SeekClock); playing = false; if (entering) { Video.Pause(); CompareVideo.Pause(); }
+        if (analysis is null || selected is null) return;
+        if(chosen.Count>0){comparisonElapsed=Math.Clamp(value,0,ComparisonDuration());time=LapComparison.TimeAtElapsed(analysis,reference,comparisonElapsed,true)??time;}
+        else time=Math.Clamp(value,0,analysis.Duration);
+        masterTail=chosen.Count>0 && comparisonElapsed>=LapComparison.Duration(analysis,firstVideo);
+        bool entering = !scrub.Active; scrub.Request(chosen.Count>0?comparisonElapsed:time, playing, SeekClock); playing = false; if (entering) { Video.Pause(); CompareVideo.Pause(); }
         viewport.ResumeFollow(); if (!chartSeeking && viewport.Follow(AnalysisAxis())) ApplyViewport(); UpdatePlayIcon(); UpdateCursor();
     }
     void ApplyScrub()
     {
         var target = scrub.TakeSeek(SeekClock); if (target is { } t && selected is not null && !videoFailed && Video.Source is not null && VideoTarget(t, firstVideo) is { } v) { Video.Position = TimeSpan.FromSeconds(Math.Max(0, v)); SyncCompare(true); }
-        if (!Video.IsSeeking && (SecondVideoColumn.Width.Value <= 0 || !CompareVideo.IsSeeking) && scrub.TryFinish(SeekClock, out bool resume)) { playing = resume; UpdatePlayIcon(); if (playing && !videoFailed && Video.Source is not null) { Video.Play(); if (SecondVideoColumn.Width.Value > 0) CompareVideo.Play(); } }
+        if (!Video.IsSeeking && (SecondVideoColumn.Width.Value <= 0 || !CompareVideo.IsSeeking) && scrub.TryFinish(SeekClock, out bool resume)) { playing = resume; UpdatePlayIcon(); if (playing && !videoFailed && Video.Source is not null) { if(!masterTail) Video.Play(); if (SecondVideoColumn.Width.Value > 0) CompareVideo.Play(); } }
     }
-    double ReferenceTime(double source, int sourceLap)
+    double ComparisonDuration() => analysis?.Laps.Where(l=>chosen.Contains(l.Id)).Select(l=>LapComparison.Duration(analysis,l.Id)).DefaultIfEmpty(0).Max() ?? 0;
+    double ReferenceTime(double source,int sourceLap)
     {
-        if (analysis is null || chosen.Count == 0) return source; return LapComparison.MapTime(analysis, source, sourceLap, reference) ?? time;
+        if(analysis is null||chosen.Count==0)return source;
+        comparisonElapsed=LapComparison.Elapsed(analysis,source,sourceLap);
+        return sourceLap==reference?source:LapComparison.TimeAtElapsed(analysis,reference,comparisonElapsed,true)??time;
     }
-    double? VideoTarget(double t, int videoLap)
+    double? VideoTarget(double target,int videoLap)
     {
-        if (selected is null || analysis is null) return null; if (chosen.Count == 0) return Analysis.ToVideo(selected.Meta, t);
-        var mapped = LapComparison.MapTime(analysis, t, reference, videoLap); return mapped is { } position ? Analysis.ToVideo(selected.Meta, position) : null;
+        if(selected is null||analysis is null)return null;
+        if(chosen.Count==0)return Analysis.ToVideo(selected.Meta,target);
+        var t=LapComparison.TimeAtElapsed(analysis,videoLap,target,true);
+        return t is {} value?Analysis.ToVideo(selected.Meta,value):null;
     }
     void SyncCompare(bool force)
     {
         if (SecondVideoColumn.Width.Value <= 0 || CompareVideo.Source is null) return;
-        if (VideoTarget(time, secondVideo) is not { } target) { CompareVideo.Pause(); return; }
+        if (VideoTarget(chosen.Count>0?comparisonElapsed:time, secondVideo) is not { } target) { CompareVideo.Pause(); return; }
         if (force) CompareVideo.Position = TimeSpan.FromSeconds(Math.Max(0, target));
         else CompareVideo.Follow(Math.Max(0, target));
     }
     void Frame()
     {
         long frameTick = Stopwatch.GetTimestamp(); double clock = SeekClock, delta = lastFrameClock > 0 ? clock - lastFrameClock : 1d / 60; lastFrameClock = clock;FlushTimelineSeek(); ApplyScrub(); if (selected is null || analysis is null || loading || !playing) return;
-        if (!videoFailed && Video.Source is not null && videoReady && VideoTarget(time, firstVideo) is not null) { double seconds = Video.Position.TotalSeconds; var mapped = Analysis.FromVideo(selected.Meta, seconds); if (mapped is not null)
+        if (!masterTail && !videoFailed && Video.Source is not null && videoReady && VideoTarget(chosen.Count>0?comparisonElapsed:time, firstVideo) is not null) { double seconds = Video.Position.TotalSeconds; var mapped = Analysis.FromVideo(selected.Meta, seconds); if (mapped is not null)
             {
                 double sourceTime = mapped.Value;
                 // Stop a shorter master at its lap boundary instead of playing the next lap.
                 var masterLap = chosen.Count > 0 ? analysis.Laps.FirstOrDefault(l => l.Id == firstVideo) : null;
                 if (masterLap is not null && sourceTime >= masterLap.End - .025)
                 {
-                    sourceTime = masterLap.End; playing = false; Video.Pause(); CompareVideo.Pause(); UpdatePlayIcon();
+                    sourceTime = masterLap.End; masterTail = true; Video.Pause();
                 }
                 time = ReferenceTime(sourceTime, firstVideo);
             } }
-        else time += Math.Min(.25, delta) * playRate;
-        var end = chosen.Count > 0 ? analysis.Laps.First(l => l.Id == reference).End : analysis.Duration; if (time >= end - .025) { time = end; playing = false; Video.Pause(); CompareVideo.Pause(); UpdatePlayIcon(); }
+        else if(chosen.Count>0){comparisonElapsed+=Math.Min(.25,delta)*playRate;time=LapComparison.TimeAtElapsed(analysis,reference,comparisonElapsed,true)??time;}else time+=Math.Min(.25,delta)*playRate;
+        double end=chosen.Count>0?ComparisonDuration():analysis.Duration;
+        if((chosen.Count>0?comparisonElapsed:time)>=end-.025){if(chosen.Count>0){comparisonElapsed=end;time=LapComparison.TimeAtElapsed(analysis,reference,end,true)??time;}else time=end;playing=false;Video.Pause();CompareVideo.Pause();UpdatePlayIcon();}
         SyncCompare(false); if (viewport.Follow(AnalysisAxis())) ApplyViewport(); UpdateCursor(); PresentationMetrics.Record("playback-update", Stopwatch.GetElapsedTime(frameTick).TotalMilliseconds);
     }
     void UpdateCursor()
     {
-        internalTime = true; Timeline.Value = time; internalTime = false; Clock.Text = ClockText(time); foreach (var plot in Plots) plot.SetTime(time); Route.SetTime(time, playing);
-        var p = analysis?.At(time); if (chosen.Count == 0 && p is not null) { selectionUpdating = true; LapPicker.SelectedItem = LapPicker.Items.Cast<LapItem>().FirstOrDefault(l => l.Id == p.LapId); selectionUpdating = false; }
-        RenderInstruments(p?.Packet); ObservedTime.Text = $"{(chosen.Count > 0 ? $"VUELTA {p?.Packet.Lap + 1}" : "SESIÓN")} · {SeriesView.DurationText(p?.Packet.T ?? time)}"; MapSpeed.Text = $"{p?.Packet.Speed:0} km/h"; MapDistance.Text = $"{p?.Distance:0} m";
+        internalTime = true; Timeline.Value = chosen.Count>0?comparisonElapsed:time; internalTime = false; Clock.Text = ClockText(chosen.Count > 0 ? AnalysisAxis() : time); foreach(var plot in Plots){if(chosen.Count>0)plot.SetElapsed(comparisonElapsed);else plot.SetTime(time);}if(chosen.Count>0)Route.SetElapsed(comparisonElapsed,playing);else Route.SetTime(time,playing);
+        var observedTime = chosen.Count > 0 && analysis is not null ? Math.Min(time,analysis.Laps.First(l=>l.Id==reference).End) : time; var p = analysis?.At(observedTime); if (chosen.Count == 0 && p is not null) { selectionUpdating = true; LapPicker.SelectedItem = LapPicker.Items.Cast<LapItem>().FirstOrDefault(l => l.Id == p.LapId); selectionUpdating = false; }
+        RenderInstruments(p?.Packet); ObservedTime.Text = $"{(chosen.Count > 0 ? $"VUELTA {p?.Packet.Lap + 1}" : "SESIÓN")} · {SeriesView.DurationText(chosen.Count > 0 ? AnalysisAxis() : time)}"; MapSpeed.Text = $"{p?.Packet.Speed:0} km/h"; MapDistance.Text = $"{p?.Distance:0} m";
     }
     static string ClockText(double seconds) => $"{(int)(seconds / 60)}:{seconds % 60:00.000}";
     void RenderInstruments(TelemetryPacket? p) { if (selected is null) LiveDashboard.SetPacket(p); else { Dashboard.AnimateReadings = playing; Dashboard.SetPacket(p); } }
@@ -247,17 +262,24 @@ public partial class MainWindow : Window
         VideoChoices.Visibility = chosen.Count > 1 ? Visibility.Visible : Visibility.Collapsed; SecondVideoColumn.Width = chosen.Count > 1 ? new GridLength(1, GridUnitType.Star) : new GridLength(0); CompareVideo.Pause();
         if (chosen.Count > 1 && Video.Source is not null && CompareVideo.Source is null) { CompareVideo.Source = Video.Source; CompareVideo.Play(); CompareVideo.Pause(); }
         else if (chosen.Count < 2) { CompareVideo.Close(); CompareVideo.Source = null; }
-        var first = available.FirstOrDefault(); internalTime = true; Timeline.Minimum = chosen.Count > 0 ? analysis.Laps.First(l => l.Id == reference).Start : 0; Timeline.Maximum = Math.Max(Timeline.Minimum + .001, chosen.Count > 0 ? analysis.Laps.First(l => l.Id == reference).End : analysis.Duration); DurationLabel.Text = ClockText(Timeline.Maximum); internalTime = false; BuildTimeline(); selectionUpdating = false; UpdatePan();
-        if (seek) Seek(chosen.Count > 0 ? analysis.Laps.First(l => l.Id == reference).Start : 0);
+        internalTime=true;Timeline.Minimum=0;Timeline.Maximum=Math.Max(.001,chosen.Count>0?ComparisonDuration():analysis.Duration);DurationLabel.Text=ClockText(Timeline.Maximum);internalTime=false;BuildTimeline();selectionUpdating=false;UpdatePan();
+        if(seek)Seek(0);
     }
-    void LapSelected(object sender, SelectionChangedEventArgs e)
+    void LapSelected(object sender,SelectionChangedEventArgs e)
     {
-        if (selectionUpdating || analysis is null || LapPicker.SelectedItem is not LapItem { Id: { } id }) return; double distance = analysis.At(time)?.Distance ?? 0; reference = id; foreach (var plot in Plots) plot.SetReference(id); Route.SetReference(id);
-        if (chosen.Count > 0) { internalTime = true; Timeline.Minimum = analysis.Laps.First(l => l.Id == id).Start; Timeline.Maximum = analysis.Laps.First(l => l.Id == id).End; internalTime = false; DurationLabel.Text = ClockText(Timeline.Maximum); BuildTimeline(); Seek(analysis.AtDistance(id, distance)?.Packet.T ?? Timeline.Minimum); } else Seek(analysis.Laps.First(l => l.Id == id).Start);
+        if(selectionUpdating||analysis is null||LapPicker.SelectedItem is not LapItem{Id:{} id})return;
+        reference=id;foreach(var plot in Plots)plot.SetReference(id);Route.SetReference(id);
+        if(chosen.Count>0){BuildTimeline();Seek(comparisonElapsed);}else Seek(analysis.Laps.First(l=>l.Id==id).Start);
     }
-    void VideoSelectionChanged(object sender, SelectionChangedEventArgs e) { if (selectionUpdating || analysis is null) return; if (FirstVideoPicker.SelectedItem is LapItem { Id: { } a }) firstVideo = a; if (SecondVideoPicker.SelectedItem is LapItem { Id: { } b }) secondVideo = b; Seek(time); }
-    void BuildTimeline() { Timeline.SetSegments(analysis?.Laps.Where(l => chosen.Count == 0 || l.Id == reference) ?? []); }
-    double AnalysisAxis() => chosen.Count > 0 ? analysis?.At(time)?.Distance ?? 0 : time;
+
+    void VideoSelectionChanged(object sender, SelectionChangedEventArgs e) { if (selectionUpdating || analysis is null) return; if (FirstVideoPicker.SelectedItem is LapItem { Id: { } a }) firstVideo = a; if (SecondVideoPicker.SelectedItem is LapItem { Id: { } b }) secondVideo = b; Seek(chosen.Count>0?comparisonElapsed:time); }
+    void BuildTimeline()
+    {
+        if(chosen.Count==0){Timeline.SetSegments(analysis?.Laps??[]);return;}
+        var lap=analysis?.Laps.FirstOrDefault(l=>l.Id==reference);
+        Timeline.SetSegments(lap is null?[]:[lap with{Start=0,End=LapComparison.Duration(analysis!,reference)}]);
+    }
+    double AnalysisAxis()=>chosen.Count>0?comparisonElapsed:time;
     void ApplyViewport() { foreach (var plot in Plots) plot.SetRange(viewport.Start, viewport.End); UpdatePan(); }
     void RefreshActivePlots()
     {
@@ -311,7 +333,13 @@ public partial class MainWindow : Window
         var dialog = new SaveFileDialog { Filter = "Sesión portable|*.vrtx", FileName = "VertexLab-session.vrtx" }; if (dialog.ShowDialog() != true) return;
         try { await Task.Run(() => PortableSession.ExportAsync(selected, dialog.FileName, new Progress<string>(text => Dispatcher.Invoke(() => Message.Text = text)), lifetime.Token)); Message.Text = "Archivo .vrtx exportado."; } catch (Exception ex) { Message.Text = ex.Message; }
     }
-    void FeatureClicked(object sender, RoutedEventArgs e) { if (selected is null) return; selected.Meta.Featured = !selected.Meta.Featured; library.Save(selected.Meta, selected.State); RefreshLibrary(); OptionsPopup.IsOpen = false; }
+    async void VerifyVideoClicked(object sender, RoutedEventArgs e)
+    {
+        OptionsPopup.IsOpen = false; if(selected is null)return;
+        if(engine is {EngineVersion:null}){Message.Text="Cierra el motor anterior desde configuración y vuelve a abrir la app para verificar el video.";return;}
+        if(await Command(new("verify-video",Name:selected.Meta.Id)))Message.Text="Verificando el cronómetro de las imágenes grabadas…";
+    }
+    void FeatureClicked(object sender, RoutedEventArgs e) { if (selected is null) return; selected = library.List().FirstOrDefault(e=>e.Meta.Id==selected.Meta.Id) ?? selected; selected.Meta.Featured = !selected.Meta.Featured; library.Save(selected.Meta, selected.State); RefreshLibrary(); OptionsPopup.IsOpen = false; }
     async void DeleteClicked(object sender, RoutedEventArgs e)
     {
         OptionsPopup.IsOpen = false; if (selected is null) return; if (MessageBox.Show(this, $"¿Eliminar «{selected.Meta.Name}» y su video? Esta acción los enviará a la papelera de Windows.", "Eliminar sesión", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;

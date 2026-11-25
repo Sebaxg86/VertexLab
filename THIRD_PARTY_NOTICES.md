@@ -56,13 +56,13 @@ Packages were pinned and their npm tarball SRI verified before vendoring. No thi
 
 ## Native desktop video (0.3.4 and later)
 
-- Vortice.MediaFoundation, Vortice.Direct3D11, Vortice.DXGI and Vortice.D3DCompiler 3.8.3 — Amer Koleci and contributors — MIT.
+- Vortice.MediaFoundation, Vortice.Direct3D11, Vortice.DXGI and Vortice.D3DCompiler 3.8.3 â€” Amer Koleci and contributors â€” MIT.
   Source: https://github.com/amerkoleci/Vortice.Windows
   Full notice: native/licenses/Vortice.Windows-MIT.txt.
-- Vortice.Mathematics 2.1.0 — Amer Koleci and contributors — MIT.
+- Vortice.Mathematics 2.1.0 â€” Amer Koleci and contributors â€” MIT.
   Source: https://github.com/amerkoleci/Vortice.Mathematics
   Full notice: native/licenses/Vortice.Mathematics-MIT.txt.
-- SharpGen.Runtime 2.4.2-beta — Alexandre Mutel, Jeremy Koritzinsky and contributors — MIT.
+- SharpGen.Runtime 2.4.2-beta â€” Alexandre Mutel, Jeremy Koritzinsky and contributors â€” MIT.
   Source: https://github.com/SharpGenTools/SharpGenTools
   Full notice: native/licenses/SharpGenTools-MIT.txt.
 
@@ -70,3 +70,10 @@ Windows Media Foundation / Media Engine and Direct3D are operating system compon
 LibVLC is no longer bundled in 0.3.4. Older native releases used LibVLCSharp.WPF
 3.10.2 and VideoLAN.LibVLC.Windows 3.0.24 under LGPL-2.1-or-later;
 the historical license remains at native/licenses/LGPL-2.1.txt.
+
+## Windows OCR / WinRT projection (native 0.3.5)
+
+- Microsoft.Windows.SDK.NET.Ref 10.0.19041.57 â€” Microsoft Corporation. Windows SDK license: https://aka.ms/WinSDKLicenseURL ; original terms included as native/licenses/Windows-SDK-license.rtf. The runtime projection Microsoft.Windows.SDK.NET.dll is included with desktop/capture.
+- WinRT.Runtime 2.2.0 â€” Microsoft Corporation â€” MIT. Source: https://github.com/microsoft/CsWinRT ; full notice native/licenses/CsWinRT-MIT.txt.
+
+Windows OCR itself is an operating system API. No OCR model, language pack or cloud service is bundled or downloaded by VertexLab.

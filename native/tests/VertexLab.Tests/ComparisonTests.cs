@@ -7,6 +7,26 @@ public class ComparisonTests
     static SessionAnalysis Session() => new() { Points = [new(new() { T = 0 }, 0, 0, false), new(new() { T = 5 }, 0, 50, false), new(new() { T = 10 }, 0, 100, false), new(new() { T = 11 }, 1, 0, false), new(new() { T = 15 }, 1, 50, false), new(new() { T = 19 }, 1, 100, false)], Laps = [new(0, 0, 0, 10, 100, 10, true), new(1, 1, 11, 19, 100, 8, false)] };
     [Fact] public void ComparisonAlignsDistanceInsteadOfElapsedTime() { var s = Session(); Assert.Equal(15, LapComparison.MapTime(s, 5, 0, 1)); Assert.Equal(5, LapComparison.MapTime(s, 15, 1, 0)); }
     [Fact] public void MappingCannotFallIntoTheFollowingLap() { var s = Session(); Assert.Equal(19, LapComparison.MapTime(s, 12, 0, 1)); Assert.Equal(11, LapComparison.MapTime(s, -10, 0, 1)); Assert.Null(LapComparison.MapTime(s, 5, 0, 99)); }
+    [Fact] public void ElapsedComparisonStartsBothLapsTogetherRegardlessOfSpeed()
+    {
+        var s=Session(); Assert.Equal(11,LapComparison.MapElapsedTime(s,0,0,1));
+        Assert.Equal(16,LapComparison.MapElapsedTime(s,5,0,1));
+        Assert.Equal(5,LapComparison.MapElapsedTime(s,16,1,0));
+    }
+    [Fact] public void ElapsedComparisonNeverShowsTheFollowingLapAfterAnEarlierFinish()
+    {
+        var s=Session(); Assert.Null(LapComparison.MapElapsedTime(s,9,0,1));
+        Assert.Equal(19,LapComparison.MapElapsedTime(s,8,0,1));
+        Assert.Null(LapComparison.MapElapsedTime(s,1,0,99));
+    }
+    [Fact] public void LapClockAlignmentUsesForzaTimeEvenWhenPcClockDrifts()
+    {
+        var s=new SessionAnalysis{Points=[new(new(){T=0,LapTime=0},0,0,false),new(new(){T=5,LapTime=5.02},0,50,false),new(new(){T=10,LapTime=10.04},0,100,false),new(new(){T=11,LapTime=0},1,0,false),new(new(){T=16,LapTime=5},1,50,false),new(new(){T=21,LapTime=10},1,100,false)],Laps=[new(0,0,0,10,100,10.04,false),new(1,1,11,21,100,10,false)]};
+        Assert.Equal(10.04,LapComparison.Duration(s,0),8);Assert.Equal(5.02,LapComparison.Elapsed(s,5,0),8);
+        Assert.Equal(16.02,LapComparison.MapElapsedTime(s,5,0,1)!.Value,8);
+        Assert.Equal(5,LapComparison.TimeAtElapsed(s,0,5.02)!.Value,8);
+        Assert.Null(LapComparison.TimeAtElapsed(s,1,10.04));Assert.Equal(21,LapComparison.TimeAtElapsed(s,1,10.04,true));
+    }
     [Fact] public void FastestExcludesPartialLaps() { Assert.Equal(1, Session().Fastest?.Id); }
     [Fact] public void DistanceLookupStaysOnRequestedLap() { var s = Session(); Assert.Equal(0, s.AtDistance(0, 1000)?.LapId); Assert.Equal(19, s.AtDistance(1, 1000)?.Packet.T); Assert.Null(s.AtDistance(3, 10)); }
     [Fact] public void ComparisonClockInterpolatesBetweenPackets()

@@ -13,6 +13,6 @@ if($LASTEXITCODE -ne 0){throw 'No se pudo preparar el instalador'}
 $wix=Join-Path $nativeRoot '.tools\wix.exe'
 if(!(Test-Path -LiteralPath $wix)){dotnet tool install wix --allow-roll-forward --version 4.0.6 --tool-path (Join-Path $nativeRoot '.tools')}
 if($LASTEXITCODE -ne 0){throw 'No se pudo preparar WiX'}
-& $wix build (Join-Path $OutputRoot 'VertexLab.wxs') -arch x64 -o (Join-Path $OutputRoot 'VertexLab-0.3.4-alpha.1-win-x64.msi')
+& $wix build (Join-Path $OutputRoot 'VertexLab.wxs') -arch x64 -o (Join-Path $OutputRoot 'VertexLab-0.3.5-alpha.1-win-x64.msi')
 if($LASTEXITCODE -ne 0){throw 'No se pudo construir el MSI'}
 Write-Host ('Instalador nativo listo en '+$OutputRoot)
