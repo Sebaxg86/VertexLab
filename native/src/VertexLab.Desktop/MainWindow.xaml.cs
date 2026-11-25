@@ -153,7 +153,10 @@ public partial class MainWindow : Window
     {
         if (analysis is null) return;FlushTimelineSeek();
         if (!playing && (chosen.Count>0?comparisonElapsed:time) >= Timeline.Maximum - .025) { masterTail = false; time = chosen.Count>0?analysis!.Laps.First(l=>l.Id==reference).Start:Timeline.Minimum; comparisonElapsed=0; if (VideoTarget(chosen.Count>0?comparisonElapsed:time, firstVideo) is { } restart) Video.Position = TimeSpan.FromSeconds(Math.Max(0, restart)); SyncCompare(true); UpdateCursor(); }
-        bool next = !playing; if (scrub.Active) { scrub.End(SeekClock); ApplyScrub(); scrub.Cancel(); }
+        bool next = !playing;
+        if(next && chosen.Count==0 && selected is not null && Video.Source is not null && VideoTarget(time,firstVideo) is null && selected.Meta.SyncSegments.FirstOrDefault(s=>s.TStart>time) is {} coverage)
+        {scrub.Begin(true,SeekClock);Seek(coverage.TStart);scrub.End(SeekClock);ApplyScrub();return;}
+        if (scrub.Active) { scrub.End(SeekClock); ApplyScrub(); scrub.Cancel(); }
         playing = next; if (playing) viewport.ResumeFollow(); UpdatePlayIcon();
         if (Video.Source is not null) { if (playing) { if(!masterTail) Video.Play(); if (SecondVideoColumn.Width.Value > 0) CompareVideo.Play(); } else { Video.Pause(); CompareVideo.Pause(); if (!masterTail && selected is not null && Analysis.FromVideo(selected.Meta, Video.Position.TotalSeconds) is { } stopped) time = ReferenceTime(stopped, firstVideo); SyncCompare(true); UpdateCursor(); } }
     }
@@ -203,8 +206,11 @@ public partial class MainWindow : Window
     void Frame()
     {
         long frameTick = Stopwatch.GetTimestamp(); double clock = SeekClock, delta = lastFrameClock > 0 ? clock - lastFrameClock : 1d / 60; lastFrameClock = clock;FlushTimelineSeek(); ApplyScrub(); if (selected is null || analysis is null || loading || !playing) return;
+        if(Video.Source is not null&&Video.IsSeeking)return;
         if (!masterTail && !videoFailed && Video.Source is not null && videoReady && VideoTarget(chosen.Count>0?comparisonElapsed:time, firstVideo) is not null) { double seconds = Video.Position.TotalSeconds; var mapped = Analysis.FromVideo(selected.Meta, seconds); if (mapped is not null)
             {
+                if(!Analysis.HasVideoCoverage(selected.Meta,seconds)&&Analysis.ToVideo(selected.Meta,mapped.Value) is {} afterGap&&afterGap>seconds+.025)
+                {Video.Pause();Video.Position=TimeSpan.FromSeconds(afterGap);Video.Play();return;}
                 double sourceTime = mapped.Value;
                 // Stop a shorter master at its lap boundary instead of playing the next lap.
                 var masterLap = chosen.Count > 0 ? analysis.Laps.FirstOrDefault(l => l.Id == firstVideo) : null;
@@ -223,6 +229,7 @@ public partial class MainWindow : Window
     {
         internalTime = true; Timeline.Value = chosen.Count>0?comparisonElapsed:time; internalTime = false; Clock.Text = ClockText(chosen.Count > 0 ? AnalysisAxis() : time); foreach(var plot in Plots){if(chosen.Count>0)plot.SetElapsed(comparisonElapsed);else plot.SetTime(time);}if(chosen.Count>0)Route.SetElapsed(comparisonElapsed,playing);else Route.SetTime(time,playing);
         var observedTime = chosen.Count > 0 && analysis is not null ? Math.Min(time,analysis.Laps.First(l=>l.Id==reference).End) : time; var p = analysis?.At(observedTime); if (chosen.Count == 0 && p is not null) { selectionUpdating = true; LapPicker.SelectedItem = LapPicker.Items.Cast<LapItem>().FirstOrDefault(l => l.Id == p.LapId); selectionUpdating = false; }
+        if(videoReady&&!videoFailed&&Video.Source is not null){bool covered=VideoTarget(chosen.Count>0?comparisonElapsed:time,firstVideo) is not null;VideoHint.Visibility=covered?Visibility.Collapsed:Visibility.Visible;if(!covered)VideoHint.Text="No hay video sincronizado para este instante.";}
         RenderInstruments(p?.Packet); ObservedTime.Text = $"{(chosen.Count > 0 ? $"VUELTA {p?.Packet.Lap + 1}" : "SESIÓN")} · {SeriesView.DurationText(chosen.Count > 0 ? AnalysisAxis() : time)}"; MapSpeed.Text = $"{p?.Packet.Speed:0} km/h"; MapDistance.Text = $"{p?.Distance:0} m";
     }
     static string ClockText(double seconds) => $"{(int)(seconds / 60)}:{seconds % 60:00.000}";

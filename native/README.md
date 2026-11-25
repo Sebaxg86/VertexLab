@@ -4,9 +4,9 @@ Aplicación nativa **exclusiva para Windows x64**, escrita en C#/.NET 10 y WPF. 
 
 ## Probar
 
-El instalador generado está en `native/artifacts/lap-time-sync-final/VertexLab-0.3.5-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
+El instalador generado está en `native/artifacts/lap-time-sync-ready/VertexLab-0.3.5-alpha.1-win-x64.msi`. Instala para el usuario actual, crea el acceso del menú Inicio y asocia `.vrtx`. Incluye .NET; el equipo de destino no necesita instalar Python, Node ni el SDK. Es una compilación de desarrollo sin firma de distribución. No se ha publicado como release del producto.
 
-También se puede ejecutar `start-native.cmd` o `native/artifacts/lap-time-sync-final/app/VertexLab.Desktop.exe`. En configuración se elige el puerto UDP (5301 por defecto), la detección automática y la conexión local con OBS WebSocket v5. La detección automática empieza desactivada en una instalación nueva. Configura Data Out de Forza con IP `127.0.0.1` y el puerto elegido. No ejecutes simultáneamente el MVP y Native sobre el mismo puerto.
+También se puede ejecutar `start-native.cmd` o `native/artifacts/lap-time-sync-ready/app/VertexLab.Desktop.exe`. En configuración se elige el puerto UDP (5301 por defecto), la detección automática y la conexión local con OBS WebSocket v5. La detección automática empieza desactivada en una instalación nueva. Configura Data Out de Forza con IP `127.0.0.1` y el puerto elegido. No ejecutes simultáneamente el MVP y Native sobre el mismo puerto.
 
 Cerrar la ventana **no detiene la captura**. El icono de la bandeja abre otra ventana o cierra el motor cuando no hay una sesión/orden OBS pendiente. Para finalizar, usa Guardar; después puedes cerrar el motor desde configuración o su menú de bandeja. Antes de actualizar o desinstalar, finaliza las grabaciones y cierra el motor.
 
@@ -136,3 +136,5 @@ Al guardar una grabación automática o manual con video se encola una verificac
 En la grabación real H.264/AAC de 60 FPS: corrección medida +95.46 ms; nueve lecturas con dispersión máxima 13.93 ms. Una segunda lectura de nueve imágenes diferentes, después de corregir, produjo +1.23 ms de corrección residual y 12.24 ms de dispersión. Estas cifras verifican ese archivo, no todos los futuros archivos. Herramienta reproducible y reportes: [SyncProbe](tools/VertexLab.SyncProbe/README.md).
 
 Para adoptar esta versión, finaliza cualquier grabación, cierra el motor anterior desde su engranaje/bandeja y abre la nueva aplicación. Cerrar solamente la ventana no cambia el motor que ya está en ejecución.
+
+Al reproducir se saltan únicamente las colas de video fuera de las referencias sincronizadas (inicio de OBS y pausa confirmada tarde); no son correcciones periódicas de deriva. El instante sin video disponible se indica explícitamente.

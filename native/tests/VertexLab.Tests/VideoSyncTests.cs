@@ -27,6 +27,12 @@ public class VideoSyncTests
         var check=VideoSyncVerifier.Evaluate(new(){Offset=.095},Segment,Rows(),Readings(.095),1d/60);
         Assert.Equal("verified",check.State);Assert.Equal(0,check.CorrectionSeconds,8);
     }
+    [Fact] public void RecordedPauseTailsAreNotMistakenForSynchronizedFootage()
+    {
+        var meta=new SessionMeta{SyncSegments=[new(){TStart=.3,TEnd=1,VideoStart=.1},new(){TStart=1,TEnd=2,VideoStart=1.4}]};
+        Assert.False(Analysis.HasVideoCoverage(meta,0));Assert.True(Analysis.HasVideoCoverage(meta,.5));
+        Assert.False(Analysis.HasVideoCoverage(meta,1.1));Assert.Equal(1,Analysis.FromVideo(meta,1.1));Assert.Equal(1.4,Analysis.ToVideo(meta,1));Assert.True(Analysis.HasVideoCoverage(meta,1.4));
+    }
     [Fact] public void ResumeSegmentsAreCheckedIndependently()
     {
         var segment=new SyncSegment{TStart=4,TEnd=10,VideoStart=20};

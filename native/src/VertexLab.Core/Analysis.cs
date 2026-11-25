@@ -55,6 +55,11 @@ public static class Analysis
         if(meta.Version!=2)return t+meta.Offset;
         foreach(var s in meta.SyncSegments.AsEnumerable().Reverse())if(t>=s.TStart-1e-6&&t<=s.TEnd+1e-6)return s.VideoStart+t-s.TStart+meta.Offset;return null;
     }
+    public static bool HasVideoCoverage(SessionMeta meta,double video)
+    {
+        if(meta.Version!=2)return true;double value=video-meta.Offset;
+        return meta.SyncSegments.Any(s=>value>=s.VideoStart-1e-6&&value<=s.VideoStart+s.TEnd-s.TStart+1e-6);
+    }
     public static double? FromVideo(SessionMeta meta,double video)
     {
         double value=video-meta.Offset;if(meta.Version!=2)return Math.Max(0,value);
