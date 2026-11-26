@@ -17,10 +17,11 @@ function renderHeaderBrand(){
     const fresh=age<2;
     return {online,active:online&&fresh&&!!state.packet.active,label:online?'LIVE':'OFF LIVE',detail:!stream?'Servidor desconectado · reconectando…':state?.udpError?'No se pudo abrir el receptor UDP':online?!fresh?'Señal interrumpida · esperando nuevos datos':state.packet.active?'Recibiendo telemetría en tiempo real':'Forza conectado · juego en pausa o menú':'Sin señal de Forza · esperando Data Out'};
   }
-  root.RaceConnection={connection};
+  function rememberCar(previous,state){const ordinal=state?.packet?.carOrdinal;if(ordinal>0&&state.carName)return {ordinal,name:state.carName};return state?.lastKnownCar?.ordinal>0?state.lastKnownCar:previous;}
+  root.RaceConnection={connection,rememberCar};
   if(typeof module!=='undefined')module.exports=root.RaceConnection;
 })(globalThis);
-let pickerTimer,streamConnected=false,liveReceivedAt=null;
+let pickerTimer,streamConnected=false,liveReceivedAt=null,liveCarMemory=null;
 function liveConnection(){return RaceConnection.connection(latest,Number.isFinite(latest?.packetAge)?performance.now()/1000:Date.now()/1000,streamConnected,liveReceivedAt);}
 function setViewText(id,value){if($(id).textContent!==value)$(id).textContent=value;}
 function setSessionPicker(open,restoreFocus=false){
@@ -42,8 +43,8 @@ function updateLiveView(){
   if(session||homeActive)return;
   setViewText('title',state.label);
   setViewText('view-eyebrow','SEGUNDO MONITOR');
-  const car=latest?.packet?.carOrdinal>0?latest.carName:null;
-  setViewText('session-info',state.online?car||'Forza conectado':'Esperando a Forza');
+  const car=liveCarMemory?.name||null;
+  setViewText('session-info','');
   setViewText('live-car',state.online?car||'Esperando datos del vehículo':'Listo para tu próxima salida');
   setViewText('live-connection',state.detail);
 }
@@ -108,15 +109,23 @@ function renderPickerSessions(items){
   for(const item of items){
     headerBrands.set(item.carOrdinal,item.brand);
     const button=createSessionButton(item);
-    button.onclick=action(async()=>{button.disabled=true;try{await load(item.id);setSessionPicker(false);setMenu(false);}finally{button.disabled=false;}});
+    button.onclick=action(async()=>{button.disabled=true;try{await transitionView(()=>load(item.id));setSessionPicker(false);setMenu(false);}finally{button.disabled=false;}});
     button.append(createAvailability(item));container.append(button);
   }
   container.scrollTop=scroll;renderHeaderBrand();
 }
+function setupQuickLiveTrail(){
+ const row=$('picker-live');let frame=0,x=0,y=0,tx=0,ty=0,inside=false;
+ const tail=document.createElement('i');tail.className='quick-neon-tail';tail.setAttribute('aria-hidden','true');row.append(tail);
+ function paint(){x+=(tx-x)*.18;y+=(ty-y)*.18;row.style.setProperty('--tail-x',x+'px');row.style.setProperty('--tail-y',y+'px');frame=inside&&Math.abs(tx-x)+Math.abs(ty-y)>.3?requestAnimationFrame(paint):0;}
+ row.addEventListener('pointermove',event=>{const rect=row.getBoundingClientRect();tx=event.clientX-rect.left;ty=event.clientY-rect.top;if(!inside){x=tx;y=ty;inside=true;}row.style.setProperty('--live-x',tx+'px');row.style.setProperty('--live-y',ty+'px');if(!frame)frame=requestAnimationFrame(paint);},{passive:true});
+ row.addEventListener('pointerleave',()=>{inside=false;cancelAnimationFrame(frame);frame=0;});
+}
 function setupViewUI(){
+ setupQuickLiveTrail();
   $('session-trigger').onclick=()=>setSessionPicker($('session-trigger').getAttribute('aria-expanded')!=='true');
   $('session-trigger').onkeydown=event=>{if(event.key==='ArrowDown'){event.preventDefault();setSessionPicker(true);$('picker-live').focus();}};
-  $('picker-live').onclick=()=>{if(globalThis.VertexBrowser?.enabled){openHome();$('message').textContent='LIVE requiere VertexConnect en tu PC de juego.';}else openLiveView();};
+  $('picker-live').onclick=()=>{if(globalThis.VertexBrowser?.enabled){transitionView(openHome);$('message').textContent='LIVE requiere VertexConnect en tu PC de juego.';}else transitionView(openLiveView);};
   document.addEventListener('pointerdown',event=>{if(!event.target.closest('.session-switcher'))setSessionPicker(false);});
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('session-trigger').getAttribute('aria-expanded')==='true')setSessionPicker(false,true);});
   $('session-picker').addEventListener('focusout',()=>{requestAnimationFrame(()=>{if(!document.querySelector('.session-switcher').contains(document.activeElement))setSessionPicker(false);});});

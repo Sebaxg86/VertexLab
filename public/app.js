@@ -541,7 +541,7 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 function live(state) {
-  latest = state;streamConnected=true;liveReceivedAt=Number.isFinite(state.packetAge)?performance.now()/1000:Date.now()/1000;updateLiveView();
+  liveCarMemory=RaceConnection.rememberCar(liveCarMemory,state);latest = state;streamConnected=true;liveReceivedAt=Number.isFinite(state.packetAge)?performance.now()/1000:Date.now()/1000;updateLiveView();
   const connected = liveConnection().online;
   $('status').textContent = state.udpError ? 'Error UDP: '+state.udpError : `UDP ${connected ? 'activo' : 'en espera'} · ${state.packets} paquetes · ${state.invalid} rechazados · ${state.dropped} perdidos en cola`;
   $('auto').checked = state.auto;

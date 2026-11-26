@@ -23,6 +23,7 @@
    {key:'delete-all',label:'Eliminar definitivamente…',enabled:!active&&!state.cloud,danger:true}
   ];
  }
- function snapTop(top,max,rowHeight=112){return Math.max(0,Math.min(Math.floor(Math.max(0,max)/rowHeight),Math.round(Math.max(0,top)/rowHeight)))*rowHeight;}
+ function snapTop(top,max,rowHeight=112){max=Math.max(0,max);top=Math.max(0,Math.min(max,top));if(max-top<=1)return max;return Math.max(0,Math.min(Math.floor(max/rowHeight),Math.round(top/rowHeight)))*rowHeight;}
+
  const api={page,windowRange,availability,actions,snapTop};root.VertexHomeModel=api;if(typeof module!=='undefined')module.exports=api;
 })(globalThis);

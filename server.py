@@ -42,6 +42,7 @@ class Runtime:
         self.live_lock = threading.Lock()
         self.live = dict(packet=None, packets=0, invalid=0, dropped=0, lastPacket=None, udpError=None)
         self.last_packet_monotonic = None
+        self.last_known_car = None
         self.pending = queue.Queue(maxsize=20000)
         self.closed = threading.Event()
         self.worker = threading.Thread(target=self.run, daemon=True)
@@ -55,6 +56,7 @@ class Runtime:
             result = self.recorder.status()
         with self.live_lock:
             result.update(self.live)
+            result['lastKnownCar'] = self.last_known_car
             result['packetAge'] = max(0, time.monotonic()-self.last_packet_monotonic) if self.last_packet_monotonic is not None else None
         result['telemetryVersion'] = 2
         if result['packet']:
@@ -252,6 +254,8 @@ class Runtime:
                 self.live['invalid'] += 1
             return
         with self.live_lock:
+            if row['carOrdinal'] > 0:
+                self.last_known_car = dict(ordinal=row['carOrdinal'], name=car_name(row['carOrdinal']))
             self.live.update(packet=row, lastPacket=time.time())
             self.last_packet_monotonic = time.monotonic()
             self.live['packets'] += 1

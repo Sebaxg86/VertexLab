@@ -28,7 +28,7 @@ function setupPortableUI(){
       const response=await fetch('/api/portable/import',{method:'POST',headers:{'Content-Type':'application/vnd.vertexlab.session+zip'},body:file});
       result=await response.json();if(!response.ok)throw Error(result.error);
       }
-      await list();await load(result.id);setSessionPicker(false);
+      await list();await transitionView(()=>load(result.id));setSessionPicker(false);
       $('message').textContent=globalThis.VertexBrowser?.enabled?($('library-save')?.checked?'Sesión guardada en la biblioteca de este dispositivo.':'Sesión temporal abierta. No se guardará en la biblioteca.'):'Sesión importada. Video, telemetría y análisis disponibles en este equipo.';
     }catch(error){$('message').textContent=error.message;}finally{await finish();}
   };

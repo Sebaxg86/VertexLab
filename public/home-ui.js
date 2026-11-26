@@ -10,7 +10,7 @@ function updateHomeLive(){
  const browser=!!globalThis.VertexBrowser?.enabled,online=!browser&&liveConnection().online;
  $('home-live-entry').dataset.online=String(online);
  setViewText('home-live-title',online?'LIVE':'LIVE OFF');
- setViewText('home-live-description',browser?'La captura en vivo requiere VertexConnect en tu PC de juego.':online?latest?.carName||'Forza conectado. Tu tablero está listo.':'Esperando la señal de Forza. Tu tablero está listo.');
+ setViewText('home-live-description',browser?'La captura en vivo requiere VertexConnect en tu PC de juego.':online?liveCarMemory?.name||'Forza conectado. Tu tablero está listo.':'Esperando la señal de Forza. Tu tablero está listo.');
  $('home-live-entry').setAttribute('aria-label',online?'Entrar a LIVE, Forza conectado':'Entrar al tablero, LIVE OFF');
 }
 function openHome(){
@@ -76,7 +76,7 @@ const HomeLibrary=(()=>{
   let card=cards.get(item.id);if(card)return card;
   card=document.createElement('article');card.className='home-session-row'+(item.featured?' is-featured':'');card.setAttribute('role','listitem');card.dataset.id=item.id;
   const button=createSessionButton(item);button.className='home-session-main';button.id='home-open-'+item.id;button.title=item.name||item.carName;button.setAttribute('aria-label','Analizar '+(item.name||item.carName));
-  button.onclick=action(async()=>{button.disabled=true;closeHomeMenus();try{await load(item.id);}finally{button.disabled=false;}});
+  button.onclick=action(async()=>{button.disabled=true;closeHomeMenus();try{await transitionView(()=>load(item.id));}finally{button.disabled=false;}});
   const availability=createAvailability(item);
   const gear=document.createElement('button');gear.id='home-settings-'+item.id;gear.className='home-row-settings';gear.innerHTML=$('settings-toggle').innerHTML;
   gear.setAttribute('aria-label','Opciones de '+(item.name||item.carName));gear.setAttribute('aria-expanded','false');gear.setAttribute('aria-controls','home-row-menu');gear.onclick=()=>openHomeSessionMenu(item,gear);
@@ -86,7 +86,7 @@ const HomeLibrary=(()=>{
   setViewText('home-library-count',total===null?'…':String(total));
   const empty=total===0&&!pending&&!failed;$('home-library-empty').hidden=!empty;$('home-library-scroll').hidden=empty;
   $('home-library-status').dataset.loading=String(!!pending);
-  setViewText('home-library-status',failed?'No se pudo cargar la biblioteca.':pending?'Cargando sesiones…':nextOffset===null?(total?'Todas tus sesiones están aquí.':''):'Desliza para ver más sesiones');
+  setViewText('home-library-status',failed?'No se pudo cargar la biblioteca.':pending?'Cargando sesiones…':nextOffset===null?'':'Desliza para ver más sesiones');
   $('home-library-retry').hidden=!failed;
   if(!homeActive)return;
   const scroll=$('home-library-scroll'),range=VertexHomeModel.windowRange(items.length,scroll.scrollTop,scroll.clientHeight,ROW);
@@ -124,7 +124,7 @@ const HomeLibrary=(()=>{
  return {refresh,loadMore,render,changed,removed,renderPicker,morePicker,schedule};
 })();
 function setupHome(){
- $('lab-logo').onclick=openHome;$('lab-logo').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openHome();}};
+ $('lab-logo').onclick=()=>transitionView(openHome);$('lab-logo').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();transitionView(openHome);}};
  $('home-live-entry').onclick=()=>{if(globalThis.VertexBrowser?.enabled){$('message').textContent='LIVE requiere VertexConnect en tu PC de juego. Aquí puedes analizar tus sesiones .vrtx.';return;}enterHomeLive();};
  $('home-import').onclick=$('home-empty-import').onclick=()=>$('portable-file').click();
  $('home-cloud-trigger').onclick=()=>{const open=$('home-cloud-trigger').getAttribute('aria-expanded')!=='true';closeHomeMenus();if(open){setHeaderDrop('home-cloud-menu','home-cloud-trigger',true);positionHomeMenu($('home-cloud-menu'),$('home-cloud-trigger'));}};
@@ -146,30 +146,26 @@ function setupHome(){
  updateHomeLive();
 }
 
-let liveTransitionBusy=false;
-async function enterHomeLive(){
- if(liveTransitionBusy)return;
- if(matchMedia('(prefers-reduced-motion: reduce)').matches){openLiveView();return;}
- liveTransitionBusy=true;
- let curtain=$('view-transition');if(!curtain){curtain=document.createElement('div');curtain.id='view-transition';curtain.setAttribute('aria-hidden','true');document.body.append(curtain);}
- curtain.classList.add('is-covering');
- await new Promise(resolve=>setTimeout(resolve,170));
- openLiveView();await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
- curtain.classList.remove('is-covering');setTimeout(()=>{liveTransitionBusy=false;},280);
+let viewTransitionTask=null;
+function transitionView(change){
+ if(viewTransitionTask)return viewTransitionTask;
+ if(matchMedia('(prefers-reduced-motion: reduce)').matches)return Promise.resolve().then(change);
+ const task=(async()=>{
+  let curtain=$('view-transition');if(!curtain){curtain=document.createElement('div');curtain.id='view-transition';curtain.setAttribute('aria-hidden','true');document.body.append(curtain);}
+  curtain.classList.add('is-covering');
+  try{await new Promise(resolve=>setTimeout(resolve,170));await change();await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));}
+  finally{curtain.classList.remove('is-covering');await new Promise(resolve=>setTimeout(resolve,280));}
+ })();
+ viewTransitionTask=task;task.finally(()=>{if(viewTransitionTask===task)viewTransitionTask=null;}).catch(()=>{});return task;
 }
+function enterHomeLive(){return transitionView(openLiveView);}
 function setupLibraryScroll(){
- const box=$('home-library-scroll');let timer=null,dragging=false,lastWheel=0,wheelTarget=0;
+ const box=$('home-library-scroll');let timer=null,dragging=false;
  const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
  function snap(){if(dragging||!homeActive)return;const target=VertexHomeModel.snapTop(box.scrollTop,box.scrollHeight-box.clientHeight);if(Math.abs(box.scrollTop-target)>.5)box.scrollTo({top:target,behavior:reduced()?'instant':'smooth'});}
  box.addEventListener('scroll',()=>{clearTimeout(timer);timer=setTimeout(snap,160);},{passive:true});
  box.addEventListener('pointerdown',()=>{dragging=true;});
  window.addEventListener('pointerup',()=>{if(dragging){dragging=false;clearTimeout(timer);timer=setTimeout(snap,160);}});
  window.addEventListener('pointercancel',()=>{dragging=false;timer=setTimeout(snap,160);});
- box.addEventListener('wheel',event=>{
-  if(event.ctrlKey||Math.abs(event.deltaX)>Math.abs(event.deltaY)||!event.deltaY)return;
-  event.preventDefault();const now=performance.now();if(now-lastWheel<125)return;
-  const base=now-lastWheel<450?wheelTarget:VertexHomeModel.snapTop(box.scrollTop,box.scrollHeight-box.clientHeight);
-  wheelTarget=VertexHomeModel.snapTop(base+Math.sign(event.deltaY)*112,box.scrollHeight-box.clientHeight);lastWheel=now;
-  box.scrollTo({top:wheelTarget,behavior:reduced()?'instant':'smooth'});
- },{passive:false});
+
 }
