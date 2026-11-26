@@ -14,14 +14,11 @@ function refreshTransport(){const b=playbackBounds();$('time').max=Math.max(0,b.
 function renderCarBadges(){
   $('session-info').replaceChildren();
   if(!session){$('session-info').textContent='Abre una sesión desde el menú';return;}
-  const meta=session.meta, classes=['D','C','B','A','S1','S2','X'];
+  const meta=session.meta,badge=createPerformanceBadge(meta.carClass,meta.carPI,true);
+  if(badge)$('session-info').append(badge);
   const year=/\b(19\d{2}|20\d{2})\b/.exec(meta.name)?.[0];
-  for(const [kind,value] of [['class',classes[meta.carClass]??'Clase —'],['pi',`PI ${meta.carPI??'—'}`],['year',year]]){
-    if(!value)continue;
-    const tag=document.createElement('span');tag.className='car-badge badge-'+kind;tag.textContent=value;
-    if(kind==='class')tag.dataset.class=classes[meta.carClass]||'';
-    $('session-info').append(tag);
-  }
+  if(year){const tag=document.createElement('span');tag.className='car-badge badge-year';tag.textContent=year;$('session-info').append(tag);}
+
 }
 function renderAnalysisMenu(){
   $('all-laps').setAttribute('aria-pressed',String(allMode));

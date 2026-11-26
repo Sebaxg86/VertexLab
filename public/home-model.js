@@ -25,5 +25,10 @@
  }
  function snapTop(top,max,rowHeight=112){max=Math.max(0,max);top=Math.max(0,Math.min(max,top));if(max-top<=1)return max;return Math.max(0,Math.min(Math.floor(max/rowHeight),Math.round(top/rowHeight)))*rowHeight;}
 
- const api={page,windowRange,availability,actions,snapTop};root.VertexHomeModel=api;if(typeof module!=='undefined')module.exports=api;
+ function classLabel(id,pi){
+  // FH6 Data Out: D=0 through X=7. Some senders still report X as 6 / 999.
+  if(id===6&&pi===999)return 'X';
+  return Number.isInteger(id)?['D','C','B','A','S1','S2','R','X'][id]||null:null;
+ }
+ const api={page,windowRange,availability,actions,snapTop,classLabel};root.VertexHomeModel=api;if(typeof module!=='undefined')module.exports=api;
 })(globalThis);

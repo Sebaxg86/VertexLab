@@ -121,9 +121,14 @@ async function loadSession(id) {
 }
 
 $('auto').onchange = action(async () => { await api('auto', {enabled: $('auto').checked}); });
-$('record').onclick = action(async () => {
+$('record').onclick = requestManualRecording;
+$('manual-record-confirm').onclick = action(async () => {
+  if(manualBusy||latest?.recording)return;
+  if(!liveConnection().online){$('manual-record-error').hidden=false;$('manual-record-error').textContent='Conecta Forza antes de iniciar la grabación.';return;}
   manualBusy=true;syncCaptureControls(latest);
-  try{await api('start',{name:$('name').value.trim()});await list();}finally{manualBusy=false;syncCaptureControls(latest);}
+  try{await api('start',{name:manualRequestedName});closeManualRecordingDialog();await list();}
+  catch(error){$('manual-record-error').hidden=false;$('manual-record-error').textContent=error.message;}
+  finally{manualBusy=false;syncCaptureControls(latest);}
 });
 $('stop').onclick = action(async () => {
   manualBusy=true;syncCaptureControls(latest);

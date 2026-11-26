@@ -35,3 +35,9 @@ test('library scrolling settles on a whole row at the top, except at the strict 
  assert.equal(snapTop(1000,1000),1000);assert.equal(snapTop(-1,1000),0);assert.equal(snapTop(50,50),50);
  for(let i=0;i<2000;i+=17)assert.equal(i>=1866?snapTop(i,1867):snapTop(i,1867)%112,i>=1866?1867:0);
 });
+
+test('FH6 classes include R and the shifted X, with compatible 999-point senders',()=>{
+ const {classLabel}=require('../public/home-model.js');
+ assert.equal(classLabel(5,900),'S2');assert.equal(classLabel(6,901),'R');assert.equal(classLabel(6,998),'R');assert.equal(classLabel(7,999),'X');assert.equal(classLabel(6,999),'X');
+ assert.equal(classLabel(3,613),'A');assert.equal(classLabel(99,800),null);assert.equal(classLabel(null,800),null);
+});

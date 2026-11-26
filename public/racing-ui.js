@@ -12,25 +12,43 @@ function setHeaderDrop(id,triggerId,open){
   if(open){panel.hidden=false;requestAnimationFrame(()=>{if(!panel.inert)panel.classList.add('is-open');});}
   else{panel.classList.remove('is-open');headerTimers.set(id,setTimeout(()=>{panel.hidden=true;},190));}
 }
+let manualRequestedName='',manualDialogTimer=null;
+function closeManualRecordingDialog(){
+ const dialog=$('manual-record-dialog');if(!dialog.open||dialog.classList.contains('is-closing'))return;
+ dialog.classList.add('is-closing');clearTimeout(manualDialogTimer);
+ manualDialogTimer=setTimeout(()=>{dialog.close();dialog.classList.remove('is-closing');if(!latest?.recording&&!homeActive&&!session)$('record-name-trigger').focus({preventScroll:true});},180);
+}
+function requestManualRecording(){
+ if(manualBusy||latest?.recording||!liveConnection().online)return;
+ manualRequestedName=$('name').value.trim();
+ setHeaderDrop('record-name-menu','record-name-trigger',false);
+ $('manual-record-summary').textContent=manualRequestedName||'Se asignará un nombre automático a esta sesión.';
+ $('manual-record-error').hidden=true;clearTimeout(manualDialogTimer);
+ const dialog=$('manual-record-dialog');dialog.classList.remove('is-closing');dialog.showModal();$('manual-record-cancel').focus();
+}
 function syncCaptureControls(state){
-  const recording=!!state?.recording;
-  $('record').hidden=recording;$('stop').hidden=!recording;
-  $('record').disabled=manualBusy;$('stop').disabled=manualBusy;
-  $('record-name-trigger').disabled=recording||manualBusy;
-  if(recording&&state.sessionName)setViewText('record-name-label',state.sessionName);
-  else if(!$('name').value.trim())setViewText('record-name-label','Nombrar sesión');
-  $('capture-state').dataset.mode=state?.mode||'idle';
-  setViewText('capture-state',recording?(state.mode==='paused'?'PAUSA · ':'REC · ')+(state.elapsed||0).toFixed(1)+' s':'');
+ const recording=!!state?.recording,controls=$('manual-controls');
+ controls.dataset.recording=String(recording);
+ $('record').disabled=manualBusy||recording;$('stop').hidden=!recording;$('stop').disabled=manualBusy;
+ $('record-name-trigger').disabled=recording||manualBusy;
+ setViewText('record-name-label','Grabación Manual');
+ if(recording&&$('record-name-trigger').getAttribute('aria-expanded')==='true')setHeaderDrop('record-name-menu','record-name-trigger',false);
+ $('capture-state').dataset.mode=state?.mode||'idle';
+ const elapsed=Math.max(0,state?.elapsed||0),minutes=Math.floor(elapsed/60),seconds=Math.floor(elapsed%60);
+ setViewText('capture-state',recording?(state.mode==='paused'?'PAUSA · ':'')+String(minutes).padStart(2,'0')+':'+String(seconds).padStart(2,'0'):'');
+ $('auto-detection-indicator').dataset.active=String(!!state?.auto);setViewText('auto-detection-label',state?.auto?'Activa':'Inactiva');
+ $('manual-record-confirm').disabled=manualBusy||recording;$('manual-record-cancel').disabled=manualBusy;
+ if(recording&&$('manual-record-dialog').open&&!manualBusy)closeManualRecordingDialog();
 }
 function setupRacingUI(){
   $('open-vertexconnect').onclick=action(async()=>{setMenu(false);const result=await api('connect/show',{});if(!result.nativeWindow)throw Error('Abre VertexConnect desde el acceso directo de VertexLab.');});
   $('analysis-settings').prepend($('feature-session'));
 
   const closeName=()=>setHeaderDrop('record-name-menu','record-name-trigger',false);
-  const saveName=()=>{setViewText('record-name-label',$('name').value.trim()||'Nombrar sesión');closeName();$('record-name-trigger').focus();};
   $('record-name-trigger').onclick=()=>{setMenu(false);const open=$('record-name-trigger').getAttribute('aria-expanded')!=='true';setHeaderDrop('record-name-menu','record-name-trigger',open);if(open)$('name').focus();};
-  $('name-done').onclick=saveName;
-  $('name').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();saveName();}};
+  $('name').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();requestManualRecording();}};
+  $('manual-record-cancel').onclick=closeManualRecordingDialog;
+  $('manual-record-dialog').addEventListener('cancel',event=>{event.preventDefault();if(!manualBusy)closeManualRecordingDialog();});
   document.addEventListener('pointerdown',event=>{if(!event.target.closest('.settings-wrap'))setMenu(false);if(!event.target.closest('.record-name-wrap'))closeName();});
   document.addEventListener('keydown',event=>{if(event.key!=='Escape')return;if($('settings-toggle').getAttribute('aria-expanded')==='true'){setMenu(false);$('settings-toggle').focus();}if($('record-name-trigger').getAttribute('aria-expanded')==='true'){closeName();$('record-name-trigger').focus();}});
   for(const [panel,trigger] of [['settings-panel','settings-toggle'],['record-name-menu','record-name-trigger']])$(panel).addEventListener('focusout',()=>requestAnimationFrame(()=>{if(!$(panel).parentElement.contains(document.activeElement))setHeaderDrop(panel,trigger,false);}));

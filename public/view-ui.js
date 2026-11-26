@@ -34,21 +34,22 @@ function setSessionPicker(open,restoreFocus=false){
   else{picker.classList.remove('is-open');pickerTimer=setTimeout(()=>{picker.hidden=true;},220);}
   if(restoreFocus)$('session-trigger').focus();
 }
+function createPerformanceBadge(classId,pi,compact=false){
+ const label=VertexHomeModel.classLabel(classId,pi);
+ if(!label||!Number.isFinite(pi)||pi<=0)return null;
+ const badge=document.createElement('span');badge.className='live-performance'+(compact?' compact-performance':'');badge.dataset.class=label;badge.setAttribute('aria-label','Clase '+label+', '+pi+' puntos');
+ const group=document.createElement('b');group.textContent=label;const points=document.createElement('span');points.textContent=pi;badge.append(group,points);return badge;
+}
 function renderLiveVehicle(id,online,fallback){
  const box=$(id),car=online?liveCarMemory:null;
  const brand=car?.brand||headerBrands.get(car?.ordinal);
  const key=JSON.stringify([car,brand,fallback]);if(box.dataset.vehicleKey===key)return;
  box.dataset.vehicleKey=key;box.classList.toggle('live-vehicle',!!car);box.replaceChildren();
  if(!car){box.textContent=fallback;return;}
- if(brand?.logo){const logo=document.createElement('img');logo.className='live-vehicle-brand'+(brand.logo.endsWith('.svg')?' brand-vector':'');logo.src=brand.logo;logo.alt=brand.name;logo.width=76;logo.height=72;logo.onerror=()=>{logo.hidden=true;};box.append(logo);}
- const details=document.createElement('span');details.className='live-vehicle-details';
- const name=document.createElement('span');name.className='live-vehicle-name';name.textContent=car.name;details.append(name);
- const label=['D','C','B','A','S1','S2','X'][car.carClass];
- if(label&&Number.isFinite(car.carPI)&&car.carPI>0){
-  const badge=document.createElement('span');badge.className='live-performance';badge.dataset.class=label;badge.setAttribute('aria-label','Clase '+label+', '+car.carPI+' puntos');
-  const group=document.createElement('b');group.textContent=label;const points=document.createElement('span');points.textContent=car.carPI;badge.append(group,points);details.append(badge);
- }
- box.append(details);
+ const row=document.createElement('span');row.className='live-vehicle-title-row';
+ if(brand?.logo){const logo=document.createElement('img');logo.className='live-vehicle-brand'+(brand.logo.endsWith('.svg')?' brand-vector':'');logo.src=brand.logo;logo.alt=brand.name;logo.width=76;logo.height=72;logo.onerror=()=>{logo.hidden=true;};row.append(logo);}
+ const name=document.createElement('span');name.className='live-vehicle-name';name.textContent=car.name;row.append(name);box.append(row);
+ const badge=createPerformanceBadge(car.carClass,car.carPI);if(badge)box.append(badge);
 }
 function updateLiveView(){
   updateHomeLive();
@@ -120,7 +121,7 @@ function createSessionButton(item){
     if(knownCar&&item.name!==item.carName){const label=document.createElement('span');label.className='picker-custom-name';label.textContent=item.name;text.append(label);}
     date.textContent=new Date(item.created*1000).toLocaleString()+(item.version===2&&!item.ended?' · En curso':'');
     if(item.featured){const star=document.createElement('span');star.className='session-star';star.textContent='★';star.setAttribute('aria-label','Sesión destacada');title.append(star);}
-    text.prepend(title);text.append(date);button.append(preview,brand,text);
+    const metadata=document.createElement('span');metadata.className='picker-session-metadata';const badge=createPerformanceBadge(item.carClass,item.carPI,true);if(badge)metadata.append(badge);metadata.append(date);text.prepend(title);text.append(metadata);button.append(preview,brand,text);
   return button;
 }
 function renderPickerSessions(items){
