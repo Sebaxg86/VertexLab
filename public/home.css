@@ -124,8 +124,9 @@ body:not([data-live-connected=true]) #picker-live:focus-visible{box-shadow:inset
  --home-scene-image:url('library-night-garage.webp');
  --home-scene-idle-opacity:.18;--home-scene-idle-brightness:.62;
  --home-scene-active-opacity:.50;--home-scene-active-brightness:.94;
- --home-scene-protection:linear-gradient(90deg,#08080adc 0%,#08080aa6 48%,#08080a70 100%),linear-gradient(180deg,#08080a75,transparent 52%,#08080a30);
+ --home-scene-protection:linear-gradient(90deg,#08080aa6 0%,#08080a6b 48%,#08080a40 100%),linear-gradient(180deg,#08080a45,transparent 52%,#08080a18);
 }
+.home-library-zone::before{background:linear-gradient(145deg,#3c15201f,#17101724 50%,transparent)}
 .home-library-atmosphere{position:absolute;inset:0;z-index:-2;isolation:isolate;overflow:hidden;pointer-events:none}
 .home-live-entry::before,.home-live-entry::after,.home-library-atmosphere::before,.home-library-atmosphere::after{content:'';position:absolute;inset:0;pointer-events:none}
 .home-live-entry::before,.home-library-atmosphere::before{
