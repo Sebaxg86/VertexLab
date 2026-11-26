@@ -13,15 +13,16 @@ function renderHeaderBrand(){
   function connection(state,now,stream=true,receivedAt){
     const elapsed=Number.isFinite(receivedAt)?Math.max(0,now-receivedAt):Infinity;
     const age=Number.isFinite(state?.packetAge)?state.packetAge+(Number.isFinite(elapsed)?elapsed:0):Math.max(0,now-(state?.lastPacket??-Infinity));
-    const online=!!((stream||elapsed<2)&&state?.packet&&!state.udpError&&age<5);
+    const online=!!((stream||elapsed<2)&&state?.packet&&!state.udpError&&(age<5||state.gameRunning===true));
     const fresh=age<2;
     return {online,active:online&&fresh&&!!state.packet.active,label:online?'LIVE':'OFF LIVE',detail:!stream?'Servidor desconectado · reconectando…':state?.udpError?'No se pudo abrir el receptor UDP':online?!fresh?'Señal interrumpida · esperando nuevos datos':state.packet.active?'Recibiendo telemetría en tiempo real':'Forza conectado · juego en pausa o menú':'Sin señal de Forza · esperando Data Out'};
   }
   function rememberCar(previous,state){const ordinal=state?.packet?.carOrdinal;if(ordinal>0&&state.carName)return {ordinal,name:state.carName};return state?.lastKnownCar?.ordinal>0?state.lastKnownCar:previous;}
-  root.RaceConnection={connection,rememberCar};
+  function rememberSample(previous,state){return state?.packet?.active&&state.packet.carOrdinal>0?state.packet:state?.lastDrivingPacket||previous;}
+  root.RaceConnection={connection,rememberCar,rememberSample};
   if(typeof module!=='undefined')module.exports=root.RaceConnection;
 })(globalThis);
-let pickerTimer,streamConnected=false,liveReceivedAt=null,liveCarMemory=null;
+let pickerTimer,streamConnected=false,liveReceivedAt=null,liveCarMemory=null,liveSampleMemory=null;
 function liveConnection(){return RaceConnection.connection(latest,Number.isFinite(latest?.packetAge)?performance.now()/1000:Date.now()/1000,streamConnected,liveReceivedAt);}
 function setViewText(id,value){if($(id).textContent!==value)$(id).textContent=value;}
 function setSessionPicker(open,restoreFocus=false){
@@ -46,7 +47,10 @@ function updateLiveView(){
   const car=liveCarMemory?.name||null;
   setViewText('session-info','');
   setViewText('live-car',state.online?car||'Esperando datos del vehículo':'Listo para tu próxima salida');
-  setViewText('live-connection',state.detail);
+  const offline=!state.online;
+  document.body.classList.toggle('live-offline',offline);
+  $('live-dashboard-host').inert=offline;
+  $('live-offline-notice').setAttribute('aria-hidden',String(!offline));
 }
 function setViewLayout(isLive){
   homeActive=false;document.body.classList.remove('home-view');$('lab-home').hidden=true;closeHomeMenus();

@@ -14,6 +14,7 @@ from pathlib import Path
 from http.server import ThreadingHTTPServer as BaseHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, quote, parse_qs
 
+from game_presence import GamePresence
 from obs_control import OBS
 from recorder import Recorder, car_name
 from telemetry import decode, analyze
@@ -43,6 +44,8 @@ class Runtime:
         self.live = dict(packet=None, packets=0, invalid=0, dropped=0, lastPacket=None, udpError=None)
         self.last_packet_monotonic = None
         self.last_known_car = None
+        self.last_driving_packet = None
+        self.game_presence = GamePresence()
         self.pending = queue.Queue(maxsize=20000)
         self.closed = threading.Event()
         self.worker = threading.Thread(target=self.run, daemon=True)
@@ -57,7 +60,9 @@ class Runtime:
         with self.live_lock:
             result.update(self.live)
             result['lastKnownCar'] = self.last_known_car
+            result['lastDrivingPacket'] = self.last_driving_packet
             result['packetAge'] = max(0, time.monotonic()-self.last_packet_monotonic) if self.last_packet_monotonic is not None else None
+        result['gameRunning'] = self.game_presence.get()
         result['telemetryVersion'] = 2
         if result['packet']:
             result['carName'] = car_name(result['packet']['carOrdinal'])
@@ -256,6 +261,8 @@ class Runtime:
         with self.live_lock:
             if row['carOrdinal'] > 0:
                 self.last_known_car = dict(ordinal=row['carOrdinal'], name=car_name(row['carOrdinal']))
+            if row['active'] and row['carOrdinal'] > 0:
+                self.last_driving_packet = row
             self.live.update(packet=row, lastPacket=time.time())
             self.last_packet_monotonic = time.monotonic()
             self.live['packets'] += 1

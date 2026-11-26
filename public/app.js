@@ -244,7 +244,7 @@ function draw(){renderDirty=true;}
 function paint() {
   if(homeActive)return;
   const renderStarted=performance.now();
-  if(!session){drawInstruments(liveConnection().active?latest.packet:null);return;}
+  if(!session){drawInstruments(liveConnection().online?liveSampleMemory:null);return;}
   frameRects=new Map(['map','telemetry-scroll',...metricDefs.map((m,i)=>i?'chart-'+m.key:'charts')].map(id=>[id,$(id).getBoundingClientRect()]));
   const laps=analysisSeries();
   const sample=observedSample();
@@ -304,7 +304,7 @@ function paint() {
   }else{map.fillStyle='#8997aa';map.font='12px Segoe UI';map.fillText('Abre una sesión para ver su recorrido.',20,h/2);}
   drawMetrics(sample, laps);
   const liveRecent = liveConnection().active;
-  drawInstruments(session ? sample : liveRecent && latest?.packet?.active ? latest.packet : null);
+  drawInstruments(session ? sample : liveConnection().online ? liveSampleMemory : null);
   if (session && hasVideo && !videoOnly() && toVideo(t) === null) $('clock').textContent += ' · sin video';
   frameRects=null;
   $('workspace').dataset.renderMs=(performance.now()-renderStarted).toFixed(2);
@@ -541,7 +541,7 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 function live(state) {
-  liveCarMemory=RaceConnection.rememberCar(liveCarMemory,state);latest = state;streamConnected=true;liveReceivedAt=Number.isFinite(state.packetAge)?performance.now()/1000:Date.now()/1000;updateLiveView();
+  liveCarMemory=RaceConnection.rememberCar(liveCarMemory,state);liveSampleMemory=RaceConnection.rememberSample(liveSampleMemory,state);latest = state;streamConnected=true;liveReceivedAt=Number.isFinite(state.packetAge)?performance.now()/1000:Date.now()/1000;updateLiveView();
   const connected = liveConnection().online;
   $('status').textContent = state.udpError ? 'Error UDP: '+state.udpError : `UDP ${connected ? 'activo' : 'en espera'} · ${state.packets} paquetes · ${state.invalid} rechazados · ${state.dropped} perdidos en cola`;
   $('auto').checked = state.auto;

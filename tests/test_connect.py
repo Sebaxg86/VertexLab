@@ -52,6 +52,15 @@ class ConnectTests(unittest.TestCase):
         self.runtime.ingest(packet(event=False, car=1006))
         self.assertEqual(self.runtime.status()['lastKnownCar']['ordinal'], 1006)
 
+    def test_pause_keeps_last_driving_packet_and_resume_replaces_it(self):
+        self.runtime.ingest(packet(event=False, active=True, stamp=100))
+        driving = self.runtime.status()['lastDrivingPacket']
+        self.runtime.ingest(packet(event=False, active=False, car=0, stamp=200))
+        self.assertEqual(self.runtime.status()['lastDrivingPacket'], driving)
+        self.assertFalse(self.runtime.status()['packet']['active'])
+        self.runtime.ingest(packet(event=False, active=True, stamp=300))
+        self.assertNotEqual(self.runtime.status()['lastDrivingPacket']['timestamp'], driving['timestamp'])
+
     def forza(self):
         self.runtime.ingest(packet(event=False))
         self.runtime.pending.join()

@@ -13,3 +13,17 @@ test('zero car IDs retain the last valid model',()=>{
  assert.deepEqual(rememberCar(null,{packet:{carOrdinal:0},lastKnownCar:car}),car);
  assert.equal(rememberCar(car,{packet:{carOrdinal:1006},carName:'Porsche'}).name,'Porsche');
 });
+
+test('paused driving values freeze, resume and survive a page reload',()=>{
+ const {rememberSample}=require('../public/view-ui.js');const sample={active:true,carOrdinal:1009,speed:84,rpm:6000};
+ assert.equal(rememberSample(null,{packet:sample}),sample);
+ assert.equal(rememberSample(sample,{packet:{active:false,carOrdinal:0,speed:0}}),sample);
+ assert.equal(rememberSample(null,{lastDrivingPacket:sample}),sample);
+ const resumed={...sample,speed:92};assert.equal(rememberSample(sample,{packet:resumed}),resumed);
+});
+test('running Forza keeps a paused session online across UDP silence, transport loss does not',()=>{
+ const state={packet:{active:false},packetAge:30,gameRunning:true};
+ assert.equal(connection(state,50,true,50).online,true);assert.equal(connection(state,50,true,50).active,false);
+ assert.equal(connection({...state,gameRunning:false},50,true,50).online,false);
+ assert.equal(connection(state,55,false,50).online,false);
+});
