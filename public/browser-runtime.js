@@ -87,7 +87,7 @@
     $('analysis-settings').hidden=!session;
     $('settings-title').textContent=session?'SESIÓN / ANÁLISIS':'CONFIGURACIÓN';
     if(matchMedia('(pointer: coarse)').matches)document.querySelector('.map-footer>span').textContent='Zoom con +/− · arrastra para mover';
-    $('picker-live').hidden=true;$('manual-controls').hidden=true;
+    $('picker-live').hidden=!session;document.body.dataset.liveConnected='false';$('manual-controls').hidden=true;
     $('export-session').lastElementChild.textContent='Guardar archivo .vrtx original';
     $('delete-session').lastElementChild.textContent='Cerrar sesión de esta pestaña';
     if(!session){$('title').textContent='Abre una sesión';$('view-eyebrow').textContent='VISOR PORTABLE';$('session-info').textContent='Biblioteca privada de este dispositivo';}
@@ -137,7 +137,7 @@
     $('library-save').onchange=action(async()=>VertexLibrary.setting('save',$('library-save').checked));
     VertexLibrary.setting('save').then(value=>{$('library-save').checked=value!==false;}).catch(()=>{$('library-save').checked=false;});
     $('library-persist').onclick=action(async()=>{$('library-storage-status').textContent=await navigator.storage?.persist?.()?'El navegador ha concedido almacenamiento persistente.':'El navegador no concedió persistencia. Conserva tus archivos originales.';});
-    const forget=document.createElement('button');forget.className='session-action';forget.textContent='Quitar de la biblioteca (conservar archivo)';forget.onclick=action(async()=>{if(!session)return;await VertexLibrary.forget(session.meta.id);saved.delete(session.meta.id);setMenu(false);$('message').textContent='Sesión retirada de la biblioteca. El archivo se conserva en su ubicación.';});$('analysis-settings').append(forget);
+    const forget=document.createElement('button');forget.className='session-action';forget.hidden=true;forget.textContent='Quitar de la biblioteca (conservar archivo)';forget.onclick=action(async()=>{if(!session)return;await VertexLibrary.forget(session.meta.id);saved.delete(session.meta.id);setMenu(false);$('message').textContent='Sesión retirada de la biblioteca. El archivo se conserva en su ubicación.';});$('analysis-settings').append(forget);
     // Reparent the video on small screens so sticky spans the entire analysis, not just Al volante.
     const media=matchMedia('(max-width:600px)'),video=document.querySelector('.video-panel'),placeholder=document.createComment('video position');video.before(placeholder);
     const position=()=>{if(media.matches)$('workspace').prepend(video);else placeholder.after(video);};media.addEventListener('change',position);position();

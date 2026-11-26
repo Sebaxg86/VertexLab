@@ -38,7 +38,7 @@ function updateLiveView(){
   const state=liveConnection();
   document.body.dataset.liveConnected=String(state.online);
   setViewText('picker-live-status',state.online?'Conectado':'Sin señal');
-  $('picker-live').setAttribute('aria-current',session?'false':'page');
+  $('picker-live').setAttribute('aria-current',session?'false':'page');$('picker-live').hidden=!session;
   if(session||homeActive)return;
   setViewText('title',state.label);
   setViewText('view-eyebrow','SEGUNDO MONITOR');
@@ -109,14 +109,14 @@ function renderPickerSessions(items){
     headerBrands.set(item.carOrdinal,item.brand);
     const button=createSessionButton(item);
     button.onclick=action(async()=>{button.disabled=true;try{await load(item.id);setSessionPicker(false);setMenu(false);}finally{button.disabled=false;}});
-    container.append(button);
+    button.append(createAvailability(item));container.append(button);
   }
   container.scrollTop=scroll;renderHeaderBrand();
 }
 function setupViewUI(){
   $('session-trigger').onclick=()=>setSessionPicker($('session-trigger').getAttribute('aria-expanded')!=='true');
   $('session-trigger').onkeydown=event=>{if(event.key==='ArrowDown'){event.preventDefault();setSessionPicker(true);$('picker-live').focus();}};
-  $('picker-live').onclick=openLiveView;
+  $('picker-live').onclick=()=>{if(globalThis.VertexBrowser?.enabled){openHome();$('message').textContent='LIVE requiere VertexConnect en tu PC de juego.';}else openLiveView();};
   document.addEventListener('pointerdown',event=>{if(!event.target.closest('.session-switcher'))setSessionPicker(false);});
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('session-trigger').getAttribute('aria-expanded')==='true')setSessionPicker(false,true);});
   $('session-picker').addEventListener('focusout',()=>{requestAnimationFrame(()=>{if(!document.querySelector('.session-switcher').contains(document.activeElement))setSessionPicker(false);});});

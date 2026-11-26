@@ -23,6 +23,9 @@ function syncCaptureControls(state){
   setViewText('capture-state',recording?(state.mode==='paused'?'PAUSA · ':'REC · ')+(state.elapsed||0).toFixed(1)+' s':'');
 }
 function setupRacingUI(){
+  $('open-vertexconnect').onclick=action(async()=>{setMenu(false);const result=await api('connect/show',{});if(!result.nativeWindow)throw Error('Abre VertexConnect desde el acceso directo de VertexLab.');});
+  $('analysis-settings').prepend($('feature-session'));
+
   const closeName=()=>setHeaderDrop('record-name-menu','record-name-trigger',false);
   const saveName=()=>{setViewText('record-name-label',$('name').value.trim()||'Nombrar sesión');closeName();$('record-name-trigger').focus();};
   $('record-name-trigger').onclick=()=>{setMenu(false);const open=$('record-name-trigger').getAttribute('aria-expanded')!=='true';setHeaderDrop('record-name-menu','record-name-trigger',open);if(open)$('name').focus();};

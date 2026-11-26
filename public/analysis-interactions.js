@@ -5,6 +5,7 @@ function updateSessionActions(){
  $('feature-label').textContent=featured?'Quitar destacado':'Destacar sesión';
  $('feature-session').querySelector('.feature-icon').textContent=featured?'★':'☆';
  $('delete-session').disabled=latest?.recording===session?.meta.id;
+ const cloud=$('analysis-cloud-actions');if(cloud){cloud.replaceChildren();for(const label of ['Sincronizar con Google Drive','Descargar desde Google Drive','Eliminar de Google Drive']){const button=document.createElement('button');button.className='session-action sync-placeholder';button.disabled=true;button.innerHTML=HomeGlyphs.cloud;const text=document.createElement('span');text.textContent=label;const note=document.createElement('small');note.textContent='Próximamente';text.append(note);button.append(text);cloud.append(button);}}
  $('export-session').disabled=!session||latest?.recording===session?.meta.id||(session.meta.version===2&&!session.meta.ended);
 }
 function clearAnalysisHover(){analysisHover=null;legendHoverLap=null;$('analysis-hover').hidden=true;$('map').removeAttribute('data-hover-lap');}

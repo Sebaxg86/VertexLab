@@ -28,3 +28,10 @@ test('cloud actions are scaffolding and never enable unsupported cloud deletion'
  assert.equal(cloud[0].label,'Quitar favorito');assert.ok(!cloud.some(a=>a.key==='delete-local'));
  assert.equal(cloud.find(a=>a.key==='download').enabled,false);assert.equal(cloud.find(a=>a.key==='delete-all').enabled,false);
 });
+
+test('library scrolling settles on a whole row at the top, even at the bottom bound',()=>{
+ const {snapTop}=require('../public/home-model.js');
+ assert.equal(snapTop(151,1000),112);assert.equal(snapTop(180,1000),224);
+ assert.equal(snapTop(1000,1000),896);assert.equal(snapTop(-1,1000),0);assert.equal(snapTop(50,50),0);
+ for(let i=0;i<2000;i+=17)assert.equal(snapTop(i,1867)%112,0);
+});
