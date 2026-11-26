@@ -89,7 +89,7 @@ def show_error(message):
 def desktop(runtime, config, url):
     import webview
     import pystray
-    from PIL import Image, ImageDraw
+    from PIL import Image
 
     if os.name == 'nt':
         import ctypes
@@ -163,8 +163,7 @@ def desktop(runtime, config, url):
 
     def start_tray():
         nonlocal tray
-        image = Image.new('RGB', (64, 64), '#09090c')
-        ImageDraw.Draw(image).polygon([(9, 12), (22, 12), (32, 42), (43, 12), (56, 12), (38, 54), (26, 54)], fill='#ff344c')
+        image = Image.open(ROOT/'public/vertexlab.ico').convert('RGBA')
         try:
             tray = pystray.Icon('VertexConnect', image, 'VertexConnect · captura local', pystray.Menu(
                 pystray.MenuItem('Abrir VertexLab', lambda *_: Bridge().open_vertexlab(),

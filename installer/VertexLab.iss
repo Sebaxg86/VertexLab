@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.2.8"
+  #define AppVersion "0.2.9"
 #endif
 [Setup]
 AppId={{72CD7404-CBB3-4DCD-85CC-EE0249E045AA}
@@ -27,6 +27,8 @@ CloseApplications=yes
 [Languages]
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 [Files]
+Source: "assets\welcome.bmp"; Flags: dontcopy
+Source: "assets\finished.bmp"; Flags: dontcopy
 Source: "..\dist\VertexConnect\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
 Name: "{group}\VertexLab"; Filename: "{app}\VertexConnect.exe"
@@ -47,10 +49,9 @@ Type: files; Name: "{autodesktop}\VertexLab.lnk"
 var
   DesktopShortcut, StartConnect: TNewCheckBox;
 
-procedure AddArtPanel(Page: TNewNotebookPage);
+procedure AddArtPanel(Page: TNewNotebookPage; Artwork: String);
 var
   Panel: TPanel;
-  Brand: TNewStaticText;
   Backdrop: TBitmapImage;
 begin
   Panel := TPanel.Create(WizardForm);
@@ -61,21 +62,8 @@ begin
   Backdrop := TBitmapImage.Create(WizardForm);
   Backdrop.Parent := Panel;
   Backdrop.SetBounds(0, 0, Panel.Width, Panel.Height);
-  Backdrop.Bitmap.Width := 1;
-  Backdrop.Bitmap.Height := 1;
-  Backdrop.Bitmap.Canvas.Pixels[0, 0] := $100C0C;
+  Backdrop.Bitmap.LoadFromFile(ExpandConstant('{tmp}\') + Artwork);
   Backdrop.Stretch := True;
-  Brand := TNewStaticText.Create(WizardForm);
-  Brand.Parent := Panel;
-  Brand.AutoSize := False;
-  Brand.SetBounds(ScaleX(20), (Panel.Height div 2) - ScaleY(20), Panel.Width - ScaleX(40), ScaleY(40));
-  Brand.Caption := 'VERTEXLAB';
-  Brand.Color := $100C0C;
-  Brand.Font.Name := 'Segoe UI';
-  Brand.Font.Size := 23;
-  Brand.Font.Style := [fsBold, fsItalic];
-  Brand.Font.Color := $4F39FF;
-  Brand.Alignment := taCenter;
   Log(Format('Artwork panel: %d x %d pixels', [Panel.Width, Panel.Height]));
 end;
 
@@ -85,8 +73,10 @@ var
 begin
   WizardForm.WizardBitmapImage.Visible := False;
   WizardForm.WizardBitmapImage2.Visible := False;
-  AddArtPanel(WizardForm.WelcomePage);
-  AddArtPanel(WizardForm.FinishedPage);
+  ExtractTemporaryFile('welcome.bmp');
+  ExtractTemporaryFile('finished.bmp');
+  AddArtPanel(WizardForm.WelcomePage, 'welcome.bmp');
+  AddArtPanel(WizardForm.FinishedPage, 'finished.bmp');
   TextLeft := (WizardForm.WelcomePage.ClientWidth div 2) + ScaleX(22);
   TextWidth := WizardForm.WelcomePage.ClientWidth - TextLeft - ScaleX(22);
   WizardForm.WelcomeLabel1.SetBounds(TextLeft, ScaleY(28), TextWidth, ScaleY(112));

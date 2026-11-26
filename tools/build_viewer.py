@@ -3,8 +3,6 @@ import hashlib
 import json
 import re
 import shutil
-import struct
-import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,31 +34,10 @@ html = re.sub(r'(src|href)="([^"/?]+\.(?:js|css))"', version_asset, html)
 (OUT / '.nojekyll').write_text('')
 
 
-def icon(size):
-    points = [(70, 80), (145, 80), (256, 360), (366, 80), (442, 80), (287, 442), (223, 442)]
-    def inside(x, y):
-        value = False
-        for i, (ax, ay) in enumerate(points):
-            bx, by = points[i-1]
-            if (ay > y) != (by > y) and x < (bx-ax)*(y-ay)/(by-ay)+ax:
-                value = not value
-        return value
-    rows = bytearray()
-    for y in range(size):
-        rows.append(0)
-        for x in range(size):
-            rows.extend((245, 65, 91, 255) if inside(x*512/size,y*512/size) else (16, 13, 19, 255))
-    def chunk(kind, data):
-        return struct.pack('>I', len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data))
-    return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',size,size,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(rows))+chunk(b'IEND',b'')
-
-
-for size in (192, 512):
-    (OUT / f'icon-{size}.png').write_bytes(icon(size))
 (OUT / 'manifest.webmanifest').write_text(json.dumps(dict(name='VertexLab', short_name='VertexLab',
     description='Video y telemetría sincronizados desde tus archivos .vrtx', start_url='./', scope='./',
     display='standalone', background_color='#100d13', theme_color='#141014', lang='es',
-    icons=[dict(src=f'icon-{size}.png',sizes=f'{size}x{size}',type='image/png',purpose='any maskable') for size in (192,512)]),ensure_ascii=False),encoding='utf-8')
+    icons=[dict(src=f'icon-{size}.png',sizes=f'{size}x{size}',type='image/png',purpose='any') for size in (192,512)]),ensure_ascii=False),encoding='utf-8')
 files = sorted(p.name for p in OUT.iterdir() if p.is_file() and p.name != 'sw.js' and not p.name.startswith('.'))
 revision = hashlib.sha256(b''.join((OUT / name).read_bytes() for name in files)).hexdigest()[:16]
 worker = """importScripts('media-service-worker.js');
