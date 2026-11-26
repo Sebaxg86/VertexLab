@@ -18,6 +18,8 @@ class ConnectRuntime(Runtime):
         self.udp_stop = threading.Event()
         self.setup_error = None
         self.show_window = None
+        self.monitor_stop = threading.Event()
+        self.monitor_thread = None
         super().__init__(config.values['dataPath'], obs)
         self.recorder.auto = False
         self.recorder.mode = 'idle'
@@ -35,6 +37,25 @@ class ConnectRuntime(Runtime):
         self.recorder.auto = self.ready() and self.config.values['auto']
         self.recorder.mode = 'armed' if self.recorder.auto else 'idle'
         self.bind_udp(self.udp_port)
+        if self.monitor_thread is None:
+            self.monitor_thread = threading.Thread(target=self.watch_obs, daemon=True)
+            self.monitor_thread.start()
+
+    def watch_obs(self):
+        while not self.monitor_stop.wait(2):
+            if not self.lock.acquire(blocking=False):
+                continue
+            try:
+                obs = self.recorder.obs
+                probe = getattr(obs, 'probe_connection', None)
+                if obs.ws is not None and probe and not probe():
+                    self.recorder.auto = False
+                    if self.recorder.meta or obs.owned:
+                        self.recorder.error = obs.error
+                    else:
+                        self.recorder.mode = 'idle'
+            finally:
+                self.lock.release()
 
     def status(self):
         result = super().status()
@@ -127,11 +148,24 @@ class ConnectRuntime(Runtime):
                 if not self.forza_confirmed and not self.config.values['complete']:
                     raise ValueError('Primero conecta Forza')
                 port = ConnectConfig.port(body.get('port', 4455))
+                self.config.save(obsPort=port)
                 password = str(body.get('password') or self.config.password())
                 # Protect before connecting; never persist plaintext credentials.
                 secret = protect_password(password)
                 super().execute('obs', dict(port=port, password=password))
                 self.config.save(obsPort=port, obsSecret=secret)
+                self.setup_error = None
+                r.auto = self.ready() and self.config.values['auto']
+                r.mode = 'armed' if r.auto else 'idle'
+            elif name == 'connect/video':
+                if not self.config.values['complete']:
+                    raise ValueError('Completa la configuración inicial primero')
+                only = body.get('telemetryOnly')
+                if not isinstance(only, bool):
+                    raise ValueError('Modo de video inválido')
+                if only:
+                    super().execute('obs-disable', {})
+                self.config.save(telemetryOnly=only)
                 self.setup_error = None
                 r.auto = self.ready() and self.config.values['auto']
                 r.mode = 'armed' if r.auto else 'idle'
@@ -167,5 +201,8 @@ class ConnectRuntime(Runtime):
         return result
 
     def close(self):
+        self.monitor_stop.set()
+        if self.monitor_thread:
+            self.monitor_thread.join(timeout=1)
         self.stop_udp()
         super().close()

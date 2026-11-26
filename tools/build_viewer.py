@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / '_site'
 OUT.mkdir(exist_ok=True)
 for source in (ROOT / 'public').iterdir():
-    if source.name in ('connect.html', 'connect.css', 'connect.js'):
+    if source.name in ('connect.html', 'connect.css', 'connect.js', 'connect-model.js'):
         (OUT / source.name).unlink(missing_ok=True)
         continue
     if source.is_file():

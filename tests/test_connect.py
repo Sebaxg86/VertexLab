@@ -22,6 +22,9 @@ class CompanionOBS(FakeOBS):
         self.enabled = False
         self.ws = None
 
+    def status(self):
+        return dict(enabled=self.enabled, connected=self.ws is not None, owned=self.owned, error=None, port=getattr(self, 'port', 4455))
+
     def connect(self, port=4455, password=''):
         self.port = port
         self.ws = object()
@@ -93,6 +96,25 @@ class ConnectTests(unittest.TestCase):
         self.runtime.command('connect/udp', {'port': port})
         self.assertEqual(ConnectConfig(self.config.path).values['udpPort'], port)
         self.assertEqual(self.runtime.status()['connect']['udpPort'], port)
+
+    def test_video_preference_can_persist_obs_required_while_obs_is_offline(self):
+        self.config.save(complete=True, telemetryOnly=True, auto=True)
+        self.runtime.command('connect/video', {'telemetryOnly': False})
+        self.assertFalse(ConnectConfig(self.config.path).values['telemetryOnly'])
+        self.assertFalse(self.runtime.ready())
+        self.assertFalse(self.runtime.recorder.auto)
+        self.runtime.command('connect/video', {'telemetryOnly': True})
+        self.assertTrue(ConnectConfig(self.config.path).values['telemetryOnly'])
+        self.assertTrue(self.runtime.ready())
+        self.assertTrue(self.runtime.recorder.auto)
+
+    def test_obs_port_preference_is_retained_after_failed_connection(self):
+        self.config.save(complete=True, telemetryOnly=False)
+        with patch.object(self.obs, 'connect', side_effect=ValueError('OBS offline')):
+            with self.assertRaises(ValueError):
+                self.runtime.command('connect/obs', {'port': 14455})
+        self.assertEqual(ConnectConfig(self.config.path).values['obsPort'], 14455)
+        self.assertFalse(self.runtime.status()['obs']['connected'])
 
     def forza(self):
         self.runtime.ingest(packet(event=False))

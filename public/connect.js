@@ -9,19 +9,20 @@ function layout(){
  el('quick-panel').hidden=!quickMode;
  if(quickMode){el('quick-forza-slot').append(el('forza-step'));el('quick-obs-slot').append(el('obs-step'));el('quick-storage').append(el('storage-settings'));el('quick-actions').append(el('capture-options'));}
  else{el('wizard-content').prepend(el('forza-step'),el('obs-step'));el('ready-storage').append(el('storage-settings'));el('ready-actions').append(el('capture-options'));}
- el('intro-eyebrow').textContent=quickMode?'VERTEXLAB · CONEXIONES':'PRIMERA CONEXIÓN';
- el('intro-title').textContent=quickMode?'Todo listo para conducir.':'Prepara tu próxima sesión.';
+ el('intro-eyebrow').textContent=quickMode?'CONEXIONES':'PRIMERA CONEXIÓN';
+ el('intro-title').textContent=quickMode?'Prepárate para conducir.':'Prepara tu próxima sesión.';
 }
 function render(){
  if(!state?.connect)return;
- const c=state.connect,connected=c.forzaConnected,locked=busy||!!state.recording;
+ const c=state.connect,connected=VertexConnectModel.forzaOnline(state,quickMode),locked=busy||!!state.recording;
  layout();document.body.dataset.step=String(step);
  el('forza-signal').className='signal '+(connected?'connected':'waiting');
- el('forza-state').textContent=connected?'Forza conectado':'Esperando señal de Forza';
+ el('forza-state').textContent=connected?'Forza conectado':quickMode?'Forza desconectado':'Esperando señal de Forza';
  el('forza-detail').textContent=state.udpError||(connected?'Telemetría recibida · UDP '+c.udpPort:'Activa Data Out y entra al juego.');
- el('quick-forza-dot').dataset.connected=String(connected);el('quick-obs-dot').dataset.connected=String(!c.telemetryOnly&&state.obs.connected);
  el('forza-next').disabled=locked||!connected;
  const only=el('telemetry-only').checked;
+ const obs=VertexConnectModel.obsState(!!state.obs.connected,only);el('obs-signal').dataset.tone=obs.tone;el('obs-signal-label').textContent=obs.text;
+ el('forza-signal').dataset.tone=connected?'green':'gray';
  for(const input of el('obs-fields').querySelectorAll('input,button'))input.disabled=locked||only;
  for(const id of ['udp-port','apply-port','telemetry-only','data-path','browse-folder','save-folder','auto-record'])el(id).disabled=locked;
  el('obs-state').textContent=only?'Solo telemetría · sin video':obsVerified&&state.obs.connected?'OBS conectado · listo para grabar':'OBS pendiente de conexión';
@@ -35,7 +36,7 @@ function render(){
  el('ready-forza').textContent=connected?'Conectado':'Configurado · esperando al juego';
  el('ready-video').textContent=only?'Solo telemetría':state.obs.connected?'Video + telemetría':'OBS pendiente';
  el('open-app').disabled=busy||!c.complete;
- el('intro-status').dataset.ready=String(c.ready);el('intro-status').textContent=state.recording?'SESIÓN EN CURSO':c.ready?'LISTO PARA CAPTURAR':quickMode?'REVISAR CONEXIÓN':'EN TU PC';
+ const summary=VertexConnectModel.readiness(connected,!!state.obs.connected,only);el('intro-status').dataset.tone=summary.tone;el('intro-status').dataset.ready=String(summary.tone==='green');el('intro-status').textContent=summary.text;
  el('footer-status').textContent=state.recording?'Grabando · los ajustes se habilitan al terminar':c.ready?'Conexiones preparadas':'VertexConnect';
 }
 async function refresh(){if(polling)return;polling=true;try{state=await request('status');if(!state.connect)throw Error('Abre VertexConnect desde su acceso directo.');if(!initialized){initialized=true;el('udp-port').value=state.connect.udpPort;el('obs-port').value=state.connect.obsPort;el('data-path').value=state.connect.dataPath;el('auto-record').checked=state.connect.auto;el('telemetry-only').checked=state.connect.telemetryOnly;obsVerified=state.obs.connected;quickMode=state.connect.complete;step=quickMode?3:1;}if(state.connect.error&&!busy)error(state.connect.error);render();}catch(e){error(e.message);}finally{polling=false;}}
@@ -45,7 +46,7 @@ el('forza-next').onclick=action(async()=>{await request('connect/forza',{});step
 el('forza-heading').onclick=()=>{if(!quickMode&&step===2){step=1;render();}};
 el('test-obs').onclick=action(async()=>{obsVerified=false;await request('connect/obs',{port:el('obs-port').value,password:el('obs-password').value});el('obs-password').value='';obsVerified=true;if(quickMode)await request('connect/complete',{telemetryOnly:false,auto:el('auto-record').checked});});
 for(const id of ['obs-port','obs-password'])el(id).oninput=()=>{obsVerified=false;render();};
-el('telemetry-only').onchange=action(async()=>{if(quickMode&&el('telemetry-only').checked)await request('connect/complete',{telemetryOnly:true,auto:el('auto-record').checked});});
+el('telemetry-only').onchange=action(async()=>{if(quickMode){try{await request('connect/video',{telemetryOnly:el('telemetry-only').checked});}catch(e){el('telemetry-only').checked=state.connect.telemetryOnly;throw e;}}});
 el('obs-next').onclick=action(async()=>{await request('connect/complete',{telemetryOnly:el('telemetry-only').checked,auto:el('auto-record').checked});step=3;});
 el('save-folder').onclick=action(async()=>{await request('connect/data',{path:el('data-path').value});});
 el('auto-record').onchange=action(async()=>{if(state.connect.complete)await request('auto',{enabled:el('auto-record').checked});});

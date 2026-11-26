@@ -87,6 +87,27 @@ class OBS:
             self.disconnect()
             raise ValueError('Se perdió la conexión con OBS') from e
 
+    def probe_connection(self):
+        """Bounded read-only health check; callers serialize it with capture commands."""
+        ws = self.ws
+        if not ws:
+            return False
+        timeout = ws.gettimeout()
+        try:
+            ws.settimeout(.25)
+            self.request('GetVersion')
+            return True
+        except Exception:
+            try:
+                self.disconnect()
+            except Exception:
+                self.ws = None
+            self.error = 'Se perdió la conexión con OBS. Abre OBS y vuelve a conectarlo.'
+            return False
+        finally:
+            if self.ws is ws:
+                ws.settimeout(timeout)
+
     def anchor(self):
         before = time.monotonic()
         status = self.request('GetRecordStatus')
