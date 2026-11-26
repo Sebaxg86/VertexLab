@@ -15,7 +15,7 @@ function showAnalysisHover(hit,event,kind,key=null){
  let value='';
  if(metric){const number=hit.row?.[key];if(Number.isFinite(number)){const duration=metric.divisor?RaceInstruments.duration(number):null;value=' · '+metric.name+': '+(duration?duration.text+' '+duration.unit:number.toFixed(metric.decimals)+' '+metric.unit);}}
  const tip=$('analysis-hover');tip.hidden=false;
- tip.textContent=lapLabel(lap)+' · '+RaceAnalysis.clock(hit.time-RaceAnalysis.bounds(lap).start)+value+' · clic para analizar';
+ tip.textContent=lapLabel(lap)+' · '+RaceAnalysis.clock(hit.time-RaceAnalysis.lapStart(lap))+value+' · clic para analizar';
  tip.style.left=Math.max(8,Math.min(innerWidth-tip.offsetWidth-8,event.clientX+14))+'px';
  tip.style.top=Math.max(8,Math.min(innerHeight-tip.offsetHeight-8,event.clientY+16))+'px';
  if(kind==='map')$('map').dataset.hoverLap=hit.lapId;

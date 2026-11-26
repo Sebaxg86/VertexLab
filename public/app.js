@@ -33,7 +33,7 @@ for (let index=0; index<4; index++) {
 for (const [index, metric] of metricDefs.entries()) {
   const card = document.createElement('article');
   card.className = 'metric-card';
-  card.innerHTML = `<div class="metric-heading"><h3 class="metric-name">${metric.name}</h3><div class="metric-number"><output id="value-${metric.key}">—</output><span class="metric-unit">${metric.unit}</span></div></div><canvas id="${index === 0 ? 'charts' : 'chart-' + metric.key}" aria-label="${metric.name} por distancia" data-key="${metric.key}"></canvas>`;
+  card.innerHTML = `<div class="metric-heading"><h3 class="metric-name">${metric.name}</h3><div class="metric-number"><output id="value-${metric.key}">—</output><span class="metric-unit">${metric.unit}</span></div></div><canvas id="${index === 0 ? 'charts' : 'chart-' + metric.key}" aria-label="${metric.name} por tiempo" data-key="${metric.key}"></canvas>`;
   $('telemetry-rows').append(card);
 }
 
@@ -297,7 +297,7 @@ function paint() {
     const image=mapLayer?.image||document.createElement('canvas');if(image.width!==$('map').width||image.height!==$('map').height){image.width=$('map').width;image.height=$('map').height;}const layer=image.getContext('2d');layer.clearRect(0,0,image.width,image.height);layer.drawImage($('map'),0,0);mapLayer={key:mapKey,image,segments:mapSegments};
     }
     for(const lap of mapLaps){map.strokeStyle=colors[lap.id%colors.length];
-      const current=sample?(allMode?(sample.lapId===lap.id?sample:null):(lap.id===reference?sample:RaceAnalysis.atDistance(lap,sample.d)!==null?nearest(lap.rows,'d',sample.d):null)):null;
+      const current=allMode?(sample?.lapId===lap.id?sample:null):RaceAnalysis.sampleAtTime(lap.rows,RaceAnalysis.atElapsed(lap,t-playbackBounds().start)??NaN);
       if(current){map.fillStyle=map.strokeStyle;map.beginPath();map.arc(...point(current),lap.id===reference||allMode?5:3.5,0,Math.PI*2);map.fill();if(lap.id===reference||allMode){const p=point(current);$('map').dataset.carX=p[0];$('map').dataset.carY=p[1];}}
       if(analysisHover?.kind==='map'&&analysisHover.lapId===lap.id&&analysisHover?.row){map.strokeStyle='#fff3f5';map.lineWidth=1.5;map.beginPath();map.arc(...point(analysisHover.row),6,0,Math.PI*2);map.stroke();}
     }
@@ -377,13 +377,13 @@ function drawInstruments(sample) {
   }
 }
 function updateTelemetryContext() {
-  $('telemetry-scroll').setAttribute('aria-label',session ? allMode?'Gráficas por tiempo del instante observado':'Gráficas por distancia del instante observado' : 'Gráficas en vivo de los últimos veinte segundos');
+  $('telemetry-scroll').setAttribute('aria-label',session ? allMode?'Gráficas por tiempo del instante observado':'Gráficas por tiempo desde el inicio de vuelta' : 'Gráficas en vivo de los últimos veinte segundos');
 }
 function metricScale(metric, series) {
   const cacheKey = metric.key + ':' + series.map(item => item.id).join(',');
   if (session && scaleCache.has(cacheKey)) return scaleCache.get(cacheKey);
   let min = 0, max = metric.max || 1;
-  if(!metric.max)for(const item of series){const bounds=RaceRender.extent(item.rows,session?(allMode?'t':'d'):'liveTime',metric.key,session&&chartRange?chartRange.start:-Infinity,session&&chartRange?chartRange.end:Infinity);min=Math.min(min,bounds[0]);max=Math.max(max,bounds[1]);}
+  if(!metric.max)for(const item of series){const bounds=RaceRender.extent(item.rows,session?(allMode?'t':'elapsed'):'liveTime',metric.key,session&&chartRange?chartRange.start:-Infinity,session&&chartRange?chartRange.end:Infinity);min=Math.min(min,bounds[0]);max=Math.max(max,bounds[1]);}
   const bounds = [min, max];
   if (session) scaleCache.set(cacheKey, bounds);
   return bounds;
@@ -401,7 +401,7 @@ function drawMetrics(sample, laps) {
   $('chart-pan').disabled = available < .001;
   $('chart-pan').value = available > .001 ? Math.round(Math.max(0,Math.min(1,start/available))*1000) : 0;
   $('chart-pan').style.setProperty('--window-width',Math.min(100,shown/full*100)+'%');
-  const rangeLabel = session ? allMode?`Tramo visible: ${RaceAnalysis.clock(range.start)} a ${RaceAnalysis.clock(range.end)}`:`Tramo visible: ${range.start.toFixed(0)} a ${range.end.toFixed(0)} metros` : `Tramo visible: hace ${(liveChartOffset+liveChartSpan).toFixed(1)} a ${liveChartOffset.toFixed(1)} segundos`;
+  const rangeLabel = session ? allMode?`Tramo visible: ${RaceAnalysis.clock(range.start)} a ${RaceAnalysis.clock(range.end)}`:`Tramo visible: ${RaceAnalysis.clock(range.start)} a ${RaceAnalysis.clock(range.end)}` : `Tramo visible: hace ${(liveChartOffset+liveChartSpan).toFixed(1)} a ${liveChartOffset.toFixed(1)} segundos`;
   $('chart-pan').setAttribute('aria-valuetext',rangeLabel);
   $('chart-pan').title = available < .001 ? 'Acerca las gráficas para desplazarlas' : rangeLabel;
   const scrollRect = frameRects.get('telemetry-scroll');
@@ -414,7 +414,7 @@ function drawMetrics(sample, laps) {
     if (duration) $('value-' + metric.key).nextElementSibling.textContent=duration.unit;
     const id = index === 0 ? 'charts' : 'chart-' + metric.key, element = $(id), rect = frameRects.get(id);
     element.classList.toggle('live-chart', !session);
-    element.setAttribute('aria-label', metric.name + (session ? allMode?' por tiempo':' por distancia' : ' en vivo'));
+    element.setAttribute('aria-label', metric.name + (session ? allMode?' por tiempo':' por tiempo de vuelta' : ' en vivo'));
     if(element.closest('.metric-card').hidden||rect.bottom<=scrollRect.top||rect.top>=scrollRect.bottom)continue;
     const [chart, width, height] = canvas(id), [min, max] = metricScale(metric, series);
     const left = metric.divisor?58:28, right = width - 8, top = 6, bottom = height - 19;
@@ -436,7 +436,7 @@ function drawMetrics(sample, laps) {
       chart.shadowColor=colors[item.id%colors.length];
       chart.strokeStyle = session ? colors[item.id % colors.length] : colors[0]; chart.lineWidth = hovered?2.8:1.4; chart.beginPath();
       let previous = null;
-      for (const row of RaceRender.reduce(item.rows,session?(allMode?'t':'d'):'liveTime',metric.key,session?range.start:end-liveChartSpan,session?range.end:end,right-left)) {
+      for (const row of RaceRender.reduce(item.rows,session?(allMode?'t':'elapsed'):'liveTime',metric.key,session?range.start:end-liveChartSpan,session?range.end:end,right-left)) {
         if (!Number.isFinite(row[metric.key])) { previous = null; continue; }
         const p = point(row);
         if(previous&&!row.gap&&!row.breakBefore&&Math.max(p[0],previous[0])>=left&&Math.min(p[0],previous[0])<=right)segments.push({a:{x:previous[0],y:previous[1],t:previous.row.t,d:previous.row.d,row:previous.row},b:{x:p[0],y:p[1],t:row.t,d:row.d,row},lapId:allMode?row.lapId:item.id});
@@ -449,12 +449,12 @@ function drawMetrics(sample, laps) {
     }
     chart.globalAlpha=1;chart.shadowBlur=0;
     chart.restore();
-    chart.fillStyle = '#7489a2'; chart.fillText(session ? allMode?RaceAnalysis.clock(range.start):range.start.toFixed(0)+' m' : '−'+(liveChartSpan+liveChartOffset).toFixed(1)+' s', left, height-3);
-    chart.textAlign = 'right'; chart.fillText(session ? allMode?RaceAnalysis.clock(range.end):range.end.toFixed(0)+' m' : liveChartOffset<.01?'Ahora':'−'+liveChartOffset.toFixed(1)+' s', right, height-3); chart.textAlign = 'left';
+    chart.fillStyle = '#7489a2'; chart.fillText(session ? RaceAnalysis.clock(range.start) : '−'+(liveChartSpan+liveChartOffset).toFixed(1)+' s', left, height-3);
+    chart.textAlign = 'right'; chart.fillText(session ? RaceAnalysis.clock(range.end) : liveChartOffset<.01?'Ahora':'−'+liveChartOffset.toFixed(1)+' s', right, height-3); chart.textAlign = 'left';
     if(session){const image=cached?.image||document.createElement('canvas');if(image.width!==element.width||image.height!==element.height){image.width=element.width;image.height=element.height;}const layer=image.getContext('2d');layer.clearRect(0,0,image.width,image.height);layer.drawImage(element,0,0);chartLayers.set(metric.key,{key:layerKey,image,segments});}
     }
     chart.save();chart.beginPath();chart.rect(left,top,right-left,bottom-top);chart.clip();
-    if(analysisHover?.kind==='chart'&&analysisHover.key===metric.key){const x=left+((allMode?analysisHover.time:analysisHover.d)-range.start)/span*(right-left);chart.strokeStyle='#ffc2cb';chart.setLineDash([3,3]);chart.beginPath();chart.moveTo(x,top);chart.lineTo(x,bottom);chart.stroke();chart.setLineDash([]);}
+    if(analysisHover?.kind==='chart'&&analysisHover.key===metric.key){const x=left+((allMode?analysisHover.time:analysisHover.time-RaceAnalysis.lapStart(session.laps.find(l=>l.id===analysisHover.lapId)))-range.start)/span*(right-left);chart.strokeStyle='#ffc2cb';chart.setLineDash([3,3]);chart.beginPath();chart.moveTo(x,top);chart.lineTo(x,bottom);chart.stroke();chart.setLineDash([]);}
     if (sample) { const x = left + (analysisX(sample)-range.start)/span*(right-left); chart.strokeStyle = '#e3fff0aa'; chart.beginPath(); chart.moveTo(x, top); chart.lineTo(x, bottom); chart.stroke(); }
     chart.restore();
   }
@@ -469,7 +469,7 @@ function chartSeek(event) {
   const left=['lapTime','raceTime'].includes(event.currentTarget.dataset.key)?58:28;
   const distance = range.start + Math.max(0, Math.min(1, (event.clientX-rect.left-left)/(rect.width-left-8))) * (range.end-range.start);
   const hit=RaceInteraction.hitSegments(chartSegments.get(event.currentTarget.dataset.key)||[],event.clientX-rect.left,event.clientY-rect.top,14,analysisHover?.lapId);
-  if(hit)seekHit(hit);else if(allMode)seek(distance);else seek(nearest(lap.rows,'d',distance).t);
+  if(hit)seekHit(hit);else if(allMode)seek(distance);else seek(playbackBounds().start+distance);
 }
 for (const element of $('telemetry-rows').querySelectorAll('canvas')) {
   element.onpointerdown = event => { if (!session) return; chartDragging = true; element.setPointerCapture(event.pointerId); chartSeek(event); };

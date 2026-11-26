@@ -13,9 +13,13 @@
     if(b.gap||b.breakBefore)return null;
     return a.t+(b.t-a.t)*(distance-a.d)/(b.d-a.d||1);
   }
+  function lapStart(lap){const first=lap?.rows[0];return bounds(lap).start-(Number.isFinite(first?.lapTime)&&first.lapTime>=0?first.lapTime:0);}
+  function atElapsed(lap,elapsed){const b=bounds(lap),time=lapStart(lap)+elapsed;return elapsed<0||!lap?.rows.length||time<b.start||time>b.end?null:time;}
+  const comparisonCache=new WeakMap();
+  function comparisonSeries(laps){return laps.map(lap=>{if(!comparisonCache.has(lap)){const start=lapStart(lap);comparisonCache.set(lap,{id:lap.id,rows:lap.rows.map(row=>({...row,elapsed:row.t-start}))});}return comparisonCache.get(lap);});}
   function videoChoices(selected,previous){const ids=[...selected];const kept=previous.filter(id=>ids.includes(id));return [...new Set([...kept,...ids])].slice(0,2);}
   function sampleAtTime(rows,time){
-    if(!rows.length||time<rows[0].t||time>rows.at(-1).t)return null;
+    if(!Number.isFinite(time)||!rows.length||time<rows[0].t||time>rows.at(-1).t)return null;
     let lo=0,hi=rows.length;
     while(lo<hi){const m=(lo+hi)>>1;if(rows[m].t<=time)lo=m+1;else hi=m;}
     const a=rows[Math.max(0,lo-1)],b=rows[Math.min(lo,rows.length-1)];
@@ -32,15 +36,14 @@
     const {current,meta,allMode,sourceLap,referenceLap,video}=state;
     if(video.error||video.ended||!Number.isFinite(video.duration))return null;
     let sourceTime=current;
-    if(!allMode&&sourceLap?.id!==referenceLap?.id){const sample=sampleAtTime(referenceLap?.rows||[],current);sourceTime=sample?atDistance(sourceLap,sample.d):null;}
+    if(!allMode)sourceTime=atElapsed(sourceLap,current-lapStart(referenceLap));
     const target=sourceTime===null?null:timeline.toVideo(meta,sourceTime);
     if(target===null||target<0||target>video.duration)return null;
     if(video.seeking||video.readyState<2)return current;
     const measured=timeline.fromVideo(meta,Number.isFinite(video.presentedTime)?video.presentedTime:video.currentTime);
     if(!Number.isFinite(measured))return null;
     if(allMode||sourceLap?.id===referenceLap?.id)return measured;
-    const sample=sampleAtTime(sourceLap?.rows||[],measured);
-    return sample?atDistance(referenceLap,sample.d):null;
+    return lapStart(referenceLap)+measured-lapStart(sourceLap);
   }
   function fastestLapIds(laps){
     const complete=laps.filter(lap=>!lap.partial&&lap.rows.length>1).map(lap=>({id:lap.id,time:lap.rows.reduce((max,row)=>Math.max(max,Number.isFinite(row.lapTime)?row.lapTime:0),0)})).filter(lap=>lap.time>0);
@@ -60,6 +63,6 @@
     timeSeriesCache.set(rows,series);return series;
   }
   function lapTimeline(laps,total){return laps.filter(lap=>lap.rows.length).map(lap=>{const b=bounds(lap);return {id:lap.id,number:lap.number,partial:!!lap.partial,start:Math.max(0,b.start),end:Math.min(total,b.end)};}).filter(lap=>lap.end>lap.start);}
-  root.RaceAnalysis={clock,bounds,sessionRows,instrumentSample,atDistance,videoChoices,sampleAtTime,videoClock,fastestLapIds,lapSummary,timeSeries,lapTimeline};
+  root.RaceAnalysis={clock,bounds,sessionRows,instrumentSample,atDistance,lapStart,atElapsed,comparisonSeries,videoChoices,sampleAtTime,videoClock,fastestLapIds,lapSummary,timeSeries,lapTimeline};
   if(typeof module!=='undefined')module.exports=root.RaceAnalysis;
 })(globalThis);

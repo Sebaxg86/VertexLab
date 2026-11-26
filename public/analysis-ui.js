@@ -1,10 +1,10 @@
 /* Analysis modes and video panes share the original session clock and OBS mapping. */
 let allMode=true, allRows=[], videoChoices=[], videoTargets=new Map(), videoClockActive=false;
 function lapLabel(lap){return lap?`Vuelta ${(Number.isFinite(lap.number)?lap.number:lap.id)+1}`:'Sin vuelta';}
-function analysisExtent(){return allMode?Math.max(1,allRows.at(-1)?.t||0):Math.max(1,...visible().map(lap=>lap.rows.at(-1)?.d||0));}
-function analysisX(row){return allMode?row.t:row.d;}
-function analysisSeries(){return allMode?RaceAnalysis.timeSeries(allRows):visible();}
-function playbackBounds(){return allMode?{start:0,end:allRows.at(-1)?.t||0}:RaceAnalysis.bounds(session?.laps.find(lap=>lap.id===reference));}
+function analysisExtent(){return allMode?Math.max(1,allRows.at(-1)?.t||0):Math.max(1,...visible().map(lap=>RaceAnalysis.bounds(lap).end-RaceAnalysis.lapStart(lap)));}
+function analysisX(row){return allMode?row.t:row.elapsed??row.t-playbackBounds().start;}
+function analysisSeries(){return allMode?RaceAnalysis.timeSeries(allRows):RaceAnalysis.comparisonSeries(visible());}
+function playbackBounds(){return allMode?{start:0,end:allRows.at(-1)?.t||0}:{start:RaceAnalysis.lapStart(session?.laps.find(lap=>lap.id===reference)),end:RaceAnalysis.lapStart(session?.laps.find(lap=>lap.id===reference))+analysisExtent()};}
 function observedSample(){
   if(!session)return null;
   const rows=allMode?allRows:session.laps.find(lap=>lap.id===reference)?.rows||[];
@@ -53,9 +53,11 @@ function applyAnalysisSelection(resetTime=true){
   const b=playbackBounds();seek(resetTime?b.start:Math.max(b.start,Math.min(b.end,t)));
 }
 function selectAnalysisLap(id){
+  const elapsed=allMode?0:t-playbackBounds().start;
   if(allMode){allMode=false;selected=new Set([id]);reference=id;videoChoices=[];}
   else if(selected.has(id))selected.delete(id);else selected.add(id);
-  applyAnalysisSelection(false);
+  applyAnalysisSelection(true);
+  if(!allMode)seek(Math.min(playbackBounds().end,playbackBounds().start+elapsed));
 }
 function renderVideoControls(){
   const laps=visible();
@@ -74,7 +76,7 @@ function renderVideoControls(){
   if(!split){$('compare-video').pause();if($('compare-video').hasAttribute('src')){$('compare-video').removeAttribute('src');$('compare-video').load();}}
   $('video-label-a').textContent=allMode?'Todo el recorrido':lapLabel(session.laps.find(lap=>lap.id===videoChoices[0]));
   $('video-label-b').textContent=split?lapLabel(session.laps.find(lap=>lap.id===videoChoices[1])):'';
-  $('video-selection-note').textContent=selected.size>2?'Se comparan todas las vueltas marcadas. Elige aquí los dos videos.':'Videos alineados por distancia · audio del primero';
+  $('video-selection-note').textContent=selected.size>2?'Se comparan todas las vueltas marcadas. Elige aquí los dos videos.':'Videos alineados por tiempo desde el inicio de vuelta · audio del primero';
   videoTargets.clear();
 }
 function videoPlaybackClock(){
@@ -86,29 +88,27 @@ function videoPlaybackClock(){
 }
 function syncVideoPanes(force=false,dt=0){
   if(!session||!hasVideo)return;
-  const sample=observedSample();
   const choices=allMode?[null]:globalThis.VertexBrowser?.singleVideo?.()?videoChoices.slice(0,1):videoChoices;
   choices.forEach((lapId,index)=>{
     const video=index?$('compare-video'):$('video'),warning=$(index?'video-warning-b':'video-warning-a');
     if(video.error){warning.hidden=false;warning.textContent=VertexPlayback.message(null,video);return;}
     const lap=lapId===null?null:session.laps.find(lap=>lap.id===lapId);
-    let targetTime=allMode||lapId===reference?t:sample?RaceAnalysis.atDistance(lap,sample.d):null;
-    // Do not seek the audible clock back to a distance plateau when the car stops.
+    let targetTime=allMode?t:RaceAnalysis.atElapsed(lap,t-playbackBounds().start);
+    // Let the audible media clock advance naturally between explicit seeks.
     // Round-tripping its own clock still skips real gaps between OBS segments.
-    if(index===0&&playing&&videoClockActive&&!force)targetTime=RaceTimeline.fromVideo(currentMeta(),video.currentTime);
+    if(index===0&&targetTime!==null&&playing&&videoClockActive&&!force)targetTime=RaceTimeline.fromVideo(currentMeta(),video.currentTime);
     const target=targetTime===null?null:RaceTimeline.toVideo(currentMeta(),targetTime);
     const available=target!==null&&target>=0&&Number.isFinite(video.duration)&&target<=video.duration;
     warning.hidden=available;
-    warning.textContent=targetTime===null?'Sin cobertura a esta distancia':target===null?'Sin video sincronizado en este tramo':Number.isFinite(video.duration)?'Fuera del video grabado':'Cargando video…';
+    warning.textContent=targetTime===null?'Fin del tramo grabado de esta vuelta':target===null?'Sin video sincronizado en este tramo':Number.isFinite(video.duration)?'Fuera del video grabado':'Cargando video…';
     if(!available){
       if(allMode&&target===null&&targetTime!==null){const next=RaceTimeline.nextPlayable(currentMeta(),targetTime,playbackBounds().end,video.duration);if(next!==null&&next>targetTime)warning.textContent=`Video disponible desde ${RaceAnalysis.clock(next)} · Reproducir avanzará al tramo sincronizado.`;}
       video.pause();videoTargets.delete(index);return;
     }
     if(force||(!video.seeking&&Math.abs(video.currentTime-target)>(globalThis.VertexBrowser?.mobileApple ? .35 : .12)))video.currentTime=Math.max(0,Math.min(video.duration,target));
-    const previous=videoTargets.get(index);
     if(playing){
       let rate=Number($('rate').value);
-      if(index>0&&!allMode&&previous!==undefined&&dt>0)rate=Math.max(.25,Math.min(4,(target-previous)/dt));
+
       if(Math.abs(video.playbackRate-rate)>.01)video.playbackRate=rate;
       VertexPlayback.play(video,error=>{if(error.name==='NotAllowedError')setPlaying(false);warning.hidden=false;warning.textContent=VertexPlayback.message(error,video);$('message').textContent=warning.textContent;});
     }else video.pause();
@@ -131,8 +131,8 @@ function setupAnalysisUI(){
     if(!session)return;
     const id=Number($('reference').value),lap=visible().find(lap=>lap.id===id);
     if(!lap)return;
-    const sample=observedSample();setPlaying(false);clearAnalysisHover();reference=id;
-    const target=allMode?RaceAnalysis.bounds(lap).start:sample?RaceAnalysis.atDistance(lap,sample.d):null;
+    const elapsed=t-playbackBounds().start;setPlaying(false);clearAnalysisHover();reference=id;
+    const target=allMode?RaceAnalysis.bounds(lap).start:RaceAnalysis.lapStart(lap)+elapsed;
     renderVideoControls();refreshTransport();seek(target??RaceAnalysis.bounds(lap).start);
   };
   $('compare-video').muted=true;

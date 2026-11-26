@@ -1,6 +1,6 @@
 function capturePortableView(){
   const rect=$('map').getBoundingClientRect();
-  return {version:1,offset:Number($('offset').value)||0,allMode,selected:[...selected],reference,t,videoChoices:[...videoChoices],chartRange,
+  return {version:1,comparisonAxis:'elapsed',offset:Number($('offset').value)||0,allMode,selected:[...selected],reference,t,videoChoices:[...videoChoices],chartRange,
     zoom,panNormalized:[pan[0]/Math.max(1,rect.width),pan[1]/Math.max(1,rect.height)],
     expandedMetric,metricIndex:Math.round($('telemetry-scroll').scrollTop/Math.max(1,$('telemetry-scroll').clientHeight/2)),
     rate:Number($('rate').value),volume:$('video').volume,muted:$('video').muted};

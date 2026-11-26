@@ -37,11 +37,11 @@ test('video clock follows decoded media time instead of accumulating frame timer
  state.video.seeking=true;state.video.currentTime=0;assert.equal(videoClock(state,timeline),10.8);
  state.video.seeking=false;state.video.readyState=1;assert.equal(videoClock(state,timeline),10.8);
 });
-test('comparison clock maps the audible lap to the selected reference by distance',()=>{
+test('comparison clock maps equal elapsed time despite different speeds and distances',()=>{
  const {videoClock}=require('../public/analysis-model.js'),timeline=require('../public/timeline.js');
  const sourceLap={id:3,rows:[{t:30,d:0},{t:40,d:100}]},referenceLap={id:6,rows:[{t:60,d:0},{t:80,d:100}]};
  const state={current:65,meta:{version:1},allMode:false,sourceLap,referenceLap,video:{duration:100,currentTime:35,readyState:4,seeking:false,ended:false,error:null}};
- assert.equal(videoClock(state,timeline),70);
+ assert.equal(videoClock(state,timeline),65);
 });
 test('video clock preserves OBS pause anchors and allows telemetry-only sections to advance',()=>{
  const {videoClock}=require('../public/analysis-model.js'),timeline=require('../public/timeline.js');
@@ -68,4 +68,23 @@ test('visible readings use the image PTS even when the media clock is slightly a
  const {videoClock}=require('../public/analysis-model.js'),timeline=require('../public/timeline.js');
  const state={current:10,meta:{version:1,offset:.058},allMode:true,video:{duration:100,currentTime:10.1,presentedTime:10.066,readyState:4,seeking:false}};
  assert.ok(Math.abs(videoClock(state,timeline)-10.008)<1e-9);
+});
+
+test('elapsed comparison retains recorded readings, stops at coverage and caches chart geometry',()=>{
+ const {atElapsed,comparisonSeries}=require('../public/analysis-model.js');
+ const laps=[{id:1,rows:[{t:50,d:0,speed:80},{t:60,d:100,speed:90}]},{id:2,rows:[{t:100,d:0,speed:70},{t:115,d:110,speed:60}]}];
+ assert.equal(atElapsed(laps[0],5),55);assert.equal(atElapsed(laps[1],5),105);
+ assert.equal(atElapsed(laps[0],11),null);assert.equal(atElapsed(laps[0],-1),null);
+ const series=comparisonSeries(laps);assert.deepEqual(series.map(l=>l.rows.map(r=>r.elapsed)),[[0,10],[0,15]]);
+ assert.equal(series[0],comparisonSeries(laps)[0]);assert.equal(laps[0].rows[0].elapsed,undefined);
+ assert.equal(series[1].rows[1].speed,60);
+});
+
+test('lap origin uses the recorded game lap clock and never invents missing opening samples',()=>{
+ const {lapStart,atElapsed,comparisonSeries,sampleAtTime}=require('../public/analysis-model.js');
+ const lap={id:0,rows:[{t:100,lapTime:.043,d:0},{t:110,lapTime:10.043,d:80}]};
+ assert.equal(lapStart(lap),99.957);assert.equal(atElapsed(lap,0),null);
+ assert.ok(Math.abs(atElapsed(lap,5)-104.957)<1e-9);
+ assert.ok(Math.abs(comparisonSeries([lap])[0].rows[0].elapsed-.043)<1e-9);
+ assert.equal(sampleAtTime(lap.rows,NaN),null);
 });
