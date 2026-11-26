@@ -191,7 +191,7 @@ function syncHomeExportControls(){
  document.body.classList.toggle('home-export-mode',homeExportMode);
  $('home-export').setAttribute('aria-pressed',String(homeExportMode));
  $('home-select-all-wrap').hidden=!homeExportMode;$('home-export-bar').hidden=!homeExportMode;
- $('home-select-all').disabled=homeSelectingAll;$('home-select-all').checked=homeAllSelected&&homeExportSelection.size>0;$('home-select-all').indeterminate=!homeAllSelected&&homeExportSelection.size>0;
+ $('home-select-all').disabled=homeSelectingAll;$('home-select-all').checked=homeSelectingAll||(homeAllSelected&&homeExportSelection.size>0);$('home-select-all').indeterminate=!homeSelectingAll&&!homeAllSelected&&homeExportSelection.size>0;
  $('home-export-confirm').disabled=homeSelectingAll||!homeExportSelection.size;
  $('home-export-cancel').disabled=homeSelectingAll;$('home-export').disabled=homeSelectingAll;
  $('home-export-count').textContent=homeSelectingAll?'Seleccionando biblioteca…':homeExportSelection.size+' seleccionadas';
