@@ -76,6 +76,7 @@ function setViewLayout(isLive){
   homeActive=false;document.body.classList.remove('home-view');$('lab-home').hidden=true;closeHomeMenus();
   if(globalThis.VertexBrowser?.enabled)isLive=false;
   document.body.classList.toggle('live-view',isLive);
+  document.body.classList.toggle('analysis-view', !!session);
   $('manual-controls').hidden=!isLive;document.querySelector('.settings-wrap').hidden=false;
   $('live-settings').hidden=!isLive;$('analysis-settings').hidden=isLive;
   $('settings-title').textContent=isLive?'CONTROL DE CAPTURA':'SESIÓN / ANÁLISIS';

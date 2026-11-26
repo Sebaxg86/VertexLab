@@ -149,3 +149,48 @@ body:not([data-live-connected=true]) #picker-live:focus-visible{box-shadow:inset
 @media(prefers-reduced-motion:reduce){
  .home-live-entry::before,.home-library-atmosphere::before{transition:none!important;transform:none!important}
 }
+
+/* Header shortcut back to Home from a session. */
+.analysis-view #lab-logo {
+  position: relative;
+  transition: filter .24s ease, transform .18s ease;
+}
+
+.analysis-view #lab-logo::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 -6px;
+  height: 2px;
+  pointer-events: none;
+  background: linear-gradient(90deg, #a91d32, #ff4059 75%, #ffd0d7);
+  box-shadow: 0 0 9px #ff405980;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform .35s cubic-bezier(.22, 1, .36, 1);
+}
+
+.analysis-view #lab-logo:is(:hover, :focus-visible) {
+  filter: drop-shadow(0 0 9px #ff405977);
+  transform: translateY(-1px);
+}
+
+.analysis-view #lab-logo:is(:hover, :focus-visible, :active)::after {
+  transform: scaleX(1);
+}
+
+.analysis-view #lab-logo:active {
+  filter: drop-shadow(0 0 13px #ff4059b0) brightness(1.2);
+  transform: translateY(1px) scale(.96);
+  transition-duration: 70ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .analysis-view #lab-logo,
+  .analysis-view #lab-logo::after {
+    transition: none;
+  }
+
+  .analysis-view #lab-logo:is(:hover, :focus-visible, :active) {
+    transform: none;
+  }
+}
