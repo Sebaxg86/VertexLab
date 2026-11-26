@@ -1,5 +1,7 @@
-let homeActive=true,homeMenuTrigger=null,homeDeleteTarget=null;
+let homeActive=true,homeMenuTrigger=null,homeDeleteTarget=null,homeExportMode=false,homeAllSelected=false,homeSelectingAll=false;
+const homeExportSelection=new Map();
 const HomeGlyphs={
+ export:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m-5 5 5-5 5 5M4 15v6h16v-6"/></svg>',
  computer:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M8 21h8m-4-5v5"/></svg>',
  cloud:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18a4 4 0 0 1-.3-8A6.5 6.5 0 0 1 18 8a5 5 0 0 1 0 10Z"/></svg>',
  star:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 3 6 7 1-5 5 1 8-6-4-6 4 1-8-5-5 7-1Z"/></svg>',
@@ -20,7 +22,7 @@ function openHome(){
  history.replaceState(null,'','#home');closeHomeMenus();updateHomeLive();HomeLibrary.render(true);
 }
 function closeHomeMenus(){
- for(const [panelId,triggerId] of [['home-cloud-menu','home-cloud-trigger'],['home-row-menu',homeMenuTrigger]]){
+ for(const [panelId,triggerId] of [['home-cloud-menu','home-cloud-trigger'],['home-import-menu','home-import'],['home-row-menu',homeMenuTrigger]]){
   const panel=$(panelId),trigger=triggerId&&$(triggerId);
   if(trigger)setHeaderDrop(panelId,triggerId,false);else{panel.classList.remove('is-open');panel.inert=true;panel.hidden=true;}
  }
@@ -35,13 +37,14 @@ function openHomeSessionMenu(item,trigger){
  homeMenuTrigger=trigger.id;
  const menu=$('home-row-menu');menu.replaceChildren();
  const caption=document.createElement('span');caption.className='home-menu-caption';caption.textContent='OPCIONES DE SESIÓN';menu.append(caption);
- for(const option of VertexHomeModel.actions(item,latest?.recording)){
+ for(const option of [...VertexHomeModel.actions(item,latest?.recording).slice(0,1),{key:'export',label:'Exportar sesión',enabled:VertexHomeModel.availability(item).local&&item.id!==latest?.recording},...VertexHomeModel.actions(item,latest?.recording).slice(1)]){
   const button=document.createElement('button');button.disabled=!option.enabled;
   if(option.danger)button.classList.add('danger-action');
-  button.innerHTML=option.key==='favorite'?HomeGlyphs.star:option.key.startsWith('delete')?HomeGlyphs.remove:HomeGlyphs.cloud;
+  button.innerHTML=option.key==='export'?HomeGlyphs.export:option.key==='favorite'?HomeGlyphs.star:option.key.startsWith('delete')?HomeGlyphs.remove:HomeGlyphs.cloud;
   const text=document.createElement('span');text.textContent=option.label;
   if(option.soon){const note=document.createElement('small');note.textContent='Próximamente · Google Drive';text.append(note);}
   button.append(text);
+  if(option.key==='export')button.onclick=action(async()=>{await exportLibrarySessions([item]);});
   if(option.key==='favorite')button.onclick=action(async()=>{closeHomeMenus();const result=await api('feature/'+item.id,{featured:!item.featured});item.featured=result.featured;HomeLibrary.changed(item);$('home-settings-'+item.id)?.focus({preventScroll:true});});
   if(option.key==='delete-local'||option.key==='delete-all')button.onclick=()=>{
    closeHomeMenus();homeDeleteTarget=item;
@@ -71,16 +74,16 @@ const HomeLibrary=(()=>{
  function visiblePicker(){return !$('session-picker').hidden&&!$('session-picker').inert;}
  function renderPicker(){renderPickerSessions(items.slice(0,pickerLimit));$('picker-count').textContent=total??items.length;}
  function changed(item){const index=items.findIndex(row=>row.id===item.id);if(index>=0)items[index]=item;cards.delete(item.id);render(true);if(visiblePicker())renderPicker();}
- function removed(id){const index=items.findIndex(item=>item.id===id);if(index<0)return;items.splice(index,1);cards.delete(id);total=Math.max(0,(total||0)-1);if(nextOffset!==null)nextOffset=Math.max(0,nextOffset-1);render(true);if(visiblePicker())renderPicker();if(!items.length&&nextOffset!==null)loadMore();}
+ function removed(id){homeExportSelection.delete(id);syncHomeExportControls();const index=items.findIndex(item=>item.id===id);if(index<0)return;items.splice(index,1);cards.delete(id);total=Math.max(0,(total||0)-1);if(nextOffset!==null)nextOffset=Math.max(0,nextOffset-1);render(true);if(visiblePicker())renderPicker();if(!items.length&&nextOffset!==null)loadMore();}
  function row(item,index){
-  let card=cards.get(item.id);if(card)return card;
+  let card=cards.get(item.id);if(card){syncHomeExportRow(card,item);return card;}
   card=document.createElement('article');card.className='home-session-row'+(item.featured?' is-featured':'');card.setAttribute('role','listitem');card.dataset.id=item.id;
   const button=createSessionButton(item);button.className='home-session-main';button.id='home-open-'+item.id;button.title=item.name||item.carName;button.setAttribute('aria-label','Analizar '+(item.name||item.carName));
-  button.onclick=action(async()=>{button.disabled=true;closeHomeMenus();try{await transitionView(()=>load(item.id));}finally{button.disabled=false;}});
+  button.onclick=action(async()=>{if(homeExportMode){toggleHomeExport(item);return;}button.disabled=true;closeHomeMenus();try{await transitionView(()=>load(item.id));}finally{button.disabled=false;}});
   const availability=createAvailability(item);
   const gear=document.createElement('button');gear.id='home-settings-'+item.id;gear.className='home-row-settings';gear.innerHTML=$('settings-toggle').innerHTML;
   gear.setAttribute('aria-label','Opciones de '+(item.name||item.carName));gear.setAttribute('aria-expanded','false');gear.setAttribute('aria-controls','home-row-menu');gear.onclick=()=>openHomeSessionMenu(item,gear);
-  card.append(button,availability,gear);cards.set(item.id,card);return card;
+  const check=document.createElement('input');check.type='checkbox';check.className='home-export-check';check.setAttribute('aria-label','Seleccionar '+(item.name||item.carName)+' para exportar');check.onchange=()=>toggleHomeExport(item,check.checked);card.append(check,button,availability,gear);syncHomeExportRow(card,item);cards.set(item.id,card);return card;
  }
  function render(force=false){
   setViewText('home-library-count',total===null?'…':String(total));
@@ -116,6 +119,7 @@ const HomeLibrary=(()=>{
   pending=task;render();return task;
  }
  async function refresh(){
+  homeAllSelected=false;syncHomeExportControls();
   generation++;pending=null;nextOffset=0;total=null;items=[];cards.clear();renderKey='';pickerLimit=12;
   closeHomeMenus();$('home-library-scroll').scrollTop=0;return loadMore();
  }
@@ -126,7 +130,27 @@ const HomeLibrary=(()=>{
 function setupHome(){
  $('lab-logo').onclick=()=>transitionView(openHome);$('lab-logo').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();transitionView(openHome);}};
  $('home-live-entry').onclick=()=>{if(globalThis.VertexBrowser?.enabled){$('message').textContent='LIVE requiere VertexConnect en tu PC de juego. Aquí puedes analizar tus sesiones .vrtx.';return;}enterHomeLive();};
- $('home-import').onclick=$('home-empty-import').onclick=()=>$('portable-file').click();
+ $('home-empty-import').onclick=()=>$('portable-file').click();
+ $('home-import').classList.add('home-menu-trigger');
+ $('home-import').onclick=()=>{const open=$('home-import').getAttribute('aria-expanded')!=='true';closeHomeMenus();if(open){setHeaderDrop('home-import-menu','home-import',true);positionHomeMenu($('home-import-menu'),$('home-import'));}};
+ $('home-import-vrtx').onclick=()=>{closeHomeMenus();$('portable-file').click();};
+ $('home-import-zip').onclick=()=>{closeHomeMenus();$('portable-bundle').click();};
+ $('portable-bundle').onchange=async()=>{const file=$('portable-bundle').files[0];$('portable-bundle').value='';if(file)try{await importLibraryBundle(file);}catch(error){$('message').textContent=error.message;}};
+ $('home-export').onclick=()=>setHomeExportMode(!homeExportMode);
+ $('home-export-cancel').onclick=()=>setHomeExportMode(false);
+ $('home-export-confirm').onclick=action(async()=>{if(await exportLibrarySessions([...homeExportSelection.values()]))setHomeExportMode(false);});
+ $('home-select-all').onchange=async()=>{
+  if(homeSelectingAll)return;
+  if(!$('home-select-all').checked){homeExportSelection.clear();homeAllSelected=false;syncHomeExportControls();HomeLibrary.render(true);return;}
+  homeSelectingAll=true;syncHomeExportControls();
+  try{
+   const selection=new Map();let offset=0;
+   do{const page=await api('library?offset='+offset+'&limit=48');for(const item of page.items)if(VertexHomeModel.availability(item).local&&item.id!==latest?.recording)selection.set(item.id,item);offset=page.nextOffset;}while(offset!==null);
+   if(homeExportMode){homeExportSelection.clear();for(const [id,item] of selection)homeExportSelection.set(id,item);homeAllSelected=true;}
+  }catch(error){$('message').textContent=error.message;}
+  finally{homeSelectingAll=false;syncHomeExportControls();HomeLibrary.render(true);}
+ };
+ syncHomeExportControls();
  $('home-cloud-trigger').onclick=()=>{const open=$('home-cloud-trigger').getAttribute('aria-expanded')!=='true';closeHomeMenus();if(open){setHeaderDrop('home-cloud-menu','home-cloud-trigger',true);positionHomeMenu($('home-cloud-menu'),$('home-cloud-trigger'));}};
  $('home-library-scroll').addEventListener('scroll',()=>{closeHomeMenus();HomeLibrary.schedule();},{passive:true});
  new ResizeObserver(()=>HomeLibrary.schedule()).observe($('home-library-scroll'));
@@ -158,3 +182,22 @@ function transitionView(change){
  viewTransitionTask=task;task.finally(()=>{if(viewTransitionTask===task)viewTransitionTask=null;}).catch(()=>{});return task;
 }
 function enterHomeLive(){return transitionView(openLiveView);}
+
+function syncHomeExportRow(card,item){
+ const check=card.querySelector('.home-export-check');check.hidden=!homeExportMode;check.checked=homeExportSelection.has(item.id);check.disabled=homeSelectingAll||!VertexHomeModel.availability(item).local||item.id===latest?.recording;
+ card.classList.toggle('export-selected',homeExportMode&&check.checked);
+}
+function syncHomeExportControls(){
+ document.body.classList.toggle('home-export-mode',homeExportMode);
+ $('home-export').setAttribute('aria-pressed',String(homeExportMode));
+ $('home-select-all-wrap').hidden=!homeExportMode;$('home-export-bar').hidden=!homeExportMode;
+ $('home-select-all').disabled=homeSelectingAll;$('home-select-all').checked=homeAllSelected&&homeExportSelection.size>0;$('home-select-all').indeterminate=!homeAllSelected&&homeExportSelection.size>0;
+ $('home-export-confirm').disabled=homeSelectingAll||!homeExportSelection.size;
+ $('home-export-cancel').disabled=homeSelectingAll;$('home-export').disabled=homeSelectingAll;
+ $('home-export-count').textContent=homeSelectingAll?'Seleccionando biblioteca…':homeExportSelection.size+' seleccionadas';
+}
+function setHomeExportMode(enabled){if(homeSelectingAll)return;closeHomeMenus();homeExportMode=enabled;homeExportSelection.clear();homeAllSelected=false;syncHomeExportControls();HomeLibrary.render(true);}
+function toggleHomeExport(item,checked=!homeExportSelection.has(item.id)){
+ if(homeSelectingAll||!VertexHomeModel.availability(item).local||item.id===latest?.recording)return;
+ checked?homeExportSelection.set(item.id,item):homeExportSelection.delete(item.id);homeAllSelected=false;syncHomeExportControls();HomeLibrary.render(true);
+}

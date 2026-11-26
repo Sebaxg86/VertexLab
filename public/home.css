@@ -99,3 +99,20 @@ body:not([data-live-connected=true]) #picker-live:focus-visible{box-shadow:inset
 #picker-live .picker-live-go{margin-left:auto;width:31px;height:31px;flex-shrink:0;fill:none;stroke:#d2fbe4;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 7px #65f4aa22);transition:transform .25s,color .25s,filter .25s}#picker-live:hover .picker-live-go{transform:translateX(5px);filter:drop-shadow(0 0 9px #65f4aa66)}body:not([data-live-connected=true]) #picker-live .picker-live-go{stroke:#a5a0ad;filter:none}
 @media(min-width:781px){.live-view .instrument-grid{grid-template-rows:minmax(220px,1.1fr) minmax(210px,1fr)}.live-view .gear-block output{font-size:clamp(90px,14vh,155px)}.live-view .speed-readout>output{font-size:clamp(78px,12vh,135px)}}
 @media(max-width:780px){.home-live-description>.live-performance{font-size:16px}.home-live-description>.live-performance b,.home-live-description>.live-performance>span{padding:4px 7px}#live-car.live-vehicle{gap:12px}#live-car .live-vehicle-brand{width:56px;height:56px}#live-car .live-vehicle-name{font-size:20px}}
+
+/* Batch transfer controls retain virtualized library rows and the existing grid. */
+.home-export-check{width:20px;height:20px;min-width:20px;accent-color:#ff394f;margin:0 0 0 7px;cursor:pointer;animation:homeSelectReveal .22s ease both}
+.home-session-row.export-selected{background:linear-gradient(90deg,#ff394f20,#ff394f06);box-shadow:inset 3px 0 #ff394f}
+.home-import[aria-pressed=true]{color:#fff;background:#751d32;border-color:#ff4059;box-shadow:0 0 20px #ff394f24}
+#home-select-all-wrap{display:flex;align-items:center;gap:9px;margin-left:14px;color:#f6ccd5;letter-spacing:.5px;text-transform:none;font-size:13px;cursor:pointer;animation:homeSelectReveal .25s ease both}
+#home-select-all{width:17px;height:17px;accent-color:#ff394f;margin:0;cursor:pointer}
+.home-export-mode .home-history-label{display:none}
+.home-library-legend:has(#home-select-all-wrap:not([hidden])){justify-content:flex-start}
+#home-export-bar{display:flex;align-items:center;gap:9px;flex-shrink:0;padding:10px 0;border-bottom:1px solid #43303a;animation:homeSelectReveal .25s ease both}
+#home-export-count{flex:1;font-size:14px;color:#d4bac5}
+#home-export-bar button{padding:7px 12px;font-size:14px}
+#home-export-confirm{border-color:#a92b45;background:#8a1c32;color:#fff}
+#home-export-confirm:disabled{opacity:.4;cursor:not-allowed}
+#home-import-menu button{font-size:16px}
+@keyframes homeSelectReveal{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.home-export-check,#home-select-all-wrap,#home-export-bar{animation:none}}

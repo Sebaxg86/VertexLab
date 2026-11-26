@@ -8,11 +8,74 @@ import tempfile
 import uuid
 import zipfile
 from pathlib import Path
+from pathlib import PurePosixPath
+import stat
 
 FORMAT = 'VertexLab session'
 VERSION = 1
 MAX_ARCHIVE = 256 * 1024**3
 VIDEO_TYPES = {'.mp4', '.mkv', '.mov', '.webm', '.flv', '.ts', '.m4v'}
+MAX_BATCH = 10000
+
+
+def import_sessions(source, data):
+    """Validate all packages in isolation before publishing any session."""
+    data = Path(data)
+    data.mkdir(parents=True, exist_ok=True)
+    published = []
+    try:
+        with tempfile.TemporaryDirectory(prefix='.vrtx-batch-', dir=data) as temporary:
+            stage = Path(temporary)
+            with zipfile.ZipFile(source) as archive:
+                entries = archive.infolist()
+                if len(entries) > MAX_BATCH * 2:
+                    raise ValueError('El ZIP admite hasta 10000 sesiones')
+                names = set()
+                packages = []
+                for info in entries:
+                    path = PurePosixPath(info.filename)
+                    if ('\\' in info.filename or ':' in info.filename or path.is_absolute()
+                            or '..' in path.parts or stat.S_ISLNK(info.external_attr >> 16)
+                            or info.flag_bits & 1 or info.filename.casefold() in names):
+                        raise ValueError('El ZIP contiene rutas, duplicados o entradas no permitidas')
+                    names.add(info.filename.casefold())
+                    if not info.is_dir():
+                        if path.suffix.lower() != '.vrtx':
+                            raise ValueError('El ZIP debe contener únicamente archivos .vrtx')
+                        packages.append(info)
+                total = sum(info.file_size for info in packages)
+                if not packages or len(packages) > MAX_BATCH or total > MAX_ARCHIVE:
+                    raise ValueError('ZIP vacío o demasiado grande (máximo 10000 sesiones y 256 GiB)')
+                if shutil.disk_usage(data).free < total * 2 + 64 * 1024**2:
+                    raise ValueError('No hay espacio suficiente para importar el ZIP')
+                results = []
+                for info in packages:
+                    package = stage / 'incoming.vrtx'
+                    with archive.open(info) as stream, package.open('wb') as target:
+                        shutil.copyfileobj(stream, target, 1024**2)
+                    results.append(import_session(package, stage))
+                    package.unlink()
+            for result in results:
+                meta_path = stage / (result['id'] + '.json')
+                meta = read_json(meta_path.read_bytes())
+                if meta.get('videoPath'):
+                    source_video = Path(meta['videoPath'])
+                    destination = data / source_video.name
+                    os.replace(source_video, destination)
+                    published.append(destination)
+                    meta['videoPath'] = str(destination.resolve())
+                rows = data / (result['id'] + '.jsonl')
+                os.replace(stage / rows.name, rows)
+                published.append(rows)
+                meta_path.write_bytes(json_bytes(meta))
+                destination = data / meta_path.name
+                os.replace(meta_path, destination)
+                published.append(destination)
+            return {'sessions': results, 'count': len(results)}
+    except (zipfile.BadZipFile, OSError, ValueError, RuntimeError, EOFError) as error:
+        for path in reversed(published):
+            path.unlink(missing_ok=True)
+        raise ValueError('No se pudo importar el ZIP: ' + str(error)) from error
 META_KEYS = {'id', 'name', 'created', 'ended', 'duration', 'offset', 'version',
              'carOrdinal', 'carClass', 'carPI', 'automatic', 'events',
              'syncSegments', 'syncState', 'featured'}

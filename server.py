@@ -10,6 +10,8 @@ import time
 import tempfile
 import shutil
 import uuid
+import zipfile
+from datetime import date
 from pathlib import Path
 from http.server import ThreadingHTTPServer as BaseHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, quote, parse_qs
@@ -19,7 +21,7 @@ from obs_control import OBS
 from recorder import Recorder, car_name
 from telemetry import decode, analyze
 from session_preview import second_lap_preview
-from portable import export_session, import_session, MAX_ARCHIVE
+from portable import export_session, import_session, import_sessions, MAX_ARCHIVE, MAX_BATCH
 
 ROOT = Path(__file__).resolve().parent
 BRANDS = json.loads((ROOT/'car-brands.json').read_text(encoding='utf-8')) if (ROOT/'car-brands.json').exists() else {}
@@ -109,7 +111,7 @@ class Runtime:
             rows = [json.loads(line) for line in path.with_suffix('.jsonl').read_text(encoding='utf-8').splitlines()]
         return dict(meta=meta, laps=analyze(rows))
 
-    def prepare_export(self, sid, view):
+    def prepare_export(self, sid, view, expire=True):
         with self.lock:
             path = self.session_path(sid)
             if self.recorder.meta and self.recorder.meta['id'] == sid:
@@ -123,7 +125,7 @@ class Runtime:
         target = Path(handle.name)
         handle.close()
         try:
-            export_session(meta, path.with_suffix('.jsonl'), target, view)
+            export_session(meta, path.with_suffix('.jsonl'), target, view if view is not None else meta.get('portableView'))
         except Exception:
             target.unlink(missing_ok=True)
             raise
@@ -131,10 +133,49 @@ class Runtime:
         name = re.sub(r'[\x00-\x1f<>:"/\\|?*]', '_', meta['name']).strip()[:100] or 'Sesion'
         with self.lock:
             self.portable_exports[token] = (target, name + '.vrtx', time.monotonic())
-        expiry = threading.Timer(1800, self.expire_export, args=(token,))
-        expiry.daemon = True
-        expiry.start()
+        if expire:
+            expiry = threading.Timer(1800, self.expire_export, args=(token,))
+            expiry.daemon = True
+            expiry.start()
         return dict(url='/api/portable/download/' + token, name=name + '.vrtx', bytes=target.stat().st_size)
+
+    def prepare_exports(self, ids, day):
+        if not isinstance(ids, list) or not 1 <= len(ids) <= MAX_BATCH or not all(isinstance(sid, str) for sid in ids) or len(set(ids)) != len(ids):
+            raise ValueError('Selecciona entre 1 y 10000 sesiones distintas')
+        for sid in ids:
+            self.session_path(sid)
+        if len(ids) == 1:
+            return self.prepare_export(ids[0], None)
+        if not isinstance(day, str):
+            raise ValueError('Fecha de exportación inválida')
+        day = date.fromisoformat(day).isoformat()
+        handle = tempfile.NamedTemporaryFile(prefix='vertexlab-batch-', suffix='.zip', delete=False)
+        target = Path(handle.name)
+        handle.close()
+        try:
+            with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
+                for index, sid in enumerate(ids, 1):
+                    result = self.prepare_export(sid, None, expire=False)
+                    token = result['url'].rsplit('/', 1)[-1]
+                    with self.lock:
+                        package, name, _ = self.portable_exports.pop(token)
+                    try:
+                        archive.write(package, f'{index:03d}-{name}')
+                        if archive.fp.tell() > MAX_ARCHIVE:
+                            raise ValueError('El ZIP supera el límite de 256 GiB')
+                    finally:
+                        package.unlink(missing_ok=True)
+            name = 'VRTX-Sessions-' + day + '.zip'
+            token = uuid.uuid4().hex
+            with self.lock:
+                self.portable_exports[token] = (target, name, time.monotonic())
+            expiry = threading.Timer(1800, self.expire_export, args=(token,))
+            expiry.daemon = True
+            expiry.start()
+            return dict(url='/api/portable/download/' + token, name=name, bytes=target.stat().st_size)
+        except Exception:
+            target.unlink(missing_ok=True)
+            raise
 
     def expire_export(self, token):
         with self.lock:
@@ -426,9 +467,9 @@ def handler_for(runtime):
             path, name, _ = prepared
             try:
                 self.send_response(200)
-                self.send_header('Content-Type','application/vnd.vertexlab.session+zip')
+                self.send_header('Content-Type','application/zip' if name.endswith('.zip') else 'application/vnd.vertexlab.session+zip')
                 self.send_header('Content-Length',str(path.stat().st_size))
-                self.send_header('Content-Disposition',"attachment; filename=Sesion.vrtx; filename*=UTF-8''"+quote(name))
+                self.send_header('Content-Disposition',"attachment; filename="+('Sesiones.zip' if name.endswith('.zip') else 'Sesion.vrtx')+"; filename*=UTF-8''"+quote(name))
                 self.send_header('Cache-Control','no-store')
                 self.end_headers()
                 with path.open('rb') as stream:
@@ -436,11 +477,11 @@ def handler_for(runtime):
             finally:
                 path.unlink(missing_ok=True)
 
-        def portable_import(self):
+        def portable_import(self, batch=False):
             size = int(self.headers.get('Content-Length',0))
             if size <= 0 or size > MAX_ARCHIVE:
                 self.close_connection = True
-                return self.send({'error':'Tamaño de archivo .vrtx inválido (máximo 256 GiB)'},413)
+                return self.send({'error':('Tamaño de ZIP inválido' if batch else 'Tamaño de archivo .vrtx inválido')+' (máximo 256 GiB)'},413)
             with tempfile.TemporaryFile() as temporary:
                 remaining = size
                 while remaining:
@@ -450,21 +491,23 @@ def handler_for(runtime):
                     temporary.write(chunk)
                     remaining -= len(chunk)
                 temporary.seek(0)
-                result = import_session(temporary, runtime.data)
+                result = (import_sessions if batch else import_session)(temporary, runtime.data)
             self.send(result)
 
         def do_POST(self):
             if not self.valid_host() or self.headers.get('Origin') not in (None,f'http://{self.headers.get("Host")}'):
                 return self.send({'error':'Origen rechazado'},403)
             try:
-                if self.path == '/api/portable/import':
-                    return self.portable_import()
+                if self.path in ('/api/portable/import', '/api/portable/import-batch'):
+                    return self.portable_import(self.path.endswith('import-batch'))
                 size = int(self.headers.get('Content-Length',0))
-                if size < 0 or size > 16384:
+                if size < 0 or size > (512 * 1024 if self.path == '/api/portable/export-batch' else 16384):
                     return self.send({'error':'Petición demasiado grande'},413)
                 body = json.loads(self.rfile.read(size) or b'{}')
                 if not isinstance(body,dict) or not self.path.startswith('/api/'):
                     raise ValueError('Petición inválida')
+                if self.path == '/api/portable/export-batch':
+                    return self.send(runtime.prepare_exports(body.get('ids'), body.get('date')))
                 if self.path.startswith('/api/portable/export/'):
                     return self.send(runtime.prepare_export(self.path.split('/')[-1],body.get('view')))
                 self.send(runtime.command(self.path[5:],body))
