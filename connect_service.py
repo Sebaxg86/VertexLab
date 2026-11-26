@@ -105,6 +105,8 @@ class ConnectRuntime(Runtime):
                 raise ValueError('Finaliza la sesión antes de cambiar la configuración')
             if name == 'connect/udp':
                 self.bind_udp(body.get('port', 5301))
+                if self.config.values['complete']:
+                    self.config.save(udpPort=self.udp_port)
             elif name == 'connect/forza':
                 if not self.status()['connect']['forzaConnected']:
                     raise ValueError('Entra a Forza y conduce hasta recibir telemetría')

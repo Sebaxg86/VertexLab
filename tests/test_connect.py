@@ -64,6 +64,36 @@ class ConnectTests(unittest.TestCase):
         self.runtime.ingest(packet(event=False, active=True, stamp=300))
         self.assertNotEqual(self.runtime.status()['lastDrivingPacket']['timestamp'], driving['timestamp'])
 
+    def test_second_launch_reopens_configured_native_panel_without_another_capture_engine(self):
+        import io
+        import sys
+        import vertexconnect
+        self.config.save(complete=True, telemetryOnly=True)
+        status = {'connect': {'product': 'VertexConnect', 'complete': True}}
+        def response(request, **kwargs):
+            body = status if isinstance(request, str) else {'nativeWindow': True}
+            return io.BytesIO(json.dumps(body).encode())
+        with patch.object(sys, 'argv', ['vertexconnect', '--config', str(self.config.path)]), \
+             patch('vertexconnect.ThreadingHTTPServer', side_effect=OSError('occupied')), \
+             patch('vertexconnect.urllib.request.urlopen', side_effect=response) as urlopen, \
+             patch('vertexconnect.ConnectRuntime') as engine, \
+             patch('vertexconnect.logging.basicConfig'), \
+             patch('vertexconnect.webbrowser.open') as browser:
+            self.assertIsNone(vertexconnect.main())
+            self.assertEqual(urlopen.call_count, 2)
+            self.assertTrue(urlopen.call_args.args[0].full_url.endswith('/api/connect/show'))
+            engine.assert_not_called()
+            browser.assert_not_called()
+
+    def test_quick_panel_udp_change_survives_reopening_the_application(self):
+        self.config.save(complete=True, telemetryOnly=True, auto=False)
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as available:
+            available.bind(('127.0.0.1', 0))
+            port = available.getsockname()[1]
+        self.runtime.command('connect/udp', {'port': port})
+        self.assertEqual(ConnectConfig(self.config.path).values['udpPort'], port)
+        self.assertEqual(self.runtime.status()['connect']['udpPort'], port)
+
     def forza(self):
         self.runtime.ingest(packet(event=False))
         self.runtime.pending.join()

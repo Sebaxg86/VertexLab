@@ -9,6 +9,7 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+from connect_window import WindowPlacement, WIDTH, HEIGHT
 from connect_config import ConnectConfig
 from connect_service import ConnectRuntime
 from server import ThreadingHTTPServer, handler_for, ROOT
@@ -38,12 +39,11 @@ def main():
                 raise ValueError('El puerto de VertexConnect está ocupado por otro programa')
             if not args.headless:
                 native = False
-                if not existing['connect']['complete']:
-                    request = urllib.request.Request(url+'/api/connect/show', data=b'{}', headers={'Content-Type': 'application/json'})
-                    with urllib.request.urlopen(request, timeout=3) as response:
-                        native = json.load(response).get('nativeWindow') is True
+                request = urllib.request.Request(url+'/api/connect/show', data=b'{}', headers={'Content-Type': 'application/json'})
+                with urllib.request.urlopen(request, timeout=3) as response:
+                    native = json.load(response).get('nativeWindow') is True
                 if not native:
-                    webbrowser.open(url+('/' if existing['connect']['complete'] else '/connect.html'))
+                    webbrowser.open(url+'/connect.html')
             return
         except Exception as error:
             show_error(str(error))
@@ -98,6 +98,7 @@ def desktop(runtime, config, url):
     window = None
     tray = None
     quitting = threading.Event()
+    placement = WindowPlacement(config.path.parent/'window.json')
 
     class Bridge:
         def open_vertexlab(self):
@@ -107,12 +108,23 @@ def desktop(runtime, config, url):
             if tray:
                 window.hide()
 
+        def minimize_window(self):
+            placement.remember(window)
+            window.minimize()
+
+        def close_window(self):
+            placement.remember(window)
+            window.destroy()
+
         def choose_folder(self):
             paths = window.create_file_dialog(webview.FileDialog.FOLDER)
             return paths[0] if paths else None
 
+    webview.settings['DRAG_REGION_DIRECT_TARGET_ONLY'] = False
     window = webview.create_window('VertexConnect', url+'/connect.html', js_api=Bridge(),
-                                   width=790, height=880, min_size=(620, 600), background_color='#09090c')
+                                   width=WIDTH, height=HEIGHT, x=0, y=0, min_size=(200, 100), resizable=False,
+                                   frameless=True, easy_drag=False, hidden=True,
+                                   background_color='#09090c')
 
     def can_quit(_=None):
         with runtime.lock:
@@ -128,8 +140,13 @@ def desktop(runtime, config, url):
         window.destroy()
 
     def show_settings(*_):
-        window.show()
         window.restore()
+        placement.center(window)
+        window.show()
+        try:
+            window.evaluate_js("window.dispatchEvent(new Event('vertexconnectshown'))")
+        except Exception:
+            pass  # The initial page may still be loading.
 
     runtime.show_window = show_settings
 
@@ -159,11 +176,11 @@ def desktop(runtime, config, url):
         except Exception:
             logging.exception('Notification icon unavailable; keeping the window open')
             tray = None
-        if config.values['complete']:
-            Bridge().open_vertexlab()
-        else:
-            window.show()
+        show_settings()
 
+    window.events.before_show += lambda: placement.center(window)
+    window.events.moved += lambda *args: placement.remember(window)
+    window.events.restored += lambda *args: placement.center(window)
     window.events.closing += on_close
     try:
         webview.start(start_tray, gui='edgechromium', private_mode=False,
