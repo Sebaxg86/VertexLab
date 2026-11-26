@@ -39,5 +39,16 @@
     const blob=await (await directory.getFileHandle(record.filename)).getFile();checkSize(blob,record.size);return new File([blob],record.name,{lastModified:blob.lastModified});
   }
   async function forget(id){await transaction('sessions','readwrite',s=>s.delete(id));}
-  root.VertexLibrary={verifyCopy,setting,records,record:id=>transaction('sessions','readonly',s=>s.get(id)),save,file,update,forget};
+  async function remove(id){
+    const record=await transaction('sessions','readonly',s=>s.get(id));if(!record)return;
+    if(record.storage!=='database'){
+      if(!/^[a-f0-9]{32}$/.test(id)||record.filename!==id+'.vrtx')throw Error('La ruta de la copia local no es válida');
+      let directory=record.directory;
+      if(directory){if(await directory.queryPermission({mode:'readwrite'})!=='granted'&&await directory.requestPermission({mode:'readwrite'})!=='granted')throw Error('Autoriza la carpeta para eliminar la copia local');}
+      else directory=await (await navigator.storage.getDirectory()).getDirectoryHandle('sessions');
+      try{await directory.removeEntry(record.filename);}catch(error){if(error.name!=='NotFoundError')throw error;}
+    }
+    await forget(id);
+  }
+  root.VertexLibrary={verifyCopy,setting,records,record:id=>transaction('sessions','readonly',s=>s.get(id)),save,file,update,forget,remove};
 })(globalThis);

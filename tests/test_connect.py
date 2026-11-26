@@ -167,6 +167,27 @@ class ConnectTests(unittest.TestCase):
             http.server_close()
             thread.join(timeout=2)
 
+    def test_library_pagination_reads_previews_only_for_requested_page(self):
+        for index in range(30):
+            sid = f'{index:032x}'
+            meta = dict(id=sid, name=f'QA {index}', created=index, version=2, ended=1,
+                        carOrdinal=1009, syncSegments=[dict(tStart=0, tEnd=1, videoStart=0)],
+                        videoPath='private-video-location.mp4')
+            (self.runtime.data/(sid+'.json')).write_text(json.dumps(meta), encoding='utf-8')
+            (self.runtime.data/(sid+'.jsonl')).write_text('', encoding='utf-8')
+        with patch('server.second_lap_preview', return_value=dict(path='M0,0 L1,1')) as preview:
+            first = self.runtime.sessions(offset=0, limit=12)
+            self.assertEqual(preview.call_count, 12)
+            second = self.runtime.sessions(offset=12, limit=12)
+            self.assertEqual(preview.call_count, 24)
+        self.assertEqual(first['total'], 30)
+        self.assertEqual(first['nextOffset'], 12)
+        self.assertEqual(len(first['items']), 12)
+        self.assertEqual(len({item['id'] for item in first['items']+second['items']}), 24)
+        self.assertEqual(first['items'][0]['availability'], dict(local=True, cloud=False))
+        self.assertNotIn('videoPath', first['items'][0])
+        self.assertNotIn('syncSegments', first['items'][0])
+
     def test_restore_does_not_require_running_game_but_obs_failure_blocks_capture(self):
         self.config.save(complete=True, telemetryOnly=False)
         with patch.object(self.runtime, 'bind_udp'), patch.object(self.obs, 'connect', side_effect=ValueError('OBS cerrado')):

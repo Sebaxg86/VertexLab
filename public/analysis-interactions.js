@@ -71,7 +71,7 @@ function setupAnalysisInteractions(){
  $('delete-cancel').onclick=()=>$('delete-dialog').close();
  $('delete-confirm').onclick=action(async()=>{
   if(!session)return;const id=session.meta.id;$('delete-confirm').disabled=true;
-  try{clearVideo();await api('delete/'+id,{confirm:true});$('delete-dialog').close();openLiveView();await list();$('message').textContent='Sesión y video eliminados.';}
+  try{clearVideo();await api('delete/'+id,{confirm:true});$('delete-dialog').close();openHome();await list();$('message').textContent='Sesión y video eliminados.';}
   catch(error){$('delete-dialog').close();await load(id);throw error;}
   finally{$('delete-confirm').disabled=false;}
  });

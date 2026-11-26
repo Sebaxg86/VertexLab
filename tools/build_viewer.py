@@ -1,6 +1,7 @@
 """Build a static, backend-free VertexLab viewer for any HTTPS static host."""
 import hashlib
 import json
+import re
 import shutil
 import struct
 import zlib
@@ -18,9 +19,19 @@ for source in (ROOT / 'public').iterdir():
 for name in ('cars.json', 'car-brands.json', 'THIRD_PARTY_NOTICES.md'):
     shutil.copy2(ROOT / name, OUT / name)
 html = (ROOT / 'public/index.html').read_text(encoding='utf-8')
-html = html.replace('<body>', '<body class="browser-viewer" data-mode="viewer" data-session-open="false">')
+html = html.replace('<body class="home-view">', '<body class="home-view browser-viewer" data-mode="viewer" data-session-open="false">')
 html = html.replace('</head>', '<meta name="theme-color" content="#141014"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="VertexLab"></head>')
 html = html.replace('<script src="timeline.js">', '<script src="browser-core.js"></script><script src="browser-library.js"></script><script src="browser-runtime.js"></script><script src="timeline.js">')
+versioned_assets = []
+def version_asset(match):
+    name = match.group(2)
+    digest = hashlib.sha256((ROOT/'public'/name).read_bytes()).hexdigest()[:12]
+    target = name+'?v='+digest
+    versioned_assets.append(target)
+    return match.group(1)+'="'+target+'"'
+# Existing installations may still have the previous cache-first service worker.
+# Version entry assets so a new Home cannot run with old application scripts.
+html = re.sub(r'(src|href)="([^"/?]+\.(?:js|css))"', version_asset, html)
 (OUT / 'index.html').write_text(html, encoding='utf-8')
 (OUT / '.nojekyll').write_text('')
 
@@ -62,6 +73,6 @@ if(url.pathname.startsWith(mediaPath)){const id=url.pathname.slice(mediaPath.len
 if(event.request.method!=='GET')return;
 if(event.request.mode==='navigate'){event.respondWith(fetch(event.request).catch(()=>caches.match(new URL('index.html',self.registration.scope).href)));return;}
 event.respondWith(caches.open(CACHE).then(async cache=>(await cache.match(event.request))||fetch(event.request)));});
-""".replace('REVISION',revision).replace('PRECACHE',json.dumps(files))
+""".replace('REVISION',revision).replace('PRECACHE',json.dumps(files+versioned_assets))
 (OUT / 'sw.js').write_text(worker,encoding='utf-8')
 print(f'Visor estático listo: {OUT} ({len(files)} archivos, revisión {revision})')

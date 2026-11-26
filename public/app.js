@@ -63,8 +63,7 @@ function action(fn) {
   return async () => { try { await fn(); } catch (e) { $('message').textContent = e.message; } };
 }
 async function list() {
-  const sessions = await api('sessions');
-  renderPickerSessions(sessions);
+  return HomeLibrary.refresh();
 
 }
 
@@ -243,6 +242,7 @@ const chartLayers=new Map();
 let mapLayer=null;
 function draw(){renderDirty=true;}
 function paint() {
+  if(homeActive)return;
   const renderStarted=performance.now();
   if(!session){drawInstruments(liveConnection().active?latest.packet:null);return;}
   frameRects=new Map(['map','telemetry-scroll',...metricDefs.map((m,i)=>i?'chart-'+m.key:'charts')].map(id=>[id,$(id).getBoundingClientRect()]));
@@ -573,10 +573,8 @@ events.onerror = () => { streamConnected=false;updateLiveView();if(!session)draw
 }
 list().catch(e => { $('message').textContent = e.message; });
 const resizeObserver = new ResizeObserver(() => requestAnimationFrame(draw));
-setupAnalysisUI();setupPortableUI();setupLapScrollArrow();setupLapTimeline();setupRacingUI();setupViewUI();setupAnalysisInteractions();
+setupAnalysisUI();setupPortableUI();setupLapScrollArrow();setupLapTimeline();setupRacingUI();setupViewUI();setupAnalysisInteractions();setupHome();
 globalThis.VertexBrowser?.setup();
-const initialSession=!globalThis.VertexBrowser?.enabled&&/^#session\/([a-zA-Z0-9]+)$/.exec(location.hash)?.[1];
-if(initialSession)load(initialSession).catch(e=>{openLiveView();$('message').textContent=e.message;});
-else openLiveView();
+openHome();
 resizeObserver.observe($('map')); resizeObserver.observe($('telemetry-scroll'));
 draw();

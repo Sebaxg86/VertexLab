@@ -42,12 +42,28 @@
   async function request(path,body){
     await initialize();
     if(path==='sessions'){const result=new Map([...saved].map(([id,item])=>[id,{...item.meta,preview:item.preview}]));for(const [id,item] of sessions)result.set(id,{...item.meta,preview:item.preview});return [...result.values()];}
+    if(path.startsWith('library?')){
+      const query=new URLSearchParams(path.split('?')[1]);
+      const catalog=new Map([...saved].map(([id,item])=>[id,{...item.meta,preview:item.preview,availability:{local:true,cloud:false}}]));
+      for(const [id,item] of sessions)catalog.set(id,{...item.meta,preview:item.preview,availability:{local:true,cloud:false,temporary:!saved.has(id)}});
+      return VertexHomeModel.page([...catalog.values()],query.get('offset'),query.get('limit'));
+    }
     const [action,id]=path.split('/');
+    if(action==='feature'){
+      const stored=saved.get(id),opened=sessions.get(id);
+      if(!stored&&!opened)throw Error('Esta sesión ya no está en la biblioteca');
+      if(stored){const updated={...stored,meta:{...stored.meta,featured:!!body.featured}};await VertexLibrary.update(updated);saved.set(id,updated);}
+      if(opened)opened.meta.featured=!!body.featured;
+      return {featured:!!body.featured};
+    }
+    if(action==='delete'&&body?.removeLocal){
+      if(body.confirm!==true)throw Error('Confirma la eliminación de la copia local');
+      release(sessions.get(id));await VertexLibrary.remove(id);saved.delete(id);sessions.delete(id);return {ok:true};
+    }
     if(action==='sessions'){for(const [otherId,other] of sessions){if(otherId!==id&&saved.has(otherId)){release(other);sessions.delete(otherId);}}}
     if(action==='sessions'&&!sessions.has(id)&&saved.has(id)){const record=saved.get(id);await open(await VertexLibrary.file(record),progress=>{document.querySelector('.session-loading-card>span').textContent=progress.phase+' · '+progress.percent+'%';},{id,persist:false,rangeRead:true});Object.assign(get(id).meta,record.meta);}
     const item=get(id);
     if(action==='sessions')return {meta:{...item.meta},laps:item.laps};
-    if(action==='feature'){item.meta.featured=!!body.featured;if(saved.has(id)){saved.get(id).meta.featured=item.meta.featured;await VertexLibrary.update(saved.get(id));}return {featured:item.meta.featured};}
     if(action==='delete'){release(item);sessions.delete(id);return {ok:true};}
     if(action==='sync'){item.meta.offset=Number(body.offset)||0;return {ok:true};}
     throw Error('Esta función requiere VertexLab Capture en la PC');
@@ -82,7 +98,7 @@
     $('video-empty').querySelector('p').textContent='Tus vueltas, en cualquier pantalla';
     $('video-empty').querySelector('small').textContent='Abre una sesión .vrtx. El archivo se procesa aquí y no se sube a ningún servidor.';
     $('video-empty').append(button);
-    $('delete-session').onclick=action(async()=>{if(!session)return;const id=session.meta.id;clearVideo();await request('delete/'+id,{});openLiveView();await list();$('message').textContent='Sesión cerrada. Tu archivo original no se ha eliminado.';});
+    $('delete-session').onclick=action(async()=>{if(!session)return;const id=session.meta.id;clearVideo();await request('delete/'+id,{});openHome();await list();$('message').textContent='Sesión cerrada. Tu archivo original no se ha eliminado.';});
     if('serviceWorker' in navigator&&isSecureContext)navigator.serviceWorker.register(new URL('sw.js',document.baseURI),{updateViaCache:'none'}).catch(()=>{});
     navigator.serviceWorker?.addEventListener('message',async event=>{
       if(event.data?.type!=='vertex-media-range'||!event.ports[0])return;

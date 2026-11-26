@@ -12,7 +12,7 @@ import shutil
 import uuid
 from pathlib import Path
 from http.server import ThreadingHTTPServer as BaseHTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, quote
+from urllib.parse import urlparse, quote, parse_qs
 
 from obs_control import OBS
 from recorder import Recorder, car_name
@@ -66,10 +66,13 @@ class Runtime:
             raise ValueError('Sesión inválida')
         return self.data/(sid+'.json')
 
-    def sessions(self):
+    def sessions(self, offset=None, limit=None):
         with self.lock:
             sessions = sorted([json.loads(p.read_text(encoding='utf-8')) for p in self.data.glob('*.json')],
                               key=lambda s:s['created'], reverse=True)
+        total = len(sessions)
+        if offset is not None:
+            sessions = sessions[offset:offset+limit]
         for meta in sessions:
             meta['carName'] = car_name(meta.get('carOrdinal', 0))
             meta['brand'] = BRANDS.get(str(meta.get('carOrdinal')))
@@ -84,6 +87,12 @@ class Runtime:
                 meta['preview'] = cached[1]
             except FileNotFoundError:
                 meta['preview'] = None
+        if offset is not None:
+            keys = ('id', 'name', 'carName', 'carOrdinal', 'carClass', 'carPI', 'created',
+                    'ended', 'duration', 'version', 'featured', 'brand', 'preview')
+            items = [dict({k: meta[k] for k in keys if k in meta}, availability=dict(local=True, cloud=False)) for meta in sessions]
+            end = offset+len(items)
+            return dict(items=items, total=total, nextOffset=end if end < total else None)
         return sessions
 
     def read_session(self, sid):
@@ -313,6 +322,11 @@ def handler_for(runtime):
                     return self.send(runtime.status())
                 if route == '/api/sessions':
                     return self.send(runtime.sessions())
+                if route == '/api/library':
+                    query = parse_qs(urlparse(self.path).query)
+                    offset = max(0, int(query.get('offset', ['0'])[0]))
+                    limit = max(1, min(48, int(query.get('limit', ['12'])[0])))
+                    return self.send(runtime.sessions(offset=offset, limit=limit))
                 if route.startswith('/api/sessions/'):
                     return self.send(runtime.read_session(route.split('/')[-1]))
                 if route.startswith('/api/video/'):

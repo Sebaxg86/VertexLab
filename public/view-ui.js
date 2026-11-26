@@ -28,17 +28,18 @@ function setSessionPicker(open,restoreFocus=false){
   const picker=$('session-picker');
   $('session-trigger').setAttribute('aria-expanded',String(open));
   picker.inert=!open;
-  if(open){picker.hidden=false;requestAnimationFrame(()=>{if(!picker.inert)picker.classList.add('is-open');});}
+  if(open){HomeLibrary.renderPicker();picker.hidden=false;requestAnimationFrame(()=>{if(!picker.inert)picker.classList.add('is-open');});}
   else{picker.classList.remove('is-open');pickerTimer=setTimeout(()=>{picker.hidden=true;},220);}
   if(restoreFocus)$('session-trigger').focus();
 }
 function updateLiveView(){
+  updateHomeLive();
   if(globalThis.VertexBrowser?.enabled){VertexBrowser.decorate();return;}
   const state=liveConnection();
   document.body.dataset.liveConnected=String(state.online);
   setViewText('picker-live-status',state.online?'Conectado':'Sin señal');
   $('picker-live').setAttribute('aria-current',session?'false':'page');
-  if(session)return;
+  if(session||homeActive)return;
   setViewText('title',state.label);
   setViewText('view-eyebrow','SEGUNDO MONITOR');
   const car=latest?.packet?.carOrdinal>0?latest.carName:null;
@@ -47,6 +48,7 @@ function updateLiveView(){
   setViewText('live-connection',state.detail);
 }
 function setViewLayout(isLive){
+  homeActive=false;document.body.classList.remove('home-view');$('lab-home').hidden=true;closeHomeMenus();
   if(globalThis.VertexBrowser?.enabled)isLive=false;
   document.body.classList.toggle('live-view',isLive);
   $('manual-controls').hidden=!isLive;document.querySelector('.settings-wrap').hidden=false;
@@ -71,12 +73,8 @@ function openLiveView(){
   setSessionPicker(false);setMenu(false);
   history.replaceState(null,'',globalThis.VertexBrowser?.enabled?'#viewer':'#live');setViewLayout(true);draw();
 }
-function renderPickerSessions(items){
-  const container=$('picker-sessions'),scroll=container.scrollTop;container.replaceChildren();
-  $('picker-count').textContent=items.length;
-  if(!items.length){const empty=document.createElement('p');empty.className='picker-empty';empty.textContent='Tus carreras aparecerán aquí cuando se guarden.';container.append(empty);}
-  for(const item of items){
-    headerBrands.set(item.carOrdinal,item.brand);
+function createSessionButton(item){
+  headerBrands.set(item.carOrdinal,item.brand);
     const button=document.createElement('button');button.className='picker-session';
     button.setAttribute('aria-current',session?.meta.id===item.id?'page':'false');
     const preview=document.createElement('span');preview.className='picker-route';
@@ -101,6 +99,15 @@ function renderPickerSessions(items){
     date.textContent=new Date(item.created*1000).toLocaleString()+(item.version===2&&!item.ended?' · En curso':'');
     if(item.featured){const star=document.createElement('span');star.className='session-star';star.textContent='★';star.setAttribute('aria-label','Sesión destacada');title.append(star);}
     text.prepend(title);text.append(date);button.append(preview,brand,text);
+  return button;
+}
+function renderPickerSessions(items){
+  const container=$('picker-sessions'),scroll=container.scrollTop;container.replaceChildren();
+  $('picker-count').textContent=items.length;
+  if(!items.length){const empty=document.createElement('p');empty.className='picker-empty';empty.textContent='Tus carreras aparecerán aquí cuando se guarden.';container.append(empty);}
+  for(const item of items){
+    headerBrands.set(item.carOrdinal,item.brand);
+    const button=createSessionButton(item);
     button.onclick=action(async()=>{button.disabled=true;try{await load(item.id);setSessionPicker(false);setMenu(false);}finally{button.disabled=false;}});
     container.append(button);
   }
