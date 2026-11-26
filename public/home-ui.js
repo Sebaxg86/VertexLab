@@ -10,7 +10,7 @@ function updateHomeLive(){
  const browser=!!globalThis.VertexBrowser?.enabled,online=!browser&&liveConnection().online;
  $('home-live-entry').dataset.online=String(online);
  setViewText('home-live-title',online?'LIVE':'LIVE OFF');
- setViewText('home-live-description',browser?'La captura en vivo requiere VertexConnect en tu PC de juego.':online?liveCarMemory?.name||'Forza conectado. Tu tablero está listo.':'Esperando la señal de Forza. Tu tablero está listo.');
+ setViewText('home-live-description',browser?'La captura en vivo requiere VertexConnect en tu PC de juego.':online?liveCarMemory?.name||'Forza conectado. Tu tablero está listo.':'Esperando señal de Forza');
  $('home-live-entry').setAttribute('aria-label',online?'Entrar a LIVE, Forza conectado':'Entrar al tablero, LIVE OFF');
 }
 function openHome(){
@@ -129,7 +129,6 @@ function setupHome(){
  $('home-import').onclick=$('home-empty-import').onclick=()=>$('portable-file').click();
  $('home-cloud-trigger').onclick=()=>{const open=$('home-cloud-trigger').getAttribute('aria-expanded')!=='true';closeHomeMenus();if(open){setHeaderDrop('home-cloud-menu','home-cloud-trigger',true);positionHomeMenu($('home-cloud-menu'),$('home-cloud-trigger'));}};
  $('home-library-scroll').addEventListener('scroll',()=>{closeHomeMenus();HomeLibrary.schedule();},{passive:true});
- setupLibraryScroll();
  new ResizeObserver(()=>HomeLibrary.schedule()).observe($('home-library-scroll'));
  $('picker-sessions').addEventListener('scroll',()=>{const box=$('picker-sessions');if(box.scrollTop+box.clientHeight>=box.scrollHeight-100)HomeLibrary.morePicker();},{passive:true});
  $('home-library-retry').onclick=()=>HomeLibrary.loadMore();
@@ -159,13 +158,3 @@ function transitionView(change){
  viewTransitionTask=task;task.finally(()=>{if(viewTransitionTask===task)viewTransitionTask=null;}).catch(()=>{});return task;
 }
 function enterHomeLive(){return transitionView(openLiveView);}
-function setupLibraryScroll(){
- const box=$('home-library-scroll');let timer=null,dragging=false;
- const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
- function snap(){if(dragging||!homeActive)return;const target=VertexHomeModel.snapTop(box.scrollTop,box.scrollHeight-box.clientHeight);if(Math.abs(box.scrollTop-target)>.5)box.scrollTo({top:target,behavior:reduced()?'instant':'smooth'});}
- box.addEventListener('scroll',()=>{clearTimeout(timer);timer=setTimeout(snap,160);},{passive:true});
- box.addEventListener('pointerdown',()=>{dragging=true;});
- window.addEventListener('pointerup',()=>{if(dragging){dragging=false;clearTimeout(timer);timer=setTimeout(snap,160);}});
- window.addEventListener('pointercancel',()=>{dragging=false;timer=setTimeout(snap,160);});
-
-}

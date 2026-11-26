@@ -87,7 +87,7 @@
     $('analysis-settings').hidden=!session;
     $('settings-title').textContent=session?'SESIÓN / ANÁLISIS':'CONFIGURACIÓN';
     if(matchMedia('(pointer: coarse)').matches)document.querySelector('.map-footer>span').textContent='Zoom con +/− · arrastra para mover';
-    $('picker-live').hidden=!session;document.body.dataset.liveConnected='false';$('manual-controls').hidden=true;
+    $('picker-live').hidden=!session;$('picker-live').querySelector('b').textContent='OFF LIVE';document.body.dataset.liveConnected='false';$('manual-controls').hidden=true;
     $('export-session').lastElementChild.textContent='Guardar archivo .vrtx original';
     $('delete-session').lastElementChild.textContent='Cerrar sesión de esta pestaña';
     if(!session){$('title').textContent='Abre una sesión';$('view-eyebrow').textContent='VISOR PORTABLE';$('session-info').textContent='Biblioteca privada de este dispositivo';}

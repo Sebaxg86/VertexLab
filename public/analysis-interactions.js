@@ -5,7 +5,19 @@ function updateSessionActions(){
  $('feature-label').textContent=featured?'Quitar destacado':'Destacar sesión';
  $('feature-session').querySelector('.feature-icon').textContent=featured?'★':'☆';
  $('delete-session').disabled=latest?.recording===session?.meta.id;
- const cloud=$('analysis-cloud-actions');if(cloud){cloud.replaceChildren();for(const label of ['Sincronizar con Google Drive','Descargar desde Google Drive','Eliminar de Google Drive']){const button=document.createElement('button');button.className='session-action sync-placeholder';button.disabled=true;button.innerHTML=HomeGlyphs.cloud;const text=document.createElement('span');text.textContent=label;const note=document.createElement('small');note.textContent='Próximamente';text.append(note);button.append(text);cloud.append(button);}}
+ const cloud=$('analysis-cloud-actions');if(cloud){
+  cloud.replaceChildren();
+  const item={...session?.meta,id:session?.meta.id,availability:session?.meta.availability||{local:true,cloud:false}};
+  for(const option of VertexHomeModel.actions(item,latest?.recording).filter(option=>option.key!=='favorite')){
+   const button=document.createElement('button');button.className='session-action'+(option.danger?' danger-action':'')+(option.soon?' sync-placeholder':'');button.disabled=!session||!option.enabled;
+   button.innerHTML=option.key.startsWith('delete')?HomeGlyphs.remove:HomeGlyphs.cloud;
+   const text=document.createElement('span');text.textContent=option.label;
+   if(option.soon){const note=document.createElement('small');note.textContent='Próximamente';text.append(note);}
+   button.append(text);
+   if(option.key==='delete-local'||option.key==='delete-all')button.onclick=()=>requestAnalysisDelete(option.key);
+   cloud.append(button);
+  }
+ }
  $('export-session').disabled=!session||latest?.recording===session?.meta.id||(session.meta.version===2&&!session.meta.ended);
 }
 function clearAnalysisHover(){analysisHover=null;legendHoverLap=null;$('analysis-hover').hidden=true;$('map').removeAttribute('data-hover-lap');}
@@ -59,16 +71,22 @@ function stepMetrics(direction){
  scrollLocked=true;clearAnalysisHover();container.scrollTo({top:index*height,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
  setTimeout(()=>{scrollLocked=false;},230);
 }
+function requestAnalysisDelete(scope){
+ if(!session||latest?.recording===session.meta.id)return;
+ setPlaying(false);setMenu(false);
+ $('delete-title').textContent=scope==='delete-all'?'¿Eliminar definitivamente?':'¿Eliminar de este dispositivo?';
+ $('delete-description').textContent=session.meta.name||session.meta.carName||'Sesión';
+ const browser=!!globalThis.VertexBrowser?.enabled;
+ $('delete-dialog').querySelector('.delete-warning').textContent=browser?'Se eliminará la copia local de VertexLab. Tu archivo .vrtx original se conserva. No hay una nube conectada.':scope==='delete-all'?'Se eliminarán definitivamente la telemetría y el video. Actualmente esta sesión solo está disponible localmente; no hay una copia en la nube conectada. Esta acción no se puede deshacer.':'Se eliminarán la telemetría y el video de este dispositivo. Esta acción no se puede deshacer.';
+ $('delete-confirm').textContent=scope==='delete-all'?'Eliminar definitivamente':'Eliminar local';
+ $('delete-dialog').showModal();$('delete-cancel').focus();
+}
 function setupAnalysisInteractions(){
  $('feature-session').onclick=action(async()=>{
   if(!session)return;const result=await api('feature/'+session.meta.id,{featured:!session.meta.featured});
   session.meta.featured=result.featured;updateSessionActions();await list();
  });
- $('delete-session').onclick=()=>{
-  if(!session)return;setPlaying(false);setMenu(false);
-  $('delete-description').textContent=session.meta.name+(session.meta.videoPath?' · '+session.meta.videoPath.split(/[\\/]/).at(-1):' · sin video asociado');
-  $('delete-dialog').showModal();$('delete-cancel').focus();
- };
+ $('delete-session').onclick=()=>requestAnalysisDelete('delete-local');
  $('delete-cancel').onclick=()=>$('delete-dialog').close();
  $('delete-confirm').onclick=action(async()=>{
   if(!session)return;const id=session.meta.id;$('delete-confirm').disabled=true;

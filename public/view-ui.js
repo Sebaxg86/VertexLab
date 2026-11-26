@@ -40,6 +40,7 @@ function updateLiveView(){
   const state=liveConnection();
   document.body.dataset.liveConnected=String(state.online);
   setViewText('picker-live-status',state.online?'Conectado':'Sin señal');
+  $('picker-live').querySelector('b').textContent=state.online?'LIVE':'OFF LIVE';
   $('picker-live').setAttribute('aria-current',session?'false':'page');$('picker-live').hidden=!session;
   if(session||homeActive)return;
   setViewText('title',state.label);
@@ -122,7 +123,7 @@ function setupQuickLiveTrail(){
  const row=$('picker-live');let frame=0,x=0,y=0,tx=0,ty=0,inside=false;
  const tail=document.createElement('i');tail.className='quick-neon-tail';tail.setAttribute('aria-hidden','true');row.append(tail);
  function paint(){x+=(tx-x)*.18;y+=(ty-y)*.18;row.style.setProperty('--tail-x',x+'px');row.style.setProperty('--tail-y',y+'px');frame=inside&&Math.abs(tx-x)+Math.abs(ty-y)>.3?requestAnimationFrame(paint):0;}
- row.addEventListener('pointermove',event=>{const rect=row.getBoundingClientRect();tx=event.clientX-rect.left;ty=event.clientY-rect.top;if(!inside){x=tx;y=ty;inside=true;}row.style.setProperty('--live-x',tx+'px');row.style.setProperty('--live-y',ty+'px');if(!frame)frame=requestAnimationFrame(paint);},{passive:true});
+ row.addEventListener('pointermove',event=>{if(document.body.dataset.liveConnected!=='true')return;const rect=row.getBoundingClientRect();tx=event.clientX-rect.left;ty=event.clientY-rect.top;if(!inside){x=tx;y=ty;inside=true;}row.style.setProperty('--live-x',tx+'px');row.style.setProperty('--live-y',ty+'px');if(!frame)frame=requestAnimationFrame(paint);},{passive:true});
  row.addEventListener('pointerleave',()=>{inside=false;cancelAnimationFrame(frame);frame=0;});
 }
 function setupViewUI(){
