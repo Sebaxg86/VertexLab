@@ -19,7 +19,8 @@ function renderHeaderBrand(){
   }
   function rememberCar(previous,state){const ordinal=state?.packet?.carOrdinal;if(ordinal>0&&state.carName)return {ordinal,name:state.carName,carClass:state.packet.carClass,carPI:state.packet.carPI,brand:state.lastKnownCar?.ordinal===ordinal?state.lastKnownCar.brand:null};return state?.lastKnownCar?.ordinal>0?state.lastKnownCar:previous;}
   function rememberSample(previous,state){return state?.packet?.active&&state.packet.carOrdinal>0?state.packet:state?.lastDrivingPacket||previous;}
-  root.RaceConnection={connection,rememberCar,rememberSample};
+  function notice(online,sample){return !online?'Abre Forza para ver la telemetría en LIVE':!sample?'Juega para ver la telemetría en tiempo real':null;}
+  root.RaceConnection={connection,rememberCar,rememberSample,notice};
   if(typeof module!=='undefined')module.exports=root.RaceConnection;
 })(globalThis);
 let pickerTimer,streamConnected=false,liveReceivedAt=null,liveCarMemory=null,liveSampleMemory=null;
@@ -65,10 +66,11 @@ function updateLiveView(){
   const car=liveCarMemory?.name||null;
   setViewText('session-info','');
   renderLiveVehicle('live-car',state.online,state.online?'Esperando datos del vehículo':'Listo para tu próxima salida');
-  const offline=!state.online;
-  document.body.classList.toggle('live-offline',offline);
-  $('live-dashboard-host').inert=offline;
-  $('live-offline-notice').setAttribute('aria-hidden',String(!offline));
+  const notice=RaceConnection.notice(state.online,liveSampleMemory),blocked=notice!==null;
+  if(notice)setViewText('live-notice-title',notice);
+  document.body.classList.toggle('live-offline',blocked);
+  $('live-dashboard-host').inert=blocked;
+  $('live-offline-notice').setAttribute('aria-hidden',String(!blocked));
 }
 function setViewLayout(isLive){
   homeActive=false;document.body.classList.remove('home-view');$('lab-home').hidden=true;closeHomeMenus();

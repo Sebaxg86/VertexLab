@@ -21,3 +21,6 @@ body[data-step="2"]:not(.quick-mode) #obs-step .choice{padding:7px 9px;margin:7p
 @media(prefers-reduced-motion:reduce){.quick-mode .signal-dot,.quick-mode .signal-dot::after{animation:none!important}#open-app::before,#open-app>span{transition:none!important}}
 
 .quick-mode .addresses>div,.quick-mode .obs-fields>label{padding:4px 10px}.quick-mode .obs-fields>label{gap:0}.quick-mode .obs-fields input{height:30px;min-height:30px}.quick-mode .choice{min-height:32px;margin:7px 0;padding:6px 9px}.quick-mode #storage-settings{padding:8px 12px}.quick-mode #storage-settings .hint{font-size:10px!important;line-height:1.2!important;margin-top:3px}.quick-mode .shell{gap:8px}
+
+/* Help belongs to the title; the product icon stays at the far edge. */
+.config-heading{gap:7px}.config-heading .step-heading{flex:0 1 auto;padding-right:0}.config-heading .config-icon{margin-left:auto}

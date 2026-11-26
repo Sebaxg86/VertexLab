@@ -27,3 +27,15 @@ test('running Forza keeps a paused session online across UDP silence, transport 
  assert.equal(connection({...state,gameRunning:false},50,true,50).online,false);
  assert.equal(connection(state,55,false,50).online,false);
 });
+
+test('LIVE asks to drive only before its first sample, and retains paused telemetry',()=>{
+ const {notice,rememberSample}=require('../public/view-ui.js');
+ assert.match(notice(false,null),/Abre Forza/);
+ assert.match(notice(true,null),/Juega/);
+ const sample=rememberSample(null,{packet:{active:true,carOrdinal:1009,speed:84}});
+ assert.equal(notice(true,sample),null);
+ const paused=rememberSample(sample,{packet:{active:false,carOrdinal:0}});
+ assert.equal(notice(true,paused),null);
+ assert.match(notice(false,paused),/Abre Forza/);
+ assert.equal(notice(true,rememberSample(null,{lastDrivingPacket:sample})),null);
+});
