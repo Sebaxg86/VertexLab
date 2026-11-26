@@ -84,17 +84,17 @@ body:not([data-live-connected=true]) #picker-live:focus-visible{box-shadow:inset
 }
 @media(max-width:780px){.live-view .g-instrument{grid-row:2;grid-column:1}.live-view .steering-instrument{grid-row:3;grid-column:1}.live-view .tire-instrument{grid-row:4;grid-column:1}}
 
-/* High-contrast pedal meters in both dashboards. */
+/* Matte segmented pedal meters, shared by LIVE and analysis. */
 .input-meter,.live-view .input-meter,body:not(.live-view) .input-meter{gap:7px;margin-top:3px;font-family:RaceNumbers,sans-serif}
-.input-meter>div,.live-view .input-meter>div,body:not(.live-view) .input-meter>div{height:12px;min-width:20px;border-radius:2px;border:1px solid #38735b;background:linear-gradient(180deg,#10231b,#080e0b);box-shadow:0 0 10px #54e6a11a,inset 0 1px 4px #0008;overflow:hidden}
-.input-meter.brake-input>div{border-color:#7b3446;background:linear-gradient(180deg,#2d121b,#13090d);box-shadow:0 0 10px #ff49651c,inset 0 1px 4px #0008}
-#instant-throttle{background:linear-gradient(180deg,#c0ffdc 0%,#61f5ad 28%,#1bc879 80%,#10a465);box-shadow:0 0 12px #58ffab88,inset 0 1px #e7fff5aa}
-#instant-brake{background:linear-gradient(180deg,#ffd4dc 0%,#ff607d 28%,#ed244c 80%,#ba1539);box-shadow:0 0 12px #ff476e88,inset 0 1px #fff0f3aa}
+.input-meter>div,.live-view .input-meter>div,body:not(.live-view) .input-meter>div{position:relative;height:12px;min-width:20px;border-radius:1px;border:1px solid #35323b;background:#09090c;box-shadow:inset 0 1px 3px #0006;overflow:hidden}
+.input-meter>div::after{content:'';position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(90deg,transparent 0,transparent calc(10% - 1px),#101014 calc(10% - 1px),#101014 10%)}
+#instant-throttle{background:linear-gradient(90deg,#27684b70,#58c991b3);border-right:1px solid #83e7b3;box-shadow:inset 0 1px #b1f6d32b}
+#instant-brake{background:linear-gradient(90deg,#7a293e70,#d74c6db3);border-right:1px solid #f28ba2;box-shadow:inset 0 1px #ffd2dd26}
 .live-view .input-meter>div{height:14px}.live-view .input-meter>span{width:36px}.input-meter output,.live-view .input-meter output,body:not(.live-view) .input-meter output{font-size:14px;min-width:33px;font-variant-numeric:tabular-nums;color:#eee7ed}
 
 /* Home uses a quieter left-aligned rating; LIVE keeps the entire identity inline. */
 .home-live-description.live-vehicle{align-items:flex-start}.home-live-description>.live-performance{align-self:flex-start;font-size:19px}.home-live-description>.live-performance b{min-width:33px;padding:5px 8px}.home-live-description>.live-performance>span{padding:5px 9px}
-#live-car.live-vehicle{flex-direction:row;justify-content:center;align-items:center;gap:20px;width:fit-content;max-width:100%;margin-left:auto;margin-right:auto}#live-car .live-vehicle-title-row{flex:0 1 auto}#live-car>.live-performance{align-self:center}
+#live-car.live-vehicle{flex-direction:row;justify-content:center;align-items:center;gap:20px;width:fit-content;max-width:100%;margin-left:auto;margin-right:auto}#live-car .live-vehicle-title-row{flex:0 1 auto}#live-car>.live-performance{align-self:center;font-size:16px;letter-spacing:.5px;box-shadow:0 0 12px color-mix(in srgb,var(--class-color) 28%,transparent),inset 0 1px #ffffff33}#live-car>.live-performance b{min-width:25px;padding:4px 6px}#live-car>.live-performance>span{padding:4px 7px}
 #picker-live .picker-live-go{margin-left:auto;width:31px;height:31px;flex-shrink:0;fill:none;stroke:#d2fbe4;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 7px #65f4aa22);transition:transform .25s,color .25s,filter .25s}#picker-live:hover .picker-live-go{transform:translateX(5px);filter:drop-shadow(0 0 9px #65f4aa66)}body:not([data-live-connected=true]) #picker-live .picker-live-go{stroke:#a5a0ad;filter:none}
 @media(min-width:781px){.live-view .instrument-grid{grid-template-rows:minmax(220px,1.1fr) minmax(210px,1fr)}.live-view .gear-block output{font-size:clamp(90px,14vh,155px)}.live-view .speed-readout>output{font-size:clamp(78px,12vh,135px)}}
 @media(max-width:780px){.home-live-description>.live-performance{font-size:16px}.home-live-description>.live-performance b,.home-live-description>.live-performance>span{padding:4px 7px}#live-car.live-vehicle{gap:12px}#live-car .live-vehicle-brand{width:56px;height:56px}#live-car .live-vehicle-name{font-size:20px}}
