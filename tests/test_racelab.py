@@ -267,6 +267,34 @@ let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end'
         self.assertIsNone(rows[0]['videoTime'])
         self.assertAlmostEqual(rows[1]['videoTime'],.1)
 
+    def test_confirmed_start_footage_recovers_coverage_before_ack(self):
+        for manual in [False, True]:
+            self.obs.wall, self.obs.duration = 100.3, .2
+            if manual:
+                self.rec.begin(100, manual=True)
+            else:
+                self.feed(100)
+            segment = self.rec.meta['syncSegments'][0]
+            self.assertAlmostEqual(segment['tStart'], .1)
+            self.assertAlmostEqual(segment['videoStart'], 0)
+            self.feed(100.4)
+            self.assertAlmostEqual(self.rec.last_row['videoTime'], .3)
+            self.rec.finish('test')
+
+    def test_resume_only_backdates_new_footage_after_confirmed_pause(self):
+        self.feed(100)
+        self.feed(100.1)
+        self.obs.pause = lambda: dict(video=.7)
+        self.rec.pause()
+        self.obs.wall, self.obs.duration = 800.3, .9
+        self.feed(800)
+        segment = self.rec.meta['syncSegments'][-1]
+        self.assertAlmostEqual(segment['tStart'], .2)
+        self.assertAlmostEqual(segment['videoStart'], .7)
+        self.assertIsNone(self.rec.last_row['videoTime'])
+        self.feed(800.4)
+        self.assertAlmostEqual(self.rec.last_row['videoTime'], 1)
+
     def test_manual_session_records_free_roam(self):
         sid = self.rec.begin(100, name='Prueba manual', manual=True)
         self.feed(100.1,event=False)
@@ -340,10 +368,33 @@ class OBSProtocolTests(unittest.TestCase):
         secret = base64.b64encode(hashlib.sha256(b'passwordsalt').digest()).decode()
         expected = base64.b64encode(hashlib.sha256((secret+'challenge').encode()).digest()).decode()
         self.assertEqual(fake.sent[0]['d']['authentication'],expected)
-        self.assertEqual(obs.start()['video'],1.5)
-        obs.pause(); obs.resume()
+        started = obs.start()
+        self.assertEqual(started['video'],1.5)
+        self.assertEqual(len(started['observations']),5)
+        obs.pause()
+        self.assertEqual(len(obs.resume()['observations']),5)
         self.assertEqual(obs.stop(),'test.mp4')
         self.assertFalse(obs.owned)
+
+    def test_anchor_sampling_uses_fresh_encoded_frame_and_preserves_evidence(self):
+        obs = OBS()
+        first = dict(wall=10, video=1, uncertainty=.001, active=True, paused=False)
+        samples = [dict(first, wall=10.01, video=1),
+                   dict(first, wall=10.02, video=1.033),
+                   dict(first, wall=10.03, video=1.033, uncertainty=.03),
+                   dict(first, wall=10.04, video=1.05)]
+        with patch.object(obs, 'anchor', side_effect=samples), patch('obs_control.time.sleep'):
+            result = obs.settled_anchor(first)
+        self.assertEqual(result['wall'], 10.02)
+        self.assertEqual(len(result['observations']), 5)
+        self.assertEqual(result['method'], 'encoded-frame-samples-v1')
+
+    def test_anchor_sampling_rejects_state_change_or_clock_reset(self):
+        obs = OBS()
+        first = dict(wall=10, video=1, uncertainty=.001, active=True, paused=False)
+        for changed in [dict(first, paused=True), dict(first, active=False), dict(first, video=.9)]:
+            with patch.object(obs, 'anchor', return_value=changed), patch('obs_control.time.sleep'):
+                with self.assertRaises(ValueError): obs.settled_anchor(first)
 
     def test_existing_recording_is_never_controlled(self):
         fake = FakeWebSocket(active=True); obs = self.connect(fake)

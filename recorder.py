@@ -31,6 +31,7 @@ class Recorder:
         self.negative_since = None
         self.block_auto = False
         self.segment = None
+        self.paused_video = None
         self.error = None
         self.last_saved = None
         self.revision = 0
@@ -92,22 +93,29 @@ class Recorder:
         self.last = wall
         self.last_row = None
         self.segment = None
+        self.paused_video = None
         self.negative_since = None
         self.error = None
         anchor = self.obs_call('start')
         if anchor:
-            self.set_segment(anchor, wall)
+            self.set_segment(anchor, wall, baseline=0)
         self.persist()
         self.revision += 1
         return self.meta['id']
 
-    def set_segment(self, anchor, wall):
-        # Acknowledge measured OBS output time. Do not claim coverage for telemetry
-        # received before the confirmed anchor, including resumed sections.
-        coverage_start = self.t + max(0, anchor['wall']-wall)
+    def set_segment(self, anchor, wall, baseline=None):
+        # Only backdate coverage by footage actually confirmed since start or
+        # the confirmed pause. Never subtract the entire cumulative OBS duration
+        # on resume. Timestamped queued UDP packets remain on their receive clock.
+        anchor_t = self.t + max(0, anchor['wall']-wall)
+        footage = max(0, anchor['video']-baseline) if baseline is not None else 0
+        coverage_start = max(self.t, anchor_t-footage)
         self.segment = dict(tStart=coverage_start, tEnd=coverage_start,
-                            videoStart=anchor['video'],
+                            videoStart=anchor['video']+coverage_start-anchor_t,
                             uncertainty=anchor['uncertainty'], wallAnchor=anchor['wall'])
+        if anchor.get('observations'):
+            self.segment['anchorObservations'] = anchor['observations']
+            self.segment['anchorMethod'] = anchor['method']
         self.meta['syncSegments'].append(self.segment)
         if self.meta['syncState'] != 'error':
             self.meta['syncState'] = 'estimated'
@@ -117,7 +125,8 @@ class Recorder:
             return
         self.mode = 'paused'
         self.meta['events'].append(dict(type='pause', t=self.t, reason=reason))
-        self.obs_call('pause')
+        anchor = self.obs_call('pause')
+        self.paused_video = anchor['video'] if anchor else None
         self.persist()
 
     def heartbeat(self, wall):
@@ -193,7 +202,7 @@ class Recorder:
             self.segment = None
             anchor = self.obs_call('resume')
             if anchor:
-                self.set_segment(anchor, wall)
+                self.set_segment(anchor, wall, baseline=self.paused_video)
         if not self.meta['carOrdinal'] and row['carOrdinal']:
             self.meta.update(carOrdinal=row['carOrdinal'], carClass=row['carClass'], carPI=row['carPI'])
             if self.meta['automatic']:

@@ -10,6 +10,8 @@ import uuid
 class OBS:
     STATE_TIMEOUT = 5.0
     STATE_POLL = .05
+    ANCHOR_SAMPLES = 5
+    ANCHOR_INTERVAL = .01
     def __init__(self):
         self.ws = None
         self.owned = False
@@ -106,6 +108,23 @@ class OBS:
                 raise ValueError(message)
             time.sleep(self.STATE_POLL)
 
+    def settled_anchor(self, anchor):
+        # outputDuration is an encoded-frame counter, not a continuously running
+        # clock. Sample across several frame ticks; prefer the freshest lower
+        # bound rather than an arbitrary point on its staircase. Keep the
+        # observations for diagnosis; this cannot measure game capture latency.
+        samples = [anchor]
+        for _ in range(self.ANCHOR_SAMPLES - 1):
+            time.sleep(self.ANCHOR_INTERVAL)
+            sample = self.anchor()
+            if not sample['active'] or sample['paused']:
+                raise ValueError('OBS cambió de estado durante la sincronización')
+            if sample['video'] < samples[-1]['video']:
+                raise ValueError('El reloj de grabación de OBS retrocedió')
+            samples.append(sample)
+        best = max(samples, key=lambda a: a['video']-a['wall']-a['uncertainty'])
+        return dict(best, observations=samples, method='encoded-frame-samples-v1')
+
     def start(self):
         if not self.enabled:
             return None
@@ -114,7 +133,7 @@ class OBS:
             raise ValueError('OBS ya graba por tu cuenta; VertexLab no modificará esa grabación')
         self.request('StartRecord')
         self.owned = True
-        return self.wait_state(True, False, 'OBS no confirmó el inicio de la grabación')
+        return self.settled_anchor(self.wait_state(True, False, 'OBS no confirmó el inicio de la grabación'))
 
     def pause(self):
         if not self.owned:
@@ -128,7 +147,7 @@ class OBS:
             return None
         if self.anchor()['paused']:
             self.request('ResumeRecord')
-        return self.wait_state(True, False, 'OBS no confirmó la reanudación')
+        return self.settled_anchor(self.wait_state(True, False, 'OBS no confirmó la reanudación'))
 
     def stop(self):
         if not self.owned:
