@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.2.9"
+  #define AppVersion "0.2.10"
 #endif
 [Setup]
 AppId={{72CD7404-CBB3-4DCD-85CC-EE0249E045AA}
@@ -40,6 +40,7 @@ SelectDirBrowseLabel=Pulsa Instalar para continuar, o Examinar para elegir otra 
 WelcomeLabel1=Bienvenido al instalador de VertexLab + VertexConnect
 WelcomeLabel2=Instala tu espacio de telemetría para capturar, reproducir y analizar tus sesiones de Forza.%n%nVertexConnect conecta el juego y OBS. VertexLab te permite explorar cada vuelta, su video y sus gráficas.%n%nPulsa Siguiente para elegir dónde instalarlo.
 FinishedHeadingLabel=Todo listo para empezar.
+ConfirmUninstall=¿Desinstalar VertexLab y VertexConnect? Se eliminarán la aplicación, sus ajustes y la caché. Tus sesiones, videos, archivos .vrtx y copias de seguridad se conservarán.
 FinishedLabel=VertexLab y VertexConnect ya están instalados.%n%nElige cómo quieres continuar. Al iniciar VertexConnect podrás configurar Forza y OBS.
 
 [UninstallDelete]
@@ -114,4 +115,36 @@ procedure CurPageChanged(CurPageID: Integer);
 begin
   if CurPageID = wpSelectDir then
     WizardForm.NextButton.Caption := SetupMessage(msgButtonInstall);
+end;
+
+
+function InitializeUninstall: Boolean;
+var
+  Locator, Services, Processes: Variant;
+begin
+  Result := False;
+  try
+    Locator := CreateOleObject('WbemScripting.SWbemLocator');
+    Services := Locator.ConnectServer('', 'root\CIMV2');
+    Processes := Services.ExecQuery('SELECT ProcessId FROM Win32_Process WHERE Name = ''VertexConnect.exe''');
+    if Processes.Count > 0 then begin
+      MsgBox('Cierra VertexConnect desde el icono junto al reloj: Salir de VertexConnect. La X solo oculta la ventana. No se interrumpirá ninguna grabación.', mbInformation, MB_OK);
+      Exit;
+    end;
+    Result := True;
+  except
+    MsgBox('No se pudo comprobar si VertexConnect sigue activo. Cierra la aplicación y vuelve a intentarlo.', mbError, MB_OK);
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
+begin
+  if CurUninstallStep = usUninstall then begin
+    if not Exec(ExpandConstant('{app}\VertexConnect.exe'), '--uninstall-cleanup', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+      Log('No se pudo limpiar la configuración; las sesiones se conservan.')
+    else if ResultCode <> 0 then
+      Log('Limpieza de configuración incompleta; se conservaron los archivos que no pudieron validarse.');
+  end;
 end;

@@ -20,7 +20,11 @@ def main():
     parser.add_argument('--port', type=int, default=8766)
     parser.add_argument('--config', type=Path)
     parser.add_argument('--headless', action='store_true', help='Run service only for development and tests')
+    parser.add_argument('--uninstall-cleanup', action='store_true', help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.uninstall_cleanup:
+        from uninstall_cleanup import main as cleanup
+        return cleanup()
     config = ConnectConfig(args.config, default_data=None if getattr(sys, 'frozen', False) else ROOT/'data')
     config.path.parent.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(filename=config.path.parent/'connect.log', level=logging.INFO,
