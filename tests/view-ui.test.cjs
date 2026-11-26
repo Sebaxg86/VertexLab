@@ -1,6 +1,6 @@
 const test=require('node:test');const assert=require('node:assert/strict');
 const {connection}=require('../public/view-ui.js');
-test('LIVE requires a fresh real packet and a connected stream',()=>{const state={packet:{active:true},lastPacket:100};assert.equal(connection(state,101).label,'LIVE');assert.equal(connection(state,105).label,'OFF LIVE');assert.equal(connection(state,101,false).online,false);assert.equal(connection({...state,udpError:'busy'},101).online,false);assert.equal(connection(null,101).online,false);});
+test('LIVE requires a fresh real packet and a connected stream',()=>{const state={packet:{active:true},lastPacket:100};assert.equal(connection(state,101).label,'LIVE');assert.equal(connection(state,105).label,'OFFLINE');assert.equal(connection(state,101,false).online,false);assert.equal(connection({...state,udpError:'busy'},101).online,false);assert.equal(connection(null,101).online,false);});
 test('paused packets preserve connection while instruments require active driving',()=>{const result=connection({packet:{active:false},lastPacket:100},101);assert.equal(result.online,true);assert.equal(result.active,false);assert.match(result.detail,/pausa/);});
 
 test('clock skew and millisecond rounding cannot reject a fresh packet',()=>{assert.equal(connection({packet:{active:true},lastPacket:100.0009},100).online,true);const state={packet:{active:true},lastPacket:9999999999,packetAge:.015};assert.equal(connection(state,10,true,10).active,true);assert.equal(connection(state,16,true,10).online,false);});

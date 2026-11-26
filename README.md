@@ -222,7 +222,7 @@ al centro, y dirección, fuerzas G y neumáticos debajo. Puedes abrir directamen
 
 El indicador verde respira mientras llegan paquetes recientes de Forza. Las lecturas se limpian tras dos segundos sin datos. El estado LIVE tolera
 cortes UDP de hasta cinco segundos y reconexiones breves del visor antes de pasar
-a OFF LIVE; no conserva lecturas viejas como si fueran actuales. La antigüedad
+a OFFLINE; no conserva lecturas viejas como si fueran actuales. La antigüedad
 del paquete usa un reloj monotónico del servidor y el tiempo transcurrido local,
 sin comparar el reloj del navegador con el de Windows. Los paquetes
 de pausa o menú mantienen la conexión e indican ese estado, sin mostrar conducción
@@ -394,7 +394,7 @@ El servicio admite --headless, --port y --config para comprobaciones aisladas. L
 
 ## Home de VertexLab
 
-Cada apertura entra en Home, aunque la URL anterior apunte a LIVE o a una sesión. El logo permite volver al inicio desde el análisis o LIVE. La mitad izquierda indica LIVE / LIVE OFF a partir de la misma recepción real y tolerancia a cortes del tablero; el visor público muestra LIVE OFF porque todavía no está emparejado con Connect. La mitad derecha muestra la biblioteca con trazadas y marcas originales, favoritos, importación .vrtx e indicadores separados de disponibilidad local y en nube.
+Cada apertura entra en Home, aunque la URL anterior apunte a LIVE o a una sesión. El logo permite volver al inicio desde el análisis o LIVE. La mitad izquierda indica LIVE / OFFLINE a partir de la misma recepción real y tolerancia a cortes del tablero; el visor público muestra OFFLINE porque todavía no está emparejado con Connect. La mitad derecha muestra la biblioteca con trazadas y marcas originales, favoritos, importación .vrtx e indicadores separados de disponibilidad local y en nube.
 
 La biblioteca solicita bloques de 12 a /api/library?offset=0&limit=12 (máximo 48), sin leer el video ni todas las muestras de análisis. El servidor calcula miniaturas solo para la página solicitada; el navegador mantiene únicamente las filas visibles y un margen de tres por lado. El selector del header carga más sesiones cuando se desplaza hasta el final. Marcar favorito en el visor modifica solo sus metadatos guardados; no requiere abrir el archivo completo.
 

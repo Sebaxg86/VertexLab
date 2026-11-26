@@ -15,7 +15,7 @@ function renderHeaderBrand(){
     const age=Number.isFinite(state?.packetAge)?state.packetAge+(Number.isFinite(elapsed)?elapsed:0):Math.max(0,now-(state?.lastPacket??-Infinity));
     const online=!!((stream||elapsed<2)&&state?.packet&&!state.udpError&&(age<5||state.gameRunning===true));
     const fresh=age<2;
-    return {online,active:online&&fresh&&!!state.packet.active,label:online?'LIVE':'OFF LIVE',detail:!stream?'Servidor desconectado · reconectando…':state?.udpError?'No se pudo abrir el receptor UDP':online?!fresh?'Señal interrumpida · esperando nuevos datos':state.packet.active?'Recibiendo telemetría en tiempo real':'Forza conectado · juego en pausa o menú':'Sin señal de Forza · esperando Data Out'};
+    return {online,active:online&&fresh&&!!state.packet.active,label:online?'LIVE':'OFFLINE',detail:!stream?'Servidor desconectado · reconectando…':state?.udpError?'No se pudo abrir el receptor UDP':online?!fresh?'Señal interrumpida · esperando nuevos datos':state.packet.active?'Recibiendo telemetría en tiempo real':'Forza conectado · juego en pausa o menú':'Sin señal de Forza · esperando Data Out'};
   }
   function rememberCar(previous,state){const ordinal=state?.packet?.carOrdinal;if(ordinal>0&&state.carName)return {ordinal,name:state.carName};return state?.lastKnownCar?.ordinal>0?state.lastKnownCar:previous;}
   function rememberSample(previous,state){return state?.packet?.active&&state.packet.carOrdinal>0?state.packet:state?.lastDrivingPacket||previous;}
@@ -40,7 +40,7 @@ function updateLiveView(){
   const state=liveConnection();
   document.body.dataset.liveConnected=String(state.online);
   setViewText('picker-live-status',state.online?'Conectado':'Sin señal');
-  $('picker-live').querySelector('b').textContent=state.online?'LIVE':'OFF LIVE';
+  $('picker-live').querySelector('b').textContent=state.online?'LIVE':'OFFLINE';
   $('picker-live').setAttribute('aria-current',session?'false':'page');$('picker-live').hidden=!session;
   if(session||homeActive)return;
   setViewText('title',state.label);

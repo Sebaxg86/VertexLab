@@ -9,9 +9,9 @@ function updateHomeLive(){
  if(!$('home-live-entry'))return;
  const browser=!!globalThis.VertexBrowser?.enabled,online=!browser&&liveConnection().online;
  $('home-live-entry').dataset.online=String(online);
- setViewText('home-live-title',online?'LIVE':'LIVE OFF');
+ setViewText('home-live-title',online?'LIVE':'OFFLINE');
  setViewText('home-live-description',browser?'La captura en vivo requiere VertexConnect en tu PC de juego.':online?liveCarMemory?.name||'Forza conectado. Tu tablero está listo.':'Esperando señal de Forza');
- $('home-live-entry').setAttribute('aria-label',online?'Entrar a LIVE, Forza conectado':'Entrar al tablero, LIVE OFF');
+ $('home-live-entry').setAttribute('aria-label',online?'Entrar a LIVE, Forza conectado':'Entrar al tablero, OFFLINE');
 }
 function openHome(){
  openLiveView();homeActive=true;revSweepState=null;
