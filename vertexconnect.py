@@ -1,0 +1,178 @@
+"""Windows companion: local capture service, setup window and notification area."""
+import argparse
+import json
+import logging
+import os
+import sys
+import threading
+import urllib.request
+import webbrowser
+from pathlib import Path
+
+from connect_config import ConnectConfig
+from connect_service import ConnectRuntime
+from server import ThreadingHTTPServer, handler_for, ROOT
+
+
+def main():
+    parser = argparse.ArgumentParser(description='VertexLab + VertexConnect')
+    parser.add_argument('--port', type=int, default=8766)
+    parser.add_argument('--config', type=Path)
+    parser.add_argument('--headless', action='store_true', help='Run service only for development and tests')
+    args = parser.parse_args()
+    config = ConnectConfig(args.config, default_data=None if getattr(sys, 'frozen', False) else ROOT/'data')
+    config.path.parent.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(filename=config.path.parent/'connect.log', level=logging.INFO,
+                        format='%(asctime)s %(levelname)s %(message)s', encoding='utf-8')
+    url = f'http://127.0.0.1:{args.port}'
+    runtime = None
+    try:
+        # Bind HTTP before opening UDP/OBS. A second launch cannot create a
+        # second recorder or touch the first instance's active recording.
+        http = ThreadingHTTPServer(('127.0.0.1', args.port), handler_for(None))
+    except OSError:
+        try:
+            with urllib.request.urlopen(url+'/api/status', timeout=2) as response:
+                existing = json.load(response)
+            if existing.get('connect', {}).get('product') != 'VertexConnect':
+                raise ValueError('El puerto de VertexConnect está ocupado por otro programa')
+            if not args.headless:
+                native = False
+                if not existing['connect']['complete']:
+                    request = urllib.request.Request(url+'/api/connect/show', data=b'{}', headers={'Content-Type': 'application/json'})
+                    with urllib.request.urlopen(request, timeout=3) as response:
+                        native = json.load(response).get('nativeWindow') is True
+                if not native:
+                    webbrowser.open(url+('/' if existing['connect']['complete'] else '/connect.html'))
+            return
+        except Exception as error:
+            show_error(str(error))
+            return 1
+    try:
+        runtime = ConnectRuntime(config)
+        http.RequestHandlerClass = handler_for(runtime)
+        try:
+            runtime.restore()
+        except ValueError as error:
+            runtime.recorder.auto = False
+            runtime.recorder.mode = 'idle'
+            runtime.setup_error = str(error)
+        service = threading.Thread(target=http.serve_forever, daemon=True)
+        service.start()
+        if args.headless:
+            try:
+                service.join()
+            except KeyboardInterrupt:
+                pass
+        else:
+            desktop(runtime, config, url)
+    except Exception:
+        logging.exception('VertexConnect could not start')
+        show_error('No se pudo abrir VertexConnect. Revisa connect.log en la carpeta de configuración.')
+        return 1
+    finally:
+        if runtime:
+            http.shutdown()
+            runtime.close()
+        http.server_close()
+    return 0
+
+
+def show_error(message):
+    if os.name == 'nt':
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(None, message, 'VertexConnect', 0x10)
+    else:
+        print(message, file=sys.stderr)
+
+
+def desktop(runtime, config, url):
+    import webview
+    import pystray
+    from PIL import Image, ImageDraw
+
+    if os.name == 'nt':
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('VertexLab.Connect')
+
+    window = None
+    tray = None
+    quitting = threading.Event()
+
+    class Bridge:
+        def open_vertexlab(self):
+            if not runtime.config.values['complete']:
+                raise ValueError('Completa la configuración primero')
+            webbrowser.open(url+'/')
+            if tray:
+                window.hide()
+
+        def choose_folder(self):
+            paths = window.create_file_dialog(webview.FileDialog.FOLDER)
+            return paths[0] if paths else None
+
+    window = webview.create_window('VertexConnect', url+'/connect.html', js_api=Bridge(),
+                                   width=790, height=880, min_size=(620, 600), background_color='#09090c')
+
+    def can_quit(_=None):
+        with runtime.lock:
+            return not runtime.recorder.meta and not runtime.recorder.obs.owned
+
+    def quit_app(*_):
+        if not can_quit():
+            show_error('Hay una sesión en curso. Finalízala en VertexLab antes de salir.')
+            return
+        quitting.set()
+        if tray:
+            tray.stop()
+        window.destroy()
+
+    def show_settings(*_):
+        window.show()
+        window.restore()
+
+    runtime.show_window = show_settings
+
+    def on_close():
+        if quitting.is_set():
+            return True
+        if tray:
+            window.hide()
+            return False
+        if not can_quit():
+            show_error('Finaliza la sesión antes de cerrar VertexConnect.')
+            return False
+        return True
+
+    def start_tray():
+        nonlocal tray
+        image = Image.new('RGB', (64, 64), '#09090c')
+        ImageDraw.Draw(image).polygon([(9, 12), (22, 12), (32, 42), (43, 12), (56, 12), (38, 54), (26, 54)], fill='#ff344c')
+        try:
+            tray = pystray.Icon('VertexConnect', image, 'VertexConnect · captura local', pystray.Menu(
+                pystray.MenuItem('Abrir VertexLab', lambda *_: Bridge().open_vertexlab(),
+                                enabled=lambda _: config.values['complete'], default=True),
+                pystray.MenuItem('Configurar conexiones', show_settings),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem('Salir de VertexConnect', quit_app, enabled=can_quit)))
+            tray.run_detached()
+        except Exception:
+            logging.exception('Notification icon unavailable; keeping the window open')
+            tray = None
+        if config.values['complete']:
+            Bridge().open_vertexlab()
+        else:
+            window.show()
+
+    window.events.closing += on_close
+    try:
+        webview.start(start_tray, gui='edgechromium', private_mode=False,
+                      storage_path=str(config.path.parent/'WebView'), icon=str(ROOT/'public/vertexlab.ico'))
+    finally:
+        runtime.show_window = None
+        if tray:
+            tray.stop()
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

@@ -53,3 +53,14 @@ Copyright / MIT notice: public/LICENSE-Cardog.txt. Trademarks remain their owner
 - hash-wasm 4.13.0 — Dániel Németh — MIT. Source: https://github.com/Daninet/hash-wasm . SHA-256 bundle `public/vendor-sha256-4.13.0.js`; license beside it.
 
 Packages were pinned and their npm tarball SRI verified before vendoring. No third-party scripts are fetched when a user opens a session.
+
+
+## Windows companion
+
+- pywebview 6.2.1 — Roman Sirokov and contributors — BSD-3-Clause. https://github.com/r0x0r/pywebview
+- pystray 0.19.5 — Moses Palmér and contributors — LGPL-3.0. https://github.com/moses-palmer/pystray . Unmodified library source and metadata are included in the companion bundle.
+- Pillow 12.3.0 — Pillow contributors — MIT-CMU. https://github.com/python-pillow/Pillow
+- pythonnet and clr-loader — their respective contributors — MIT. https://github.com/pythonnet/pythonnet and https://github.com/pythonnet/clr-loader
+- PyInstaller 6.22.3 is used as a build tool under GPL-2.0-or-later with its bootloader distribution exception. https://pyinstaller.org/en/stable/license.html
+
+Dependency license files and Python's license are bundled under _internal/licenses. Microsoft Edge WebView2 is a system runtime, not bundled with VertexLab. The notification icon and companion artwork are drawn locally for VertexLab.

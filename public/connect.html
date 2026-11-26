@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VertexConnect</title><link rel="stylesheet" href="connect.css"></head>
+<body><main class="shell">
+<header><a class="brand" href="#" aria-label="VertexConnect">VERTEX<span>CONNECT</span></a><span class="local-badge">EN TU PC</span></header>
+<div class="intro"><p class="eyebrow">EL JUEGO. LOS DATOS. CADA DETALLE.</p><h1>Prepara tu próxima sesión.</h1><p>Conecta una vez. Después, concéntrate en conducir.</p></div>
+<nav class="progress" aria-label="Configuración"><span class="current" data-step="1">01 <b>FORZA</b></span><i></i><span data-step="2">02 <b>OBS</b></span><i></i><span data-step="3">03 <b>LISTO</b></span></nav>
+<div id="connection-error" class="notice error" role="alert" hidden></div>
+<section class="step" id="forza-step"><button class="step-heading" id="forza-heading" aria-expanded="true"><span class="step-number">01</span><span>Conectar Forza<small>La telemetría empieza aquí</small></span><span class="check" id="forza-check" hidden>✓</span></button>
+<div class="step-body" id="forza-body"><p>En Forza, abre <strong>Ajustes → HUD y jugabilidad → Data Out</strong>. Activa la salida de datos y utiliza estos valores.</p>
+<div class="addresses"><div><span>DIRECCIÓN IP</span><strong>127.0.0.1</strong><button class="copy" data-copy="127.0.0.1" aria-label="Copiar dirección IP">Copiar</button></div><div><label for="udp-port">PUERTO UDP</label><div class="port-input"><input id="udp-port" type="number" min="1024" max="65535" value="5301"><button class="copy" id="apply-port">Aplicar</button></div></div></div>
+<p class="hint">Entra al juego y conduce unos metros. No necesitas iniciar una carrera. OBS se configura en el siguiente paso.</p>
+<div class="signal" id="forza-signal" role="status"><span class="signal-dot"></span><div><strong id="forza-state">Esperando a Forza</strong><small id="forza-detail">Comprobando recepción de telemetría…</small></div></div>
+<button class="primary" id="forza-next" disabled>Continuar <span>→</span></button></div></section>
+<section class="step" id="obs-step" hidden><button class="step-heading" id="obs-heading" aria-expanded="true"><span class="step-number">02</span><span>Configurar OBS<small>Video y telemetría, juntos</small></span><span class="check" id="obs-check" hidden>✓</span></button>
+<div class="step-body" id="obs-body"><p>Abre OBS y activa <strong>Herramientas → Ajustes del servidor WebSocket</strong>. Déjalo abierto mientras grabas.</p>
+<div class="obs-fields" id="obs-fields"><label>Puerto WebSocket<input id="obs-port" type="number" min="1024" max="65535" value="4455"></label><label>Contraseña de WebSocket<input id="obs-password" type="password" autocomplete="off" placeholder="Contraseña configurada en OBS"></label><button class="secondary" id="test-obs">Comprobar conexión</button></div>
+<p id="obs-state" class="hint" role="status">Todavía no conectado</p>
+<label class="choice"><input id="telemetry-only" type="checkbox"><span><strong>No grabar video con OBS, solo telemetría.</strong><small>Podrás activar el video después desde la configuración.</small></span></label>
+<button class="primary" id="obs-next" disabled>Continuar <span>→</span></button></div></section>
+<section class="ready" id="ready-step" hidden><div class="ready-mark" aria-hidden="true">✓</div><p class="eyebrow">CONEXIONES PREPARADAS</p><h2>Todo listo.</h2><p>Tu próxima sesión empieza al volante.</p><div class="summary"><div><span>FORZA</span><strong id="ready-forza">Configurado</strong></div><div><span>GRABACIÓN</span><strong id="ready-video">Video + telemetría</strong></div></div>
+<label class="folder-label" for="data-path">TUS SESIONES SE GUARDARÁN EN</label><div class="folder"><input id="data-path" type="text" spellcheck="false" aria-label="Carpeta de sesiones"><button class="copy" id="browse-folder" hidden>Elegir</button><button class="copy" id="save-folder">Guardar</button></div><p class="hint">Cambiar de carpeta no mueve ni borra las sesiones anteriores.</p>
+<label class="choice compact"><input id="auto-record" type="checkbox" checked><span>Detectar y grabar carreras automáticamente</span></label>
+<button class="primary" id="open-app">Abrir VertexLab <span>↗</span></button><button class="text-button" id="review">Revisar configuración</button></section>
+<footer><span class="footer-dot"></span><span>Captura local · funciona sin internet</span><span id="footer-status">VertexConnect</span></footer>
+</main><script src="connect.js"></script></body></html>

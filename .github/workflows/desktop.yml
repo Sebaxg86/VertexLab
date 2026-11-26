@@ -1,0 +1,29 @@
+name: Build VertexLab for Windows
+on:
+  workflow_dispatch:
+jobs:
+  desktop:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-desktop.txt
+      - run: python -m unittest discover -s tests
+      - run: python tools/build_desktop.py
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $compiler = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 7\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $compiler) { throw 'Inno Setup compiler is required on the Windows build image' }
+          & $compiler installer\VertexLab.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VertexLab-Windows
+          path: |
+            dist/installer/*.exe
+            dist/VertexConnect/**
