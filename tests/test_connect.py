@@ -45,6 +45,9 @@ class ConnectTests(unittest.TestCase):
     def test_last_known_vehicle_survives_pause_without_changing_raw_packet(self):
         self.runtime.ingest(packet(event=False, car=1009))
         original = self.runtime.status()['lastKnownCar']
+        self.assertEqual(original['carClass'], 3)
+        self.assertEqual(original['carPI'], 800)
+        self.assertIsNotNone(original['brand'])
         self.runtime.ingest(packet(active=False, event=False, car=0))
         paused = self.runtime.status()
         self.assertEqual(paused['lastKnownCar'], original)

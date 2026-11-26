@@ -260,7 +260,9 @@ class Runtime:
             return
         with self.live_lock:
             if row['carOrdinal'] > 0:
-                self.last_known_car = dict(ordinal=row['carOrdinal'], name=car_name(row['carOrdinal']))
+                self.last_known_car = dict(ordinal=row['carOrdinal'], name=car_name(row['carOrdinal']),
+                                           carClass=row['carClass'], carPI=row['carPI'],
+                                           brand=BRANDS.get(str(row['carOrdinal'])))
             if row['active'] and row['carOrdinal'] > 0:
                 self.last_driving_packet = row
             self.live.update(packet=row, lastPacket=time.time())

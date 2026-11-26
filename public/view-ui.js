@@ -17,7 +17,7 @@ function renderHeaderBrand(){
     const fresh=age<2;
     return {online,active:online&&fresh&&!!state.packet.active,label:online?'LIVE':'OFFLINE',detail:!stream?'Servidor desconectado · reconectando…':state?.udpError?'No se pudo abrir el receptor UDP':online?!fresh?'Señal interrumpida · esperando nuevos datos':state.packet.active?'Recibiendo telemetría en tiempo real':'Forza conectado · juego en pausa o menú':'Sin señal de Forza · esperando Data Out'};
   }
-  function rememberCar(previous,state){const ordinal=state?.packet?.carOrdinal;if(ordinal>0&&state.carName)return {ordinal,name:state.carName};return state?.lastKnownCar?.ordinal>0?state.lastKnownCar:previous;}
+  function rememberCar(previous,state){const ordinal=state?.packet?.carOrdinal;if(ordinal>0&&state.carName)return {ordinal,name:state.carName,carClass:state.packet.carClass,carPI:state.packet.carPI,brand:state.lastKnownCar?.ordinal===ordinal?state.lastKnownCar.brand:null};return state?.lastKnownCar?.ordinal>0?state.lastKnownCar:previous;}
   function rememberSample(previous,state){return state?.packet?.active&&state.packet.carOrdinal>0?state.packet:state?.lastDrivingPacket||previous;}
   root.RaceConnection={connection,rememberCar,rememberSample};
   if(typeof module!=='undefined')module.exports=root.RaceConnection;
@@ -34,6 +34,22 @@ function setSessionPicker(open,restoreFocus=false){
   else{picker.classList.remove('is-open');pickerTimer=setTimeout(()=>{picker.hidden=true;},220);}
   if(restoreFocus)$('session-trigger').focus();
 }
+function renderLiveVehicle(id,online,fallback){
+ const box=$(id),car=online?liveCarMemory:null;
+ const brand=car?.brand||headerBrands.get(car?.ordinal);
+ const key=JSON.stringify([car,brand,fallback]);if(box.dataset.vehicleKey===key)return;
+ box.dataset.vehicleKey=key;box.classList.toggle('live-vehicle',!!car);box.replaceChildren();
+ if(!car){box.textContent=fallback;return;}
+ if(brand?.logo){const logo=document.createElement('img');logo.className='live-vehicle-brand'+(brand.logo.endsWith('.svg')?' brand-vector':'');logo.src=brand.logo;logo.alt=brand.name;logo.width=76;logo.height=72;logo.onerror=()=>{logo.hidden=true;};box.append(logo);}
+ const details=document.createElement('span');details.className='live-vehicle-details';
+ const name=document.createElement('span');name.className='live-vehicle-name';name.textContent=car.name;details.append(name);
+ const label=['D','C','B','A','S1','S2','X'][car.carClass];
+ if(label&&Number.isFinite(car.carPI)&&car.carPI>0){
+  const badge=document.createElement('span');badge.className='live-performance';badge.dataset.class=label;badge.setAttribute('aria-label','Clase '+label+', '+car.carPI+' puntos');
+  const group=document.createElement('b');group.textContent=label;const points=document.createElement('span');points.textContent=car.carPI;badge.append(group,points);details.append(badge);
+ }
+ box.append(details);
+}
 function updateLiveView(){
   updateHomeLive();
   if(globalThis.VertexBrowser?.enabled){VertexBrowser.decorate();return;}
@@ -47,7 +63,7 @@ function updateLiveView(){
   setViewText('view-eyebrow','SEGUNDO MONITOR');
   const car=liveCarMemory?.name||null;
   setViewText('session-info','');
-  setViewText('live-car',state.online?car||'Esperando datos del vehículo':'Listo para tu próxima salida');
+  renderLiveVehicle('live-car',state.online,state.online?'Esperando datos del vehículo':'Listo para tu próxima salida');
   const offline=!state.online;
   document.body.classList.toggle('live-offline',offline);
   $('live-dashboard-host').inert=offline;
