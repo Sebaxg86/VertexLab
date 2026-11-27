@@ -21,12 +21,18 @@
     const maximum = engine ? sample.engineMaxRpm : finite(observedPeak) && observedPeak>0 ? observedPeak : null;
     return {maximum,engine,ratio:maximum && finite(sample?.rpm) ? Math.max(0,Math.min(1,sample.rpm/maximum)) : null};
   }
-  function revLights(ratio, gear, speed, wasShifting=false) {
+  function revLights(ratio, gear, speed, wasShifting=false, live=false) {
     const valid = finite(ratio);
     // The reported engine maximum can exceed the full-throttle limiter.
     // Enter at 88%; release below 86% to avoid flickering around the threshold.
     const shift = valid && ratio>=(wasShifting ? .86 : .88) && gear>0 && speed>15;
-    const levels=Array.from({length:16},(_,i)=>valid ? shift?1:Math.max(0,Math.min(1,ratio/.8*8-Math.min(i,15-i))) : 0);
+    const levels=Array.from({length:16},(_,i)=>{
+      if (!valid || shift) return shift ? 1 : 0;
+      const pair=Math.min(i,15-i);
+      // In LIVE, reserve the red pairs for the final stretch before blue.
+      const progress=live && pair>=6 ? 6+(ratio-.79)/.045 : ratio/.8*8;
+      return Math.max(0,Math.min(1,progress-pair));
+    });
     return {shift,levels,lit:levels.map(level=>level>0)};
   }
   function revSweep(previous,reading,now){

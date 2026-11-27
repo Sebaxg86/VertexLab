@@ -346,7 +346,7 @@ function drawInstruments(sample) {
   const keepShift=(!session||playing)&&shiftMemory.key===shiftKey&&shiftMemory.active;
   revSweepState=RaceInstruments.revSweep(revSweepState,{context:session?session.meta.id+':'+playing:'live:'+liveRpmCar,gear,ratio,animate:!!sample&&(!session||playing)&&!revMotion.matches},performance.now());
   $('rev-lights').classList.toggle('is-sweeping',revSweepState.active);
-  const lights=RaceInstruments.revLights(revSweepState.ratio,gear,sample?.speed,keepShift&&!revSweepState.active);
+  const lights=RaceInstruments.revLights(revSweepState.ratio,gear,sample?.speed,keepShift&&!revSweepState.active,document.body.classList.contains('live-view'));
   shiftMemory={key:shiftKey,active:lights.shift};
   $('rev-lights').classList.toggle('shift-alert',lights.shift);
   $('rev-lights').setAttribute('title',`Aviso de cambio estimado al 88% · ${maximum?Math.round(maximum*.88).toLocaleString('es-MX'):'—'} RPM · luces de las orillas al centro`);
