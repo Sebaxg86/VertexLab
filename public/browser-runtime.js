@@ -87,7 +87,7 @@
       const controller=navigator.serviceWorker?.controller;
       if(!controller||!registration)throw Error('Recarga VertexLab para activar el reproductor de streaming desde Google Drive.');
       const channel=new MessageChannel();
-      await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{channel.port1.close();reject(Error('El reproductor en la nube necesita recargarse.'));},4000);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data.ok?resolve():reject(Error('No se pudo preparar el streaming de video'));};controller.postMessage({type:'vertex-cloud-media',id,fileId:item.cloudVideo.fileId,size:item.cloudVideo.size,type:item.cloudVideo.type},[channel.port2]);});
+      await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{channel.port1.close();reject(Error('El reproductor en la nube necesita recargarse.'));},4000);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data.ok?resolve():reject(Error('No se pudo preparar el streaming de video'));};controller.postMessage({type:'vertex-cloud-media',id,fileId:item.cloudVideo.fileId,size:item.cloudVideo.size,mime:item.cloudVideo.type},[channel.port2]);});
       item.url=new URL('__vertex_media/'+id+'/video',registration.scope).href;
       return;
     }

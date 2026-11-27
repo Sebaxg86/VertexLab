@@ -9,10 +9,10 @@ self.addEventListener('message',event=>{
     localMedia.set(id,{size,video,clientId:event.source?.id});event.ports[0]?.postMessage({ok:true});
   }
   if(event.data?.type==='vertex-cloud-media'){
-    const {id,fileId,size,type}=event.data;
+    const {id,fileId,size,mime}=event.data;
     if(!/^[a-f0-9]{32}$/.test(id)||!/^[A-Za-z0-9_-]{8,128}$/.test(fileId||'')||!Number.isSafeInteger(size)||size<1){event.ports[0]?.postMessage({ok:false});return;}
     localMedia.delete(id);
-    cloudMedia.set(id,{fileId,size,type:type||'video/mp4',clientId:event.source?.id});event.ports[0]?.postMessage({ok:true});
+    cloudMedia.set(id,{fileId,size,type:mime||'video/mp4',clientId:event.source?.id});event.ports[0]?.postMessage({ok:true});
   }
   if(event.data?.type==='vertex-media-release'){localMedia.delete(event.data.id);cloudMedia.delete(event.data.id);}
 });
