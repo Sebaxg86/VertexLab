@@ -42,7 +42,7 @@ files = sorted(p.name for p in OUT.iterdir() if p.is_file() and p.name != 'sw.js
 revision = hashlib.sha256(b''.join((OUT / name).read_bytes() for name in files)).hexdigest()[:16]
 worker = """importScripts('media-service-worker.js');
 const CACHE='vertexlab-viewer-REVISION',FILES=PRECACHE;
-self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES.map(name=>new Request(new URL(name,self.registration.scope).href,{cache:'reload'}))))));
+self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES.map(name=>new Request(new URL(name,self.registration.scope).href,{cache:'reload'})))).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('vertexlab-viewer-')&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{const url=new URL(event.request.url);if(url.origin!==self.location.origin)return;
 const mediaPath=new URL('__vertex_media/',self.registration.scope).pathname;
