@@ -128,10 +128,12 @@ Deno.serve(async (request) => {
   const userId = userData.user.id;
 
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
-  const privateDb = createClient(supabaseUrl, serviceKey, {
-    auth: { persistSession: false },
-    db: { schema: 'private' },
-  });
+
+  async function readStoredToken() {
+    const { data, error } = await admin.rpc('get_drive_token', { p_user_id: userId });
+    if (error) throw error;
+    return Array.isArray(data) ? data[0] ?? null : data ?? null;
+  }
 
   let body: Record<string, unknown>;
   try {
@@ -176,11 +178,7 @@ Deno.serve(async (request) => {
 
       let refreshToken = tokenData.refresh_token ? String(tokenData.refresh_token) : '';
       if (!refreshToken) {
-        const { data: existing } = await privateDb
-          .from('drive_tokens')
-          .select('encrypted_refresh_token, token_iv')
-          .eq('user_id', userId)
-          .maybeSingle();
+        const existing = await readStoredToken();
         if (!existing) {
           return jsonResponse(
             {
@@ -197,12 +195,12 @@ Deno.serve(async (request) => {
       const driveEmail = await fetchDriveEmail(tokenData.access_token);
       const { cipher, iv } = await encryptToken(refreshToken);
 
-      const { error: upsertError } = await privateDb.from('drive_tokens').upsert({
-        user_id: userId,
-        encrypted_refresh_token: cipher,
-        token_iv: iv,
-        scope: String(tokenData.scope || DRIVE_SCOPE),
-        drive_email: driveEmail,
+      const { error: upsertError } = await admin.rpc('upsert_drive_token', {
+        p_user_id: userId,
+        p_encrypted: cipher,
+        p_iv: iv,
+        p_scope: String(tokenData.scope || DRIVE_SCOPE),
+        p_drive_email: driveEmail,
       });
       if (upsertError) throw upsertError;
 
@@ -229,12 +227,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'token') {
-      const { data: row, error: tokenReadError } = await privateDb
-        .from('drive_tokens')
-        .select('encrypted_refresh_token, token_iv, drive_email')
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (tokenReadError) throw tokenReadError;
+      const row = await readStoredToken();
       if (!row) {
         return jsonResponse(
           { error: 'Google Drive no está vinculado a esta cuenta', code: 'DRIVE_NOT_CONNECTED' },
@@ -258,7 +251,7 @@ Deno.serve(async (request) => {
       const refreshData = await refreshRes.json();
       if (!refreshRes.ok || !refreshData.access_token) {
         if (refreshData.error === 'invalid_grant') {
-          await privateDb.from('drive_tokens').delete().eq('user_id', userId);
+          await admin.rpc('delete_drive_token', { p_user_id: userId });
           await admin
             .from('profiles')
             .update({ drive_connected: false, drive_email: null })
@@ -321,11 +314,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'disconnect') {
-      const { data: row } = await privateDb
-        .from('drive_tokens')
-        .select('encrypted_refresh_token, token_iv')
-        .eq('user_id', userId)
-        .maybeSingle();
+      const row = await readStoredToken();
       if (row) {
         try {
           const refreshToken = await decryptToken(row.encrypted_refresh_token, row.token_iv);
@@ -337,7 +326,7 @@ Deno.serve(async (request) => {
         } catch {
           // Best-effort revoke; always clear local token state.
         }
-        await privateDb.from('drive_tokens').delete().eq('user_id', userId);
+        await admin.rpc('delete_drive_token', { p_user_id: userId });
       }
       await admin
         .from('profiles')
@@ -353,7 +342,13 @@ Deno.serve(async (request) => {
 
     return jsonResponse({ error: 'Acción no reconocida' }, 400, origin);
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Error interno de Drive Auth';
+    console.error('drive-auth error:', error);
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? String((error as { message: unknown }).message)
+          : 'Error interno de Drive Auth';
     return jsonResponse({ error: message }, 500, origin);
   }
 });
