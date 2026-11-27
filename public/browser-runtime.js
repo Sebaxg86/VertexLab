@@ -153,9 +153,9 @@
     $('live-dashboard-host').inert=false;
     $('live-offline-notice').setAttribute('aria-hidden','true');
     document.body.dataset.liveConnected='true';
-    $('view-eyebrow').textContent='TELEMETRÍA EN TIEMPO REAL · DEMO';
+    $('view-eyebrow').textContent='MODO DEMO';
     $('title').textContent='LIVE DEMO';
-    $('session-info').textContent='Vista previa interactiva';
+    $('session-info').textContent='';
     renderLiveVehicle('live-car',true,carName);
     demoStart=performance.now();
     const duration=Math.max(1,Number(demo.duration)||35);
@@ -170,7 +170,7 @@
         liveSampleMemory=sample;
         drawInstruments(sample);
         $('instant-source').textContent='Demo en tiempo real';
-        $('instant-note').textContent='Telemetría grabada · 2022 Toyota GR86';
+        $('instant-note').textContent='2022 Toyota GR86 · Telemetría grabada';
       }
     };
     tick();

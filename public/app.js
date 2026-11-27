@@ -249,7 +249,7 @@ function draw(){renderDirty=true;}
 function paint() {
   if(homeActive)return;
   const renderStarted=performance.now();
-  if(!session){drawInstruments(liveConnection().online?liveSampleMemory:null);return;}
+  if(!session){drawInstruments((liveConnection().online||globalThis.VertexBrowser?.liveDemoActive?.())?liveSampleMemory:null);return;}
   frameRects=new Map(['map','telemetry-scroll',...metricDefs.map((m,i)=>i?'chart-'+m.key:'charts')].map(id=>[id,$(id).getBoundingClientRect()]));
   const laps=analysisSeries();
   const sample=observedSample();
@@ -309,7 +309,7 @@ function paint() {
   }else{map.fillStyle='#8997aa';map.font='12px Segoe UI';map.fillText('Abre una sesión para ver su recorrido.',20,h/2);}
   drawMetrics(sample, laps);
   const liveRecent = liveConnection().active;
-  drawInstruments(session ? sample : liveConnection().online ? liveSampleMemory : null);
+  drawInstruments(session ? sample : (liveConnection().online || globalThis.VertexBrowser?.liveDemoActive?.()) ? liveSampleMemory : null);
   if (session && hasVideo && !videoOnly() && toVideo(t) === null) $('clock').textContent += ' · sin video';
   frameRects=null;
   $('workspace').dataset.renderMs=(performance.now()-renderStarted).toFixed(2);
