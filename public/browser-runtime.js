@@ -244,6 +244,25 @@
     headerCta.id='viewer-download-cta';headerCta.className='viewer-download-cta';
     headerCta.href=DOWNLOAD_URL;headerCta.target='_blank';headerCta.rel='noopener noreferrer';
     headerCta.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 15v6h16v-6"/></svg><span class="viewer-cta-text"><small><b>VERTEX<em class="brand-accent">LAB</em></b> · WINDOWS</small><strong>DESCARGAR AHORA <i>↗</i></strong></span>';
+    headerCta.addEventListener('click',event=>{
+      if(!matchMedia('(max-width:600px)').matches)return;
+      event.preventDefault();
+      let dialog=$('viewer-download-modal');
+      if(!dialog){
+        dialog=document.createElement('dialog');
+        dialog.id='viewer-download-modal';
+        dialog.className='cloud-auth-dialog viewer-download-modal';
+        dialog.innerHTML=`<span class="eyebrow">APLICACIÓN DE ESCRITORIO · WINDOWS</span><h2>VERTEX<em class="brand-accent">LAB</em> + CONNECT</h2><p class="auth-subtitle">Lleva tu experiencia al siguiente nivel en tu PC de juego y analiza cada vuelta desde tu teléfono.</p><ul class="download-modal-perks"><li>Telemetría real de Forza en tiempo real (LIVE) para segundo monitor.</li><li>Grabación automática con OBS sincronizada por tramos y pausas.</li><li>Respaldo en tu Google Drive para reproducir en streaming desde cualquier dispositivo.</li></ul><a class="cloud-google-btn viewer-modal-dl" href="${DOWNLOAD_URL}" target="_blank" rel="noopener noreferrer"><span>Descargar para Windows ↗</span></a><div class="cloud-auth-footer"><button type="button" id="viewer-dl-close" class="cloud-auth-cancel">Ahora no</button></div>`;
+        document.body.append(dialog);
+        dialog.querySelector('#viewer-dl-close').onclick=()=>dialog.close();
+        dialog.addEventListener('click',e=>{
+          if(e.target!==dialog)return;
+          const r=dialog.getBoundingClientRect();
+          if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close();
+        });
+      }
+      dialog.showModal();
+    });
     headerWrap.append(chevrons,headerCta);
     document.querySelector('.app-header')?.append(headerWrap);
     const homeZone=document.querySelector('.home-live-zone');
