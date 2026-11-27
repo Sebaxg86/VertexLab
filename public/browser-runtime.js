@@ -186,7 +186,7 @@
     $('picker-live').hidden=!session;
     $('picker-live').querySelector('b').textContent='LIVE DEMO';
     $('manual-controls').hidden=true;
-    const cta=$('viewer-download-cta');
+    const cta=$('viewer-download-wrap');
     if(cta)cta.hidden=!liveDemoActive;
     if(liveDemoActive){
       document.body.dataset.liveConnected='true';
@@ -204,11 +204,17 @@
     $('video-empty').querySelector('p').textContent='Tus vueltas, en cualquier pantalla';
     $('video-empty').querySelector('small').textContent='Abre una sesión .vrtx. El archivo se procesa aquí y no se sube a ningún servidor.';
     $('video-empty').append(button);
+    const headerWrap=document.createElement('div');
+    headerWrap.id='viewer-download-wrap';headerWrap.className='viewer-download-wrap';headerWrap.hidden=true;
+    const chevrons=document.createElement('span');
+    chevrons.className='viewer-cta-chevrons';chevrons.setAttribute('aria-hidden','true');
+    chevrons.innerHTML='<svg viewBox="0 0 42 20"><path class="c1" d="M3 3l7 7-7 7"/><path class="c2" d="M16 3l7 7-7 7"/><path class="c3" d="M29 3l7 7-7 7"/></svg>';
     const headerCta=document.createElement('a');
     headerCta.id='viewer-download-cta';headerCta.className='viewer-download-cta';
-    headerCta.href=DOWNLOAD_URL;headerCta.target='_blank';headerCta.rel='noopener noreferrer';headerCta.hidden=true;
+    headerCta.href=DOWNLOAD_URL;headerCta.target='_blank';headerCta.rel='noopener noreferrer';
     headerCta.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 15v6h16v-6"/></svg><span class="viewer-cta-text"><small>VERTEXCONNECT · WINDOWS</small><b>DESCARGAR AHORA <i>↗</i></b></span>';
-    document.querySelector('.app-header')?.append(headerCta);
+    headerWrap.append(chevrons,headerCta);
+    document.querySelector('.app-header')?.append(headerWrap);
     const homeZone=document.querySelector('.home-live-zone');
     if(homeZone){
       const homeLink=document.createElement('a');
