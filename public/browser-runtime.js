@@ -1,6 +1,7 @@
 /* In-memory storage adapter for the static viewer. Session files never leave the device. */
 (function(root){
   const enabled=document.body.dataset.mode==='viewer',sessions=new Map();let catalog=null;let initialized;let openStorageSettings=()=>{};
+  const DOWNLOAD_URL='https://github.com/sebaxg86/VertexLab/releases/latest';
   let liveDemoActive=false,demoData=null,demoTimer=null,demoStart=0;
   const mobileApple=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   const saved=new Map();
@@ -185,6 +186,8 @@
     $('picker-live').hidden=!session;
     $('picker-live').querySelector('b').textContent='LIVE DEMO';
     $('manual-controls').hidden=true;
+    const cta=$('viewer-download-cta');
+    if(cta)cta.hidden=!liveDemoActive;
     if(liveDemoActive){
       document.body.dataset.liveConnected='true';
       document.querySelector('.settings-wrap').hidden=true;
@@ -201,6 +204,19 @@
     $('video-empty').querySelector('p').textContent='Tus vueltas, en cualquier pantalla';
     $('video-empty').querySelector('small').textContent='Abre una sesión .vrtx. El archivo se procesa aquí y no se sube a ningún servidor.';
     $('video-empty').append(button);
+    const headerCta=document.createElement('a');
+    headerCta.id='viewer-download-cta';headerCta.className='viewer-download-cta';
+    headerCta.href=DOWNLOAD_URL;headerCta.target='_blank';headerCta.rel='noopener noreferrer';headerCta.hidden=true;
+    headerCta.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 15v6h16v-6"/></svg><span>Descargar para Windows</span>';
+    document.querySelector('.app-header')?.append(headerCta);
+    const homeZone=document.querySelector('.home-live-zone');
+    if(homeZone){
+      const homeLink=document.createElement('a');
+      homeLink.id='home-download-link';homeLink.className='home-download-link';
+      homeLink.href=DOWNLOAD_URL;homeLink.target='_blank';homeLink.rel='noopener noreferrer';
+      homeLink.innerHTML='¿QUIERES CAPTURAR TUS CARRERAS? <b>DESCARGA VERTEXLAB PARA WINDOWS ↗</b>';
+      homeZone.append(homeLink);
+    }
     $('delete-session').onclick=action(async()=>{if(!session)return;const id=session.meta.id;clearVideo();await request('delete/'+id,{});openHome();await list();$('message').textContent='Sesión cerrada. Tu archivo original no se ha eliminado.';});
     if('serviceWorker' in navigator&&isSecureContext)navigator.serviceWorker.register(new URL('sw.js',document.baseURI),{updateViaCache:'none'}).catch(()=>{});
     navigator.serviceWorker?.addEventListener('message',async event=>{
