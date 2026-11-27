@@ -277,3 +277,10 @@ body:not([data-live-connected=true]) #picker-live:focus-visible{box-shadow:inset
 @media (max-width: 780px) {
   .live-view .rev-display { --live-motor-gap: 40px; }
 }
+
+/* A static garage backdrop keeps the LIVE instruments in the foreground. */
+.live-view .live-workspace {
+  background:
+    linear-gradient(180deg, rgba(8,7,9,.78), rgba(8,7,9,.85) 56%, rgba(8,7,9,.77)),
+    #080709 url('live-garage.webp') center / cover no-repeat;
+}
