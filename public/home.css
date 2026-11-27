@@ -477,4 +477,13 @@ body:not([data-live-connected=true]) #picker-live:focus-visible{box-shadow:inset
     height: 1.15rem;
     font-size: 0;
   }
+
+  .viewer-modal-dl > span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    line-height: 1.25;
+    text-align: center;
+  }
 }
