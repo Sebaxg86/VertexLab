@@ -197,7 +197,7 @@
 
  async function signOut(){
   if(signedIn()&&configured()){
-   try{await sbFetch('/auth/v1/logout',{method:'POST'});}catch{}
+   try{await sbFetch('/auth/v1/logout?scope=local',{method:'POST'});}catch{}
   }
   if(!root.VertexBrowser?.enabled){
    try{await fetch('/api/cloud/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});}catch{}
