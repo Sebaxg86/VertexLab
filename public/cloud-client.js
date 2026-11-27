@@ -566,20 +566,39 @@
   }
  }
 
+ const MenuIcons={
+  account:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>',
+  drive:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18a4 4 0 0 1-.3-8A6.5 6.5 0 0 1 18 8a5 5 0 0 1 0 10H6Z"/><path d="M12 11v6m-2.5-3.5L12 11l2.5 2.5"/></svg>',
+  folder:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5h6l2 2h10v12H3Z"/></svg>',
+  refresh:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.5-4.5M4 4v4h4M4 13a8 8 0 0 0 14.5 4.5M20 20v-4h-4"/></svg>',
+  unlink:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 6.6A6.5 6.5 0 0 0 5.7 10 4 4 0 0 0 6 18h11m3.7-2.3A5 5 0 0 0 18 8a6.5 6.5 0 0 0-8.4-3.7M3 3l18 18"/></svg>',
+  logout:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-2M9 12h11m-3-3 3 3-3 3"/></svg>',
+  sliders:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="10" cy="18" r="2" fill="currentColor"/></svg>'
+ };
+
  function renderMenu(){
   const menu=document.getElementById('home-cloud-menu');
   if(!menu)return;
   menu.replaceChildren();
   const s=state();
-  const addButton=(label,sub,onClick,danger=false)=>{
+  const addButton=(label,sub,onClick,{icon=MenuIcons.drive,danger=false}={})=>{
    const btn=document.createElement('button');
    if(danger)btn.classList.add('danger-action');
-   btn.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18a4 4 0 0 1-.3-8A6.5 6.5 0 0 1 18 8a5 5 0 0 1 0 10Z"/></svg>';
+   btn.innerHTML=icon;
    const span=document.createElement('span');span.textContent=label;
    if(sub){const small=document.createElement('small');small.textContent=sub;span.append(small);}
    btn.append(span);
    btn.onclick=onClick;
    menu.append(btn);
+  };
+  const addDivider=()=>{const hr=document.createElement('hr');hr.className='home-menu-divider';menu.append(hr);};
+  const addAdvanced=()=>{
+   if(!root.VertexBrowser?.enabled)return;
+   addDivider();
+   addButton('Ajustes avanzados','Almacenamiento y reproducción local',()=>{
+    if(typeof closeHomeMenus==='function')closeHomeMenus();
+    root.VertexBrowser.openStorageSettings?.();
+   },{icon:MenuIcons.sliders});
   };
 
   if(!s.configured){
@@ -593,12 +612,14 @@
     if(gid===null)return;
     saveConfig({supabaseUrl:url,supabaseAnonKey:anon,googleClientId:gid});
     const msg=document.getElementById('message');if(msg)msg.textContent='Configuración de nube guardada en este navegador.';
-   });
+   },{icon:MenuIcons.sliders});
+   addAdvanced();
    return;
   }
 
   if(!s.signedIn){
-   addButton('Iniciar sesión en VertexLab','Crea o abre tu cuenta con Google',()=>{if(typeof closeHomeMenus==='function')closeHomeMenus();signIn().catch(e=>{const msg=document.getElementById('message');if(msg)msg.textContent=e.message;});});
+   addButton('Iniciar sesión en VertexLab','Crea o abre tu cuenta con Google',()=>{if(typeof closeHomeMenus==='function')closeHomeMenus();signIn().catch(e=>{const msg=document.getElementById('message');if(msg)msg.textContent=e.message;});},{icon:MenuIcons.account});
+   addAdvanced();
    return;
   }
 
@@ -608,28 +629,30 @@
   menu.append(caption);
 
   if(!s.driveConnected){
-   addButton('Vincular Google Drive','Se recordará en todos tus dispositivos',()=>{if(typeof closeHomeMenus==='function')closeHomeMenus();connectDrive().catch(e=>{const msg=document.getElementById('message');if(msg)msg.textContent=e.message;});});
+   addButton('Vincular Google Drive','Se recordará en todos tus dispositivos',()=>{if(typeof closeHomeMenus==='function')closeHomeMenus();connectDrive().catch(e=>{const msg=document.getElementById('message');if(msg)msg.textContent=e.message;});},{icon:MenuIcons.drive});
   }else{
    addButton('Carpeta de Google Drive',s.driveRootFolderName||'VertexLab (predeterminada)',()=>{
     if(typeof closeHomeMenus==='function')closeHomeMenus();
     openFolderDialog();
-   });
+   },{icon:MenuIcons.folder});
    addButton('Actualizar biblioteca en la nube',s.driveEmail||'Sincronizar índice',async()=>{
     if(typeof closeHomeMenus==='function')closeHomeMenus();
     try{await refreshCloudSessions();if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();}
     catch(e){const msg=document.getElementById('message');if(msg)msg.textContent=e.message;}
-   });
+   },{icon:MenuIcons.refresh});
+   addDivider();
    addButton('Desconectar Google Drive','Tus archivos en Drive se conservan',async()=>{
     if(typeof closeHomeMenus==='function')closeHomeMenus();
     try{await disconnectDrive();if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();}
     catch(e){const msg=document.getElementById('message');if(msg)msg.textContent=e.message;}
-   },true);
+   },{icon:MenuIcons.unlink,danger:true});
   }
   addButton('Cerrar sesión de VertexLab','Desconecta esta cuenta en este dispositivo',async()=>{
    if(typeof closeHomeMenus==='function')closeHomeMenus();
    await signOut();
    if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();
-  });
+  },{icon:MenuIcons.logout});
+  addAdvanced();
  }
 
  async function init(){

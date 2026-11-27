@@ -1,6 +1,6 @@
 /* In-memory storage adapter for the static viewer. Session files never leave the device. */
 (function(root){
-  const enabled=document.body.dataset.mode==='viewer',sessions=new Map();let catalog=null;let initialized;
+  const enabled=document.body.dataset.mode==='viewer',sessions=new Map();let catalog=null;let initialized;let openStorageSettings=()=>{};
   const mobileApple=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   const saved=new Map();
   async function initialize(){return initialized??=(async()=>{for(const record of await VertexLibrary.records())saved.set(record.id,record);})();}
@@ -166,16 +166,15 @@
     const shieldIcon=icon('M12 2l8 3v6c0 6-8 11-8 11S4 17 4 11V5Zm-4 9 3 3 5-6');
     const filmIcon=icon('M3 4h18v16H3ZM7 4v16M17 4v16M3 9h4m-4 6h4m10-6h4m-4 6h4');
     const settings=document.createElement('dialog');settings.id='library-settings';settings.setAttribute('aria-labelledby','library-title');
-    settings.innerHTML=`<header class="library-dialog-heading"><div class="library-dialog-icon">${books}</div><div><span class="library-eyebrow">VERTEXLAB · ESTE DISPOSITIVO</span><h2 id="library-title">Biblioteca</h2></div><button id="library-dismiss" class="icon-button" aria-label="Cerrar biblioteca">${icon('M6 6l12 12M18 6 6 18')}</button></header>
-    <p class="library-intro">Configura el guardado de tus sesiones y la reproducción en este dispositivo.</p>
+    settings.innerHTML=`<header class="library-dialog-heading"><div class="library-dialog-icon">${books}</div><div><span class="library-eyebrow">VERTEXLAB · ESTE DISPOSITIVO</span><h2 id="library-title">Ajustes avanzados</h2></div><button id="library-dismiss" class="icon-button" aria-label="Cerrar ajustes avanzados">${icon('M6 6l12 12M18 6 6 18')}</button></header>
+    <p class="library-intro">Configura el almacenamiento local del navegador y la reproducción en este dispositivo.</p>
     <section class="library-section"><h3>${deviceIcon} Guardado de sesiones</h3><label class="switch library-option"><input id="library-save" type="checkbox" checked><span>Guardar las sesiones que abra<small>Disponibles al volver a abrir VertexLab en este dispositivo.</small></span></label><output id="library-location">Almacenamiento privado de VertexLab</output><div class="dialog-actions"><button id="library-folder">${folderIcon}<span>Elegir carpeta</span></button><button id="library-private">${deviceIcon}<span>Usar VertexLab</span></button></div><p id="library-help"></p></section>
     <section class="library-section"><h3>${filmIcon} Reproducción</h3><label class="switch library-option"><input id="library-range-video" type="checkbox"><span>Reproducir video por fragmentos locales<small>Lee el video por partes para reducir el uso de memoria.</small></span></label><label class="switch library-option"><input id="library-two-videos" type="checkbox"><span>Permitir dos videos simultáneos<small>La comparación de video utiliza más memoria.</small></span></label><p class="library-note">Los cambios de reproducción se aplican al reabrir la sesión.</p></section>
     <section class="library-section"><h3>${shieldIcon} Almacenamiento</h3><button id="library-persist">${shieldIcon}<span>Proteger almacenamiento sin conexión</span></button><p id="library-storage-status" role="status"></p></section><footer class="library-dialog-footer"><button id="library-close">Listo</button></footer>`;document.body.append(settings);
-    const openSettings=document.createElement('button');openSettings.className='session-action library-settings-button';openSettings.innerHTML=books+'<span>Biblioteca</span>';openSettings.setAttribute('aria-haspopup','dialog');$('settings-panel').append(openSettings);
     const showStatus=async()=>{const folder=await VertexLibrary.setting('directory');$('library-location').textContent=folder?'Carpeta: '+folder.name:'Almacenamiento privado de VertexLab';const estimate=await navigator.storage?.estimate?.();$('library-storage-status').textContent=estimate?.quota?`${(estimate.usage/1024**3).toFixed(2)} GB usados · ${(estimate.quota/1024**3).toFixed(1)} GB de cuota del sitio`:'';};
     let closeTimer;
-    const closeLibrary=()=>{if(!settings.open||settings.classList.contains('is-closing'))return;settings.classList.add('is-closing');closeTimer=setTimeout(()=>{settings.close();settings.classList.remove('is-closing');$('settings-toggle').focus();},matchMedia('(prefers-reduced-motion: reduce)').matches?0:180);};
-    openSettings.onclick=()=>{clearTimeout(closeTimer);settings.classList.remove('is-closing');setMenu(false);settings.showModal();showStatus().catch(error=>$('library-storage-status').textContent=error.message);};
+    const closeLibrary=()=>{if(!settings.open||settings.classList.contains('is-closing'))return;settings.classList.add('is-closing');closeTimer=setTimeout(()=>{settings.close();settings.classList.remove('is-closing');},matchMedia('(prefers-reduced-motion: reduce)').matches?0:180);};
+    openStorageSettings=()=>{clearTimeout(closeTimer);settings.classList.remove('is-closing');setMenu(false);settings.showModal();showStatus().catch(error=>$('library-storage-status').textContent=error.message);};
     $('library-close').onclick=$('library-dismiss').onclick=closeLibrary;
     settings.addEventListener('cancel',event=>{event.preventDefault();closeLibrary();});
     settings.addEventListener('click',event=>{if(event.target!==settings)return;const rect=settings.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)closeLibrary();});
@@ -199,5 +198,5 @@
     if(old){release(old);sessions.delete(record.id);}
     saved.set(record.id,record);
   }
-  root.VertexBrowser={enabled,mobileApple,singleVideo:()=>!$('library-two-videos')?.checked,prepareVideo,open,request,videoURL,original,source,importFile,registerSavedRecord,decorate,setup};
+  root.VertexBrowser={enabled,mobileApple,singleVideo:()=>!$('library-two-videos')?.checked,prepareVideo,open,request,videoURL,original,source,importFile,registerSavedRecord,openStorageSettings:()=>openStorageSettings(),decorate,setup};
 })(globalThis);
