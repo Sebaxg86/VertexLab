@@ -70,7 +70,8 @@ test('Safari worker bridge validates an entire package through main-thread range
  assert.equal(result.laps.length,2);assert.equal(result.video.size,8);assert.ok(ranges>3);
 });
 
-test('missing ZIP directory in worker retries through main-thread ranges and still validates the package',async()=>{
+for(const error of ['End of central directory not found','n.K.slice is not a function'])
+test('worker retries by ranges after '+error,async()=>{
  const vm=require('node:vm'),fs=require('node:fs'),file=await fixture();let retries=0;
  const result=await new Promise((resolve,reject)=>{
   const self={postMessage:message=>{
@@ -78,7 +79,7 @@ test('missing ZIP directory in worker retries through main-thread ranges and sti
    else if(message.readRange){const {id,start,end}=message.readRange;file.slice(start,end).arrayBuffer().then(buffer=>self.onmessage({data:{readReply:true,id,buffer}}),reject);}
    else if(message.result)resolve(message.result);else if(message.error)reject(Error(message.error));
   }};
-  const reader={read:(input,options)=>{if(!input.remote)throw Error('End of central directory not found');return require('../public/vrtx-reader.js').read(input,options);}};
+  const reader={read:(input,options)=>{if(!input.remote)throw Error(error);return require('../public/vrtx-reader.js').read(input,options);}};
   const context=vm.createContext({self,importScripts:()=>{},zip,hashwasm:hash,VertexBrowserCore:core,VertexPackageReader:reader,Map,Promise,Error});
   vm.runInContext(fs.readFileSync(require.resolve('../public/viewer-worker.js'),'utf8'),context);
   self.onmessage({data:file});

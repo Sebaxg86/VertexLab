@@ -20,10 +20,28 @@ html = (ROOT / 'public/index.html').read_text(encoding='utf-8')
 html = html.replace('<body class="home-view">', '<body class="home-view browser-viewer" data-mode="viewer" data-session-open="false">')
 html = html.replace('</head>', '<meta name="theme-color" content="#141014"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-192.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="VertexLab"></head>')
 html = html.replace('<script src="timeline.js">', '<script src="browser-core.js"></script><script src="browser-library.js"></script><script src="browser-runtime.js"></script><script src="timeline.js">')
+# Keep the viewer's worker and its ZIP reader on the same revision as the page.
+worker_files = ('vendor-zip-2.25.0.js', 'vendor-sha256-4.13.0.js', 'browser-core.js', 'vrtx-reader.js')
 versioned_assets = []
+def version_worker_asset(name):
+    digest = hashlib.sha256((OUT / name).read_bytes()).hexdigest()[:12]
+    target = f'{name}?v={digest}'
+    versioned_assets.append(target)
+    return target
+
+viewer_worker = OUT / 'viewer-worker.js'
+worker_source = viewer_worker.read_text(encoding='utf-8')
+for name in worker_files:
+    worker_source = worker_source.replace(f"'{name}'", repr(version_worker_asset(name)), 1)
+viewer_worker.write_text(worker_source, encoding='utf-8')
+
+runtime = OUT / 'browser-runtime.js'
+runtime_source = runtime.read_text(encoding='utf-8')
+runtime.write_text(runtime_source.replace("'viewer-worker.js'", repr(version_worker_asset(viewer_worker.name)), 1), encoding='utf-8')
+
 def version_asset(match):
     name = match.group(2)
-    digest = hashlib.sha256((ROOT/'public'/name).read_bytes()).hexdigest()[:12]
+    digest = hashlib.sha256((OUT / name).read_bytes()).hexdigest()[:12]
     target = name+'?v='+digest
     versioned_assets.append(target)
     return match.group(1)+'="'+target+'"'
