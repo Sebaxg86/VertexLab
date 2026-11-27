@@ -45,7 +45,7 @@
     if(path.startsWith('library?')){
       const query=new URLSearchParams(path.split('?')[1]);
       const catalog=new Map([...saved].map(([id,item])=>[id,{...item.meta,preview:item.preview,availability:{local:true,cloud:false}}]));
-      for(const [id,item] of sessions)catalog.set(id,{...item.meta,preview:item.preview,availability:{local:true,cloud:false,temporary:!saved.has(id)}});
+      for(const [id,item] of sessions)if(item.file||saved.has(id))catalog.set(id,{...item.meta,preview:item.preview,availability:{local:true,cloud:false,temporary:!saved.has(id)}});
       const cloudItems=globalThis.VertexCloud?.cachedSessions?.()||[];
       const merged=globalThis.VertexCloudModel?VertexCloudModel.mergeLibrary([...catalog.values()],cloudItems):[...catalog.values()];
       return VertexHomeModel.page(merged,query.get('offset'),query.get('limit'));
