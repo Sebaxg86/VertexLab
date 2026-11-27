@@ -214,15 +214,26 @@ body:not([data-live-connected=true]) #picker-live:focus-visible{box-shadow:inset
   box-shadow: inset 0 0 18px #0006;
 }
 
-/* Reserve the width of three speed digits even at zero. */
-.live-view .speed-readout>output {
+/* Keep both motor readouts anchored as the number of digits changes. */
+#instant-gear {
+  display: block;
+  inline-size: 2ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+#instant-speed {
   display: inline-block;
   inline-size: 3ch;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-.live-view .rpm-block { grid-template-columns: 6ch auto; }
-.live-view .rpm-block>output { white-space: nowrap; }
+#instant-rpm {
+  display: inline-block;
+  inline-size: 6ch;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.live-view .rpm-block { grid-template-columns: max-content max-content; }
 
 .live-view .wheel-display svg,
 .live-view .g-display svg {
@@ -240,8 +251,9 @@ body:not([data-live-connected=true]) #picker-live:focus-visible{box-shadow:inset
 .live-view #instant-gear::before {
   content: '';
   position: absolute;
-  inset: .02em 50%;
-  width: 1.05em;
+  inset-block: .02em;
+  left: 50%;
+  width: 2.4ch;
   transform: translateX(-50%) skewX(-16deg);
   z-index: -1;
   pointer-events: none;

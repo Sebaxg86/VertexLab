@@ -46,6 +46,16 @@
     const progress=active?1-Math.pow(1-elapsed/220,3):1;
     return {context,gear:valid?gear:null,started:active?started:null,active,ratio:valid?ratio*progress:ratio};
   }
-  root.RaceInstruments = {values,duration,rpmReference,revLights,revSweep};
+  function gearDisplay(previous, context, gear, now) {
+    if (previous?.context !== context || !finite(gear) || gear !== 11 || !finite(previous.gear) || previous.gear === 11) {
+      return {context, gear, pendingSince: null};
+    }
+    // Hold a brief 11 during a shift but still display a sustained reading.
+    const pendingSince = previous.pendingSince ?? now;
+    return now - pendingSince < 120
+      ? {context, gear: previous.gear, pendingSince}
+      : {context, gear, pendingSince: null};
+  }
+  root.RaceInstruments = {values,duration,rpmReference,revLights,revSweep,gearDisplay};
   if (typeof module !== 'undefined') module.exports = root.RaceInstruments;
 })(globalThis);

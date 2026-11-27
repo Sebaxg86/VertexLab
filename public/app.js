@@ -8,7 +8,7 @@ let liveHistory = [], lastLiveStamp = null, legendKey = null, toastTimer;
 let chartRange = null, liveChartSpan = 20, liveChartOffset = 0;
 let sessionRpmPeak = 0, liveRpmPeak = 0, liveRpmCar = null;
 let shiftMemory = {key:null,active:false};
-let revSweepState=null;
+let revSweepState=null, gearDisplayState=null;
 const revMotion=matchMedia('(prefers-reduced-motion: reduce)');
 const scaleCache = new Map();
 for (let i=0;i<16;i++) { const led=document.createElement('i'),pair=Math.min(i,15-i); led.style.setProperty('--led-color',pair<4?'#59e2ba':pair<6?'#ffc66e':'#f77d94'); $('rev-lights').append(led); }
@@ -334,7 +334,13 @@ function drawInstruments(sample) {
   const observedLap=allMode?sample?.lapId:reference;
   if(session&&observedLap!==undefined&&observedLap!==null&&$('reference').value!==String(observedLap))$('reference').value=String(observedLap);
   $('reference').disabled=!session;
-  const rpm = sample?.rpm, gear = sample?.gear;
+  const rpm = sample?.rpm;
+  const gearContext = session
+    ? playing ? session.meta.id + ':' + reference : null
+    : 'live:' + liveRpmCar;
+  gearDisplayState = gearContext === null ? null
+    : RaceInstruments.gearDisplay(gearDisplayState, gearContext, sample?.gear, performance.now());
+  const gear = gearDisplayState?.gear ?? sample?.gear;
   const {ratio,maximum,engine} = RaceInstruments.rpmReference(sample,session?sessionRpmPeak:liveRpmPeak);
   textValue('instant-gear',Number.isFinite(gear) ? gear===0?'R':String(gear) : '—');
   textValue('instant-rpm',Number.isFinite(rpm) ? Math.round(rpm).toLocaleString('es-MX') : '—');
