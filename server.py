@@ -266,6 +266,19 @@ class Runtime:
             path = self.session_path(sid)
             meta = json.loads(path.read_text(encoding='utf-8'))
             rows = [json.loads(line) for line in path.with_suffix('.jsonl').read_text(encoding='utf-8').splitlines()]
+        crow = self.cloud_sessions_cache.get(sid)
+        meta['availability'] = dict(local=True, cloud=crow is not None)
+        if crow:
+            meta['cloud'] = dict(
+                driveFolderId=crow.get('drive_folder_id'),
+                driveMetaFileId=crow.get('drive_meta_file_id'),
+                driveTelemetryFileId=crow.get('drive_telemetry_file_id'),
+                driveVideoFileId=crow.get('drive_video_file_id'),
+                videoSize=crow.get('video_size'),
+                videoMime=crow.get('video_mime'),
+                videoName=crow.get('video_name'),
+                telemetryEncoding=crow.get('telemetry_encoding', 'gzip'),
+            )
         return dict(meta=meta, laps=analyze(rows))
 
     def prepare_export(self, sid, view, expire=True):

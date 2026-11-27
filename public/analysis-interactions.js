@@ -7,7 +7,14 @@ function updateSessionActions(){
  $('delete-session').disabled=latest?.recording===session?.meta.id;
  const cloud=$('analysis-cloud-actions');if(cloud){
   cloud.replaceChildren();
-  const item={...session?.meta,id:session?.meta.id,availability:session?.meta.availability||{local:true,cloud:false}};
+  const cloudMatch=session?.meta.id?(globalThis.VertexCloud?.cachedSessions?.()||[]).find(c=>c.id===session.meta.id):null;
+  const baseAvail=session?.meta.availability||{local:true,cloud:false};
+  const liveAvail={...baseAvail,cloud:baseAvail.cloud||!!cloudMatch};
+  if(session?.meta){
+   session.meta.availability=liveAvail;
+   if(cloudMatch?.cloud&&!session.meta.cloud)session.meta.cloud=cloudMatch.cloud;
+  }
+  const item={...session?.meta,id:session?.meta.id,availability:liveAvail,cloud:session?.meta.cloud||cloudMatch?.cloud||null};
   for(const option of VertexHomeModel.actions(item,latest?.recording,globalThis.VertexCloud?.actionState?.()).filter(option=>option.key!=='favorite')){
    const button=document.createElement('button');button.className='session-action'+(option.danger?' danger-action':'')+(option.soon?' sync-placeholder':'');button.disabled=!session||!option.enabled;
    button.innerHTML=option.key.startsWith('delete')?HomeGlyphs.remove:HomeGlyphs.cloud;
