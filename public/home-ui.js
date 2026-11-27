@@ -59,7 +59,7 @@ function closeHomeMenus(){
  setHomeBackdrop(false);
 }
 function positionHomeMenu(panel,trigger){
- const rect=trigger.getBoundingClientRect(),width=panel.offsetWidth||275,height=panel.offsetHeight;
+ const rect=trigger.getBoundingClientRect(),width=panel.offsetWidth||312,height=panel.offsetHeight;
  panel.style.left=Math.max(12,Math.min(innerWidth-width-12,rect.right-width))+'px';
  panel.style.top=Math.max(12,rect.bottom+height+12>innerHeight?rect.top-height-8:rect.bottom+8)+'px';
  setHomeBackdrop(true);
