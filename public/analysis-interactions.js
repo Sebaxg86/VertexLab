@@ -79,9 +79,18 @@ function requestAnalysisDelete(scope){
  setPlaying(false);setMenu(false);
  $('delete-title').textContent=scope==='delete-all'?'¿Eliminar definitivamente?':'¿Eliminar de este dispositivo?';
  $('delete-description').textContent=session.meta.name||session.meta.carName||'Sesión';
- const browser=!!globalThis.VertexBrowser?.enabled;
- $('delete-dialog').querySelector('.delete-warning').textContent=browser?'Se eliminará la copia local de VertexLab. Tu archivo .vrtx original se conserva. No hay una nube conectada.':scope==='delete-all'?'Se eliminarán definitivamente la telemetría y el video. Actualmente esta sesión solo está disponible localmente; no hay una copia en la nube conectada. Esta acción no se puede deshacer.':'Se eliminarán la telemetría y el video de este dispositivo. Esta acción no se puede deshacer.';
- $('delete-confirm').textContent=scope==='delete-all'?'Eliminar definitivamente':'Eliminar local';
+ const browser=!!globalThis.VertexBrowser?.enabled,inCloud=!!session.meta.availability?.cloud;
+ $('delete-dialog').dataset.scope=scope;
+ if(scope==='delete-all'&&inCloud){
+  $('delete-dialog').querySelector('.delete-warning').textContent='Se eliminarán definitivamente tanto la copia en este dispositivo como el respaldo en Google Drive. Esta acción no se puede deshacer.';
+  $('delete-confirm').textContent='Eliminar de todos lados';
+ }else if(inCloud){
+  $('delete-dialog').querySelector('.delete-warning').textContent='Se eliminará únicamente la copia local en este dispositivo. Tu respaldo en Google Drive se conserva.';
+  $('delete-confirm').textContent='Eliminar copia local';
+ }else{
+  $('delete-dialog').querySelector('.delete-warning').textContent=browser?'Se eliminará la copia local de VertexLab. Tu archivo .vrtx original se conserva. No hay un respaldo en Google Drive.':scope==='delete-all'?'Se eliminarán definitivamente la telemetría y el video. No hay una copia en Google Drive. Esta acción no se puede deshacer.':'Se eliminarán la telemetría y el video de este dispositivo. Esta acción no se puede deshacer.';
+  $('delete-confirm').textContent=scope==='delete-all'?'Eliminar definitivamente':'Eliminar local';
+ }
  $('delete-dialog').showModal();$('delete-cancel').focus();
 }
 function setupAnalysisInteractions(){
@@ -92,8 +101,14 @@ function setupAnalysisInteractions(){
  $('delete-session').onclick=()=>requestAnalysisDelete('delete-local');
  $('delete-cancel').onclick=()=>$('delete-dialog').close();
  $('delete-confirm').onclick=action(async()=>{
-  if(!session)return;const id=session.meta.id;$('delete-confirm').disabled=true;
-  try{clearVideo();await api('delete/'+id,{confirm:true});$('delete-dialog').close();openHome();await list();$('message').textContent='Sesión y video eliminados.';}
+  if(!session)return;const id=session.meta.id,scope=$('delete-dialog').dataset.scope||'delete-local',inCloud=!!session.meta.availability?.cloud,folderId=session.meta.cloud?.driveFolderId;$('delete-confirm').disabled=true;
+  try{
+   clearVideo();
+   if(session.meta.availability?.local!==false)await api('delete/'+id,{confirm:true,removeLocal:true});
+   if(scope==='delete-all'&&inCloud)await VertexCloud.deleteCloudSession(id,folderId);
+   $('delete-dialog').close();openHome();await list();
+   $('message').textContent=scope==='delete-all'&&inCloud?'Sesión eliminada de este dispositivo y de Google Drive.':inCloud?'Copia local eliminada. Tu respaldo en Google Drive se conserva.':'Sesión y video eliminados.';
+  }
   catch(error){$('delete-dialog').close();await load(id);throw error;}
   finally{$('delete-confirm').disabled=false;}
  });

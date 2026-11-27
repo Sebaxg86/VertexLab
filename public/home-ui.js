@@ -52,12 +52,20 @@ function openHomeSessionMenu(item,trigger){
   if(option.key==='delete-cloud')button.onclick=action(async()=>{closeHomeMenus();if(!confirm('¿Eliminar la copia en Google Drive de "'+(item.name||item.carName||'esta sesión')+'"?'))return;await VertexCloud.deleteCloudSession(item.id,item.cloud?.driveFolderId);await HomeLibrary.refresh();$('message').textContent='Copia eliminada de Google Drive.';});
   if(option.key==='favorite')button.onclick=action(async()=>{closeHomeMenus();const result=await api('feature/'+item.id,{featured:!item.featured});item.featured=result.featured;HomeLibrary.changed(item);$('home-settings-'+item.id)?.focus({preventScroll:true});});
   if(option.key==='delete-local'||option.key==='delete-all')button.onclick=()=>{
-   closeHomeMenus();homeDeleteTarget=item;
-   const browser=!!globalThis.VertexBrowser?.enabled;
+   closeHomeMenus();homeDeleteTarget={item,scope:option.key};
+   const browser=!!globalThis.VertexBrowser?.enabled,inCloud=VertexHomeModel.availability(item).cloud;
    $('home-delete-title').textContent=option.key==='delete-all'?'¿Eliminar definitivamente?':'¿Eliminar de este dispositivo?';
    $('home-delete-description').textContent=item.name||item.carName||'Sesión';
-   $('home-delete-warning').textContent=browser?'Se eliminará la copia guardada por VertexLab y su registro en la biblioteca. El archivo .vrtx original que importaste se conserva. No hay un respaldo conectado en Google Drive.':'Se eliminarán la telemetría y el video asociados a esta sesión. No hay un respaldo conectado en Google Drive. Esta acción no se puede deshacer.';
-   $('home-delete-confirm').textContent=browser?'Eliminar copia local':'Eliminar sesión y video';
+   if(option.key==='delete-all'&&inCloud){
+    $('home-delete-warning').textContent='Se eliminarán definitivamente tanto la copia en este dispositivo como el respaldo en Google Drive. Esta acción no se puede deshacer.';
+    $('home-delete-confirm').textContent='Eliminar de todos lados';
+   }else if(inCloud){
+    $('home-delete-warning').textContent='Se eliminará únicamente la copia local en este dispositivo para liberar espacio. Tu respaldo en Google Drive se conserva y podrás seguir viéndolo en streaming o descargarlo de nuevo.';
+    $('home-delete-confirm').textContent='Eliminar copia local';
+   }else{
+    $('home-delete-warning').textContent=browser?'Se eliminará la copia guardada por VertexLab y su registro en la biblioteca. El archivo .vrtx original que importaste se conserva. No hay un respaldo en Google Drive.':'Se eliminarán la telemetría y el video asociados a esta sesión. No hay un respaldo en Google Drive. Esta acción no se puede deshacer.';
+    $('home-delete-confirm').textContent=browser?'Eliminar copia local':'Eliminar sesión y video';
+   }
    $('home-delete-error').hidden=true;$('home-delete-dialog').showModal();$('home-delete-cancel').focus();
   };
   menu.append(button);
@@ -193,10 +201,16 @@ function setupHome(){
  document.addEventListener('pointerdown',event=>{if(!event.target.closest('.home-popover,.home-menu-trigger,.home-row-settings'))closeHomeMenus();});
  document.addEventListener('keydown',event=>{if(event.key==='Escape'){const target=homeMenuTrigger&&$(homeMenuTrigger);closeHomeMenus();if(target?.isConnected)target.focus({preventScroll:true});}});
  window.addEventListener('resize',closeHomeMenus);
- $('home-delete-cancel').onclick=()=>{const id=homeDeleteTarget?.id;$('home-delete-dialog').close();homeDeleteTarget=null;id&&$('home-settings-'+id)?.focus({preventScroll:true});};
+ $('home-delete-cancel').onclick=()=>{const id=homeDeleteTarget?.item?.id;$('home-delete-dialog').close();homeDeleteTarget=null;id&&$('home-settings-'+id)?.focus({preventScroll:true});};
  $('home-delete-confirm').onclick=async()=>{
-  if(!homeDeleteTarget)return;const target=homeDeleteTarget;$('home-delete-confirm').disabled=true;$('home-delete-error').hidden=true;
-  try{await api('delete/'+target.id,{confirm:true,removeLocal:true});HomeLibrary.removed(target.id);$('home-delete-dialog').close();homeDeleteTarget=null;$('message').textContent='Sesión eliminada de este dispositivo.';}
+  if(!homeDeleteTarget)return;const {item:target,scope}=homeDeleteTarget;const state=VertexHomeModel.availability(target);$('home-delete-confirm').disabled=true;$('home-delete-error').hidden=true;
+  try{
+   if(state.local)await api('delete/'+target.id,{confirm:true,removeLocal:true});
+   if(scope==='delete-all'&&state.cloud)await VertexCloud.deleteCloudSession(target.id,target.cloud?.driveFolderId);
+   $('home-delete-dialog').close();homeDeleteTarget=null;
+   if(scope==='delete-local'&&state.cloud){await HomeLibrary.refresh();$('message').textContent='Copia local eliminada. Tu respaldo en Google Drive se conserva.';}
+   else{HomeLibrary.removed(target.id);$('message').textContent=scope==='delete-all'&&state.cloud?'Sesión eliminada de este dispositivo y de Google Drive.':'Sesión eliminada de este dispositivo.';}
+  }
   catch(error){$('home-delete-error').textContent=error.message;$('home-delete-error').hidden=false;}
   finally{$('home-delete-confirm').disabled=false;}
  };
