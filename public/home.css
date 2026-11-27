@@ -398,3 +398,62 @@ body:not([data-live-connected=true]) #picker-live:focus-visible{box-shadow:inset
     linear-gradient(180deg, rgba(8,7,9,.78), rgba(8,7,9,.85) 56%, rgba(8,7,9,.77)),
     #080709 url('live-garage.webp') center / cover no-repeat;
 }
+
+@media (max-width: 600px) {
+  body.analysis-view .tire-instrument {
+    grid-template-rows: auto auto auto;
+  }
+
+  body.analysis-view .tire-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.analysis-view .tire-tile {
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr);
+    grid-template-rows: 14px 24px 18px 5px;
+    align-content: center;
+    align-items: center;
+    gap: 4px 8px;
+    min-height: 104px;
+    padding: 8px;
+  }
+
+  body.analysis-view .tire-tile > svg {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    height: 42px;
+  }
+
+  body.analysis-view .tire-info > span {
+    grid-column: 2;
+    grid-row: 1;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  body.analysis-view .tire-info > span::after {
+    content: none;
+  }
+
+  body.analysis-view .tire-info > output {
+    grid-column: 2;
+    grid-row: 2;
+    font-size: 22px;
+  }
+
+  body.analysis-view .tire-info > small {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    font-size: 12px;
+    line-height: 18px;
+    font-variant-numeric: tabular-nums;
+    text-overflow: clip;
+  }
+
+  body.analysis-view .slip-meter {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    height: 5px;
+  }
+}
