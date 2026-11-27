@@ -47,8 +47,8 @@ function openHomeSessionMenu(item,trigger){
   if(option.soon){const note=document.createElement('small');note.textContent='Conecta Google Drive';text.append(note);}
   button.append(text);
   if(option.key==='export')button.onclick=action(async()=>{await exportLibrarySessions([item]);});
-  if(option.key==='sync')button.onclick=action(async()=>{closeHomeMenus();$('message').textContent='Sincronizando con Google Drive…';await VertexCloud.syncSession(item.id);await HomeLibrary.refresh();$('message').textContent='Sesión sincronizada con Google Drive.';});
-  if(option.key==='download')button.onclick=action(async()=>{closeHomeMenus();$('message').textContent='Descargando sesión a este dispositivo…';const res=await VertexCloud.downloadSession(item.id);await HomeLibrary.refresh();$('message').textContent=res.alreadyLocal?'Esta sesión ya está en este dispositivo.':'Sesión descargada a este dispositivo.';});
+  if(option.key==='sync')button.onclick=action(async()=>{closeHomeMenus();$('message').textContent='Subiendo sesión a Google Drive…';await VertexCloud.syncSession(item.id);});
+  if(option.key==='download')button.onclick=action(async()=>{closeHomeMenus();$('message').textContent='Descargando sesión desde Google Drive…';await VertexCloud.downloadSession(item.id);});
   if(option.key==='delete-cloud')button.onclick=action(async()=>{closeHomeMenus();if(!confirm('¿Eliminar la copia en Google Drive de "'+(item.name||item.carName||'esta sesión')+'"?'))return;await VertexCloud.deleteCloudSession(item.id,item.cloud?.driveFolderId);await HomeLibrary.refresh();$('message').textContent='Copia eliminada de Google Drive.';});
   if(option.key==='favorite')button.onclick=action(async()=>{closeHomeMenus();const result=await api('feature/'+item.id,{featured:!item.featured});item.featured=result.featured;HomeLibrary.changed(item);$('home-settings-'+item.id)?.focus({preventScroll:true});});
   if(option.key==='delete-local'||option.key==='delete-all')button.onclick=()=>{
@@ -64,11 +64,32 @@ function openHomeSessionMenu(item,trigger){
  }
  setHeaderDrop('home-row-menu',trigger.id,true);positionHomeMenu(menu,trigger);
 }
+function applyCloudProgress(status,item){
+ const job=globalThis.VertexCloud?.jobFor?.(item.id);
+ const state=VertexHomeModel.availability(item);
+ if(job){
+  const pct=Math.max(0,Math.min(100,Math.round(job.percent||0)));
+  const r=10,c=2*Math.PI*r,offset=c*(1-pct/100);
+  status.classList.add('is-syncing');
+  status.classList.remove('available');
+  status.innerHTML=`<svg class="cloud-progress-ring" viewBox="0 0 26 26" aria-hidden="true"><circle class="ring-track" cx="13" cy="13" r="${r}"/><circle class="ring-fill" cx="13" cy="13" r="${r}" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"/></svg><b class="cloud-progress-pct">${pct}</b>`;
+  const label=`${job.phase||'Sincronizando'} · ${pct}%`;
+  status.setAttribute('aria-label',label);status.title=label;
+ }else{
+  status.classList.remove('is-syncing');
+  status.innerHTML=HomeGlyphs.cloud;
+  status.classList.toggle('available',state.cloud);
+  const label=state.cloud?'Respaldada en Google Drive':'Sin respaldo en Google Drive';
+  status.setAttribute('aria-label',label);status.title=label;
+ }
+}
 function createAvailability(item){
   const availability=document.createElement('div');availability.className='home-availability';const state=VertexHomeModel.availability(item);
   for(const [key,icon,active,label] of [['local',HomeGlyphs.computer,state.local,state.temporary?'Disponible temporalmente en este dispositivo':'Disponible en este dispositivo'],['cloud',HomeGlyphs.cloud,state.cloud,'Respaldada en Google Drive']]){
-   const status=document.createElement('span');status.innerHTML=icon;status.dataset.storage=key;
-   status.classList.toggle('available',active);status.setAttribute('role','img');status.setAttribute('aria-label',active?label:key==='local'?'No disponible en este dispositivo':'Sin respaldo en Google Drive');status.title=status.getAttribute('aria-label');availability.append(status);
+   const status=document.createElement('span');status.dataset.storage=key;status.setAttribute('role','img');
+   if(key==='cloud'){applyCloudProgress(status,item);}
+   else{status.innerHTML=icon;status.classList.toggle('available',active);status.setAttribute('aria-label',active?label:'No disponible en este dispositivo');status.title=status.getAttribute('aria-label');}
+   availability.append(status);
   }
  return availability;
 }
@@ -157,7 +178,14 @@ function setupHome(){
  };
  syncHomeExportControls();
  $('home-cloud-trigger').onclick=()=>{const open=$('home-cloud-trigger').getAttribute('aria-expanded')!=='true';closeHomeMenus();if(open){globalThis.VertexCloud?.renderMenu?.();setHeaderDrop('home-cloud-menu','home-cloud-trigger',true);positionHomeMenu($('home-cloud-menu'),$('home-cloud-trigger'));}};
- globalThis.VertexCloud?.init?.().then(()=>HomeLibrary.refresh()).catch(()=>{});
+ globalThis.VertexCloud?.init?.().then(()=>{VertexCloud.pollJobs?.();return HomeLibrary.refresh();}).catch(()=>{});
+ globalThis.VertexCloud?.onJobUpdate?.(()=>{
+  for(const row of $('home-library-rows').children){
+   if(!row.dataset.id)continue;
+   const status=row.querySelector('[data-storage="cloud"]');
+   if(status)applyCloudProgress(status,{id:row.dataset.id,availability:{cloud:status.classList.contains('available')}});
+  }
+ });
  $('home-library-scroll').addEventListener('scroll',()=>{closeHomeMenus();HomeLibrary.schedule();},{passive:true});
  new ResizeObserver(()=>HomeLibrary.schedule()).observe($('home-library-scroll'));
  $('picker-sessions').addEventListener('scroll',()=>{const box=$('picker-sessions');if(box.scrollTop+box.clientHeight>=box.scrollHeight-100)HomeLibrary.morePicker();},{passive:true});

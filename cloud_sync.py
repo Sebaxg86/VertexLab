@@ -446,9 +446,13 @@ class CloudSyncService:
         session_folder = drive.create_folder(sid, parent_id=root_folder_id)
         folder_id = session_folder['id']
         try:
+            if progress:
+                progress('Subiendo metadatos', 2)
             meta_bytes = json.dumps(portable_meta, ensure_ascii=False, allow_nan=False).encode('utf-8')
             meta_file = drive.upload_bytes(meta_bytes, 'meta.json', 'application/json', folder_id)
 
+            if progress:
+                progress('Comprimiendo y subiendo telemetría', 6)
             compressed = gzip.compress(telemetry_path.read_bytes(), compresslevel=6)
             tel_file = drive.upload_bytes(compressed, 'telemetry.jsonl.gz', 'application/gzip', folder_id)
 
@@ -461,8 +465,15 @@ class CloudSyncService:
                 video_name = f'video{ext}'
                 video_mime = mimetypes.guess_type(video_name)[0] or 'video/mp4'
                 video_size = video_path.stat().st_size
-                uploaded_video = drive.upload_file(video_path, video_name, video_mime, folder_id, progress=progress)
+                def video_progress(done, total):
+                    if progress and total > 0:
+                        pct = 10 + int(done / total * 86)
+                        progress('Subiendo video a Google Drive', min(96, pct))
+                uploaded_video = drive.upload_file(video_path, video_name, video_mime, folder_id, progress=video_progress)
                 video_file_id = uploaded_video['id']
+
+            if progress:
+                progress('Registrando sesión en la nube', 98)
 
             preview = second_lap_preview(telemetry_path, manual=meta.get('automatic') is False)
             ordinal = int(meta.get('carOrdinal') or 0)
@@ -520,6 +531,8 @@ class CloudSyncService:
             return {'id': sid, 'alreadyLocal': True}
 
         drive = DriveClient(self.get_drive_token(), http=self.http)
+        if progress:
+            progress('Descargando metadatos', 4)
         meta_raw = drive.download_bytes(cloud_row['drive_meta_file_id'])
         meta = json.loads(meta_raw.decode('utf-8'))
         meta['id'] = sid
@@ -529,6 +542,8 @@ class CloudSyncService:
             meta['offset'] = float(cloud_row['sync_offset'] or 0)
         validate_meta(meta)
 
+        if progress:
+            progress('Descargando telemetría', 10)
         tel_raw = drive.download_bytes(cloud_row['drive_telemetry_file_id'])
         if cloud_row.get('telemetry_encoding', 'gzip') == 'gzip':
             tel_raw = gzip.decompress(tel_raw)
@@ -540,11 +555,15 @@ class CloudSyncService:
             if ext not in VIDEO_TYPES:
                 ext = '.mp4'
             video_dest = data_dir / f'{sid}{ext}'
+            def dl_progress(done, total):
+                if progress and total > 0:
+                    pct = 15 + int(done / total * 82)
+                    progress('Descargando video desde Google Drive', min(97, pct))
             drive.download_file(
                 cloud_row['drive_video_file_id'],
                 video_dest,
                 total_size=cloud_row.get('video_size'),
-                progress=progress,
+                progress=dl_progress,
             )
             meta['videoPath'] = str(video_dest.resolve())
         else:

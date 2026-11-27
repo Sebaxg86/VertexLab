@@ -58,6 +58,8 @@ class Runtime:
         self.portable_exports = {}
         self.cloud = CloudSyncService()
         self.cloud_sessions_cache = {}
+        self.cloud_jobs = {}
+        self.cloud_jobs_lock = threading.Lock()
 
     def status(self):
         with self.lock:
@@ -198,9 +200,26 @@ class Runtime:
             with self.lock:
                 if self.recorder.meta and self.recorder.meta['id'] == sid:
                     raise ValueError('Finaliza la sesión antes de sincronizar con Google Drive')
-            row = self.cloud.sync_session(self.data, sid, car_name_fn=car_name, brands=BRANDS)
-            self.cloud_sessions_cache[sid] = row
-            return dict(ok=True, id=sid, cloud=row)
+            with self.cloud_jobs_lock:
+                active = self.cloud_jobs.get(sid)
+                if active and not active.get('done'):
+                    return dict(ok=True, started=True, job=dict(active))
+                job = dict(id=sid, action='upload', phase='Iniciando subida', percent=1, done=False, error=None)
+                self.cloud_jobs[sid] = job
+            def run_upload():
+                def on_progress(phase, percent):
+                    with self.cloud_jobs_lock:
+                        self.cloud_jobs[sid].update(phase=phase, percent=max(0, min(99, int(percent))))
+                try:
+                    row = self.cloud.sync_session(self.data, sid, car_name_fn=car_name, brands=BRANDS, progress=on_progress)
+                    self.cloud_sessions_cache[sid] = row
+                    with self.cloud_jobs_lock:
+                        self.cloud_jobs[sid].update(phase='Sincronizada con Google Drive', percent=100, done=True, error=None)
+                except Exception as exc:
+                    with self.cloud_jobs_lock:
+                        self.cloud_jobs[sid].update(phase='Error al sincronizar', done=True, error=str(exc))
+            threading.Thread(target=run_upload, daemon=True).start()
+            return dict(ok=True, started=True, job=dict(job))
         if action.startswith('download/'):
             sid = action.split('/', 1)[1]
             crow = self.cloud_sessions_cache.get(sid)
@@ -209,7 +228,28 @@ class Runtime:
                 crow = self.cloud_sessions_cache.get(sid)
             if not crow:
                 raise ValueError('La sesión no se encontró en Google Drive')
-            return self.cloud.download_session(self.data, crow)
+            with self.cloud_jobs_lock:
+                active = self.cloud_jobs.get(sid)
+                if active and not active.get('done'):
+                    return dict(ok=True, started=True, job=dict(active))
+                job = dict(id=sid, action='download', phase='Iniciando descarga', percent=1, done=False, error=None)
+                self.cloud_jobs[sid] = job
+            def run_download():
+                def on_progress(phase, percent):
+                    with self.cloud_jobs_lock:
+                        self.cloud_jobs[sid].update(phase=phase, percent=max(0, min(99, int(percent))))
+                try:
+                    result = self.cloud.download_session(self.data, crow, progress=on_progress)
+                    with self.cloud_jobs_lock:
+                        self.cloud_jobs[sid].update(
+                            phase='Ya está en este dispositivo' if result.get('alreadyLocal') else 'Descargada en este dispositivo',
+                            percent=100, done=True, error=None, alreadyLocal=result.get('alreadyLocal', False)
+                        )
+                except Exception as exc:
+                    with self.cloud_jobs_lock:
+                        self.cloud_jobs[sid].update(phase='Error al descargar', done=True, error=str(exc))
+            threading.Thread(target=run_download, daemon=True).start()
+            return dict(ok=True, started=True, job=dict(job))
         if action.startswith('delete/'):
             sid = action.split('/', 1)[1]
             if body.get('confirm') is not True:
@@ -493,6 +533,10 @@ def handler_for(runtime):
                     return self.send(runtime.status())
                 if route == '/api/cloud/status':
                     return self.send(runtime.cloud.status())
+                if route == '/api/cloud/jobs':
+                    with runtime.cloud_jobs_lock:
+                        jobs = {k: dict(v) for k, v in runtime.cloud_jobs.items()}
+                    return self.send({'jobs': jobs})
                 if route == '/api/cloud/drive/folders':
                     drive = DriveClient(runtime.cloud.get_drive_token(), http=runtime.cloud.http)
                     query = parse_qs(urlparse(self.path).query)

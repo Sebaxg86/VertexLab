@@ -20,6 +20,9 @@
  const rangeCache=new Map();
  let rangeCacheBytes=0;
  const listeners=new Set();
+ const jobListeners=new Set();
+ const activeJobs=new Map();
+ let jobPollTimer=null;
 
  function loadConfig(){
   if(root.VERTEXLAB_CLOUD_CONFIG&&root.VERTEXLAB_CLOUD_CONFIG.supabaseUrl)return {...DEFAULT_CONFIG,...root.VERTEXLAB_CLOUD_CONFIG};
@@ -46,6 +49,39 @@
  }
  function emit(){for(const fn of listeners)try{fn(state());}catch{}}
  function onChange(fn){listeners.add(fn);return ()=>listeners.delete(fn);}
+ function emitJobs(){for(const fn of jobListeners)try{fn(activeJobs);}catch{}}
+ function onJobUpdate(fn){jobListeners.add(fn);return ()=>jobListeners.delete(fn);}
+ function jobFor(id){const j=activeJobs.get(id);return j&&!j.done?j:null;}
+
+ async function pollJobs(){
+  if(root.VertexBrowser?.enabled)return;
+  clearTimeout(jobPollTimer);jobPollTimer=null;
+  try{
+   const response=await fetch('/api/cloud/jobs');
+   if(!response.ok)return;
+   const data=await response.json();
+   const jobs=data.jobs||{};
+   let hasRunning=false,finishedAny=false;
+   for(const [id,job] of Object.entries(jobs)){
+    const prev=activeJobs.get(id);
+    activeJobs.set(id,job);
+    if(!job.done){hasRunning=true;}
+    else if(prev&&!prev.done){
+     finishedAny=true;
+     const msg=document.getElementById('message');
+     if(msg)msg.textContent=job.error?('Error en nube: '+job.error):(job.phase||'Listo.');
+    }
+   }
+   emitJobs();
+   if(finishedAny){
+    await refreshCloudSessions().catch(()=>{});
+    if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();
+   }
+   if(hasRunning)jobPollTimer=setTimeout(pollJobs,500);
+  }catch{
+   if([...activeJobs.values()].some(j=>!j.done))jobPollTimer=setTimeout(pollJobs,1500);
+  }
+ }
 
  function configured(){return !!(config.supabaseUrl&&config.supabaseAnonKey);}
  function signedIn(){return !!(auth?.accessToken&&auth?.user?.id);}
@@ -299,7 +335,8 @@
    const response=await fetch('/api/cloud/sync/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
    const data=await response.json();
    if(!response.ok)throw Error(data.error||'No se pudo sincronizar la sesión');
-   await refreshCloudSessions();
+   if(data.job){activeJobs.set(id,data.job);emitJobs();pollJobs();}
+   else await refreshCloudSessions();
    return data;
   }
   throw Error('La subida directa desde el visor web estará disponible en la siguiente actualización; sincroniza desde VertexLab en tu PC.');
@@ -310,6 +347,7 @@
    const response=await fetch('/api/cloud/download/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
    const data=await response.json();
    if(!response.ok)throw Error(data.error||'No se pudo descargar la sesión');
+   if(data.job){activeJobs.set(id,data.job);emitJobs();pollJobs();}
    return data;
   }
   throw Error('Para descargar sesiones a este dispositivo en el visor web usa el archivo .vrtx o reproduce en streaming.');
@@ -479,7 +517,7 @@
  }
 
  root.VertexCloud={
-  init,state,actionState,cachedSessions,onChange,saveConfig,
+  init,state,actionState,cachedSessions,onChange,onJobUpdate,jobFor,pollJobs,saveConfig,
   signIn,signOut,connectDrive,disconnectDrive,
   listFolders,createFolder,selectFolder,getDriveAccessToken,
   refreshProfile,refreshCloudSessions,openCloudSession,
