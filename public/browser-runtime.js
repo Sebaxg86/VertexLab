@@ -254,14 +254,24 @@
         dialog.className='cloud-auth-dialog viewer-download-modal';
         dialog.innerHTML=`<span class="eyebrow">APLICACIÓN DE ESCRITORIO · WINDOWS</span><h2>VERTEX<em class="brand-accent">LAB</em> + CONNECT</h2><p class="auth-subtitle">Lleva tu experiencia al siguiente nivel en tu PC de juego y analiza cada vuelta desde tu teléfono.</p><ul class="download-modal-perks"><li>Telemetría real de Forza en tiempo real (LIVE) para segundo monitor.</li><li>Grabación automática con OBS sincronizada por tramos y pausas.</li><li>Respaldo en tu Google Drive para reproducir en streaming desde cualquier dispositivo.</li></ul><a class="cloud-google-btn viewer-modal-dl" href="${DOWNLOAD_URL}" target="_blank" rel="noopener noreferrer"><span>Descargar para Windows ↗</span></a><div class="cloud-auth-footer"><button type="button" id="viewer-dl-close" class="cloud-auth-cancel">Ahora no</button></div>`;
         document.body.append(dialog);
-        dialog.querySelector('#viewer-dl-close').onclick=()=>dialog.close();
+        const closeDownloadModal=()=>{
+          if(!dialog.open||dialog.classList.contains('is-closing'))return;
+          if(matchMedia('(prefers-reduced-motion: reduce)').matches){dialog.close();return;}
+          dialog.classList.add('is-closing');
+          clearTimeout(dialog._closeTimer);
+          dialog._closeTimer=setTimeout(()=>{dialog.close();dialog.classList.remove('is-closing');},200);
+        };
+        dialog.querySelector('#viewer-dl-close').onclick=closeDownloadModal;
+        dialog.addEventListener('cancel',e=>{e.preventDefault();closeDownloadModal();});
         dialog.addEventListener('click',e=>{
           if(e.target!==dialog)return;
           const r=dialog.getBoundingClientRect();
-          if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close();
+          if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)closeDownloadModal();
         });
       }
-      dialog.showModal();
+      clearTimeout(dialog._closeTimer);
+      dialog.classList.remove('is-closing');
+      if(!dialog.open)dialog.showModal();
     });
     headerWrap.append(chevrons,headerCta);
     document.querySelector('.app-header')?.append(headerWrap);
