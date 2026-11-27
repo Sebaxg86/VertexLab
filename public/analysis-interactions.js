@@ -25,8 +25,7 @@ function updateSessionActions(){
    button.append(text);
    if(option.key==='sync')button.onclick=action(async()=>{setMenu(false);$('message').textContent='Subiendo sesión a Google Drive…';await VertexCloud.syncSession(session.meta.id);updateSessionActions();});
    if(option.key==='download')button.onclick=action(async()=>{setMenu(false);$('message').textContent='Descargando sesión desde Google Drive…';await VertexCloud.downloadSession(session.meta.id);updateSessionActions();});
-   if(option.key==='delete-cloud')button.onclick=action(async()=>{setMenu(false);if(!confirm('¿Eliminar la copia en Google Drive?'))return;await VertexCloud.deleteCloudSession(session.meta.id,session.meta.cloud?.driveFolderId);if(session.meta.availability)session.meta.availability.cloud=false;updateSessionActions();await list();$('message').textContent='Copia eliminada de Google Drive.';});
-   if(option.key==='delete-local'||option.key==='delete-all')button.onclick=()=>requestAnalysisDelete(option.key);
+   if(option.key==='delete-local'||option.key==='delete-cloud'||option.key==='delete-all')button.onclick=()=>requestAnalysisDelete(option.key);
    cloud.append(button);
   }
  }
@@ -100,11 +99,14 @@ function stepMetrics(direction){
 function requestAnalysisDelete(scope){
  if(!session||latest?.recording===session.meta.id)return;
  setPlaying(false);setMenu(false);
- $('delete-title').textContent=scope==='delete-all'?'¿Eliminar definitivamente?':'¿Eliminar de este dispositivo?';
+ $('delete-title').textContent=scope==='delete-all'?'¿Eliminar definitivamente?':scope==='delete-cloud'?'¿Eliminar de Google Drive?':'¿Eliminar de este dispositivo?';
  $('delete-description').textContent=session.meta.name||session.meta.carName||'Sesión';
- const browser=!!globalThis.VertexBrowser?.enabled,inCloud=!!session.meta.availability?.cloud;
+ const browser=!!globalThis.VertexBrowser?.enabled,inCloud=!!session.meta.availability?.cloud,isLocal=session.meta.availability?.local!==false;
  $('delete-dialog').dataset.scope=scope;
- if(scope==='delete-all'&&inCloud){
+ if(scope==='delete-cloud'){
+  $('delete-dialog').querySelector('.delete-warning').textContent=isLocal?'Se eliminará únicamente el respaldo en Google Drive. Tu copia local en este dispositivo se conserva.':'Se eliminará el respaldo en Google Drive. Esta sesión no está descargada en este dispositivo y esta acción no se puede deshacer.';
+  $('delete-confirm').textContent='Eliminar de Google Drive';
+ }else if(scope==='delete-all'&&inCloud){
   $('delete-dialog').querySelector('.delete-warning').textContent='Se eliminarán definitivamente tanto la copia en este dispositivo como el respaldo en Google Drive. Esta acción no se puede deshacer.';
   $('delete-confirm').textContent='Eliminar de todos lados';
  }else if(inCloud){
@@ -124,10 +126,23 @@ function setupAnalysisInteractions(){
  $('delete-session').onclick=()=>requestAnalysisDelete('delete-local');
  $('delete-cancel').onclick=()=>$('delete-dialog').close();
  $('delete-confirm').onclick=action(async()=>{
-  if(!session)return;const id=session.meta.id,scope=$('delete-dialog').dataset.scope||'delete-local',inCloud=!!session.meta.availability?.cloud,folderId=session.meta.cloud?.driveFolderId;$('delete-confirm').disabled=true;
+  if(!session)return;const id=session.meta.id,scope=$('delete-dialog').dataset.scope||'delete-local',inCloud=!!session.meta.availability?.cloud,isLocal=session.meta.availability?.local!==false,folderId=session.meta.cloud?.driveFolderId;$('delete-confirm').disabled=true;
   try{
+   if(scope==='delete-cloud'){
+    await VertexCloud.deleteCloudSession(id,folderId);
+    $('delete-dialog').close();
+    if(isLocal){
+     if(session.meta.availability)session.meta.availability.cloud=false;
+     session.meta.cloud=null;updateSessionActions();await list();
+     $('message').textContent='Respaldo eliminado de Google Drive. Tu copia local se conserva.';
+    }else{
+     clearVideo();openHome();await list();
+     $('message').textContent='Sesión eliminada de Google Drive.';
+    }
+    return;
+   }
    clearVideo();
-   if(session.meta.availability?.local!==false)await api('delete/'+id,{confirm:true,removeLocal:true});
+   if(isLocal)await api('delete/'+id,{confirm:true,removeLocal:true});
    if(scope==='delete-all'&&inCloud)await VertexCloud.deleteCloudSession(id,folderId);
    $('delete-dialog').close();openHome();await list();
    $('message').textContent=scope==='delete-all'&&inCloud?'Sesión eliminada de este dispositivo y de Google Drive.':inCloud?'Copia local eliminada. Tu respaldo en Google Drive se conserva.':'Sesión y video eliminados.';

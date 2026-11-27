@@ -49,17 +49,19 @@ function openHomeSessionMenu(item,trigger){
   if(option.key==='export')button.onclick=action(async()=>{await exportLibrarySessions([item]);});
   if(option.key==='sync')button.onclick=action(async()=>{closeHomeMenus();$('message').textContent='Subiendo sesión a Google Drive…';await VertexCloud.syncSession(item.id);});
   if(option.key==='download')button.onclick=action(async()=>{closeHomeMenus();$('message').textContent='Descargando sesión desde Google Drive…';await VertexCloud.downloadSession(item.id);});
-  if(option.key==='delete-cloud')button.onclick=action(async()=>{closeHomeMenus();if(!confirm('¿Eliminar la copia en Google Drive de "'+(item.name||item.carName||'esta sesión')+'"?'))return;await VertexCloud.deleteCloudSession(item.id,item.cloud?.driveFolderId);await HomeLibrary.refresh();$('message').textContent='Copia eliminada de Google Drive.';});
   if(option.key==='favorite')button.onclick=action(async()=>{closeHomeMenus();const result=await api('feature/'+item.id,{featured:!item.featured});item.featured=result.featured;HomeLibrary.changed(item);$('home-settings-'+item.id)?.focus({preventScroll:true});});
-  if(option.key==='delete-local'||option.key==='delete-all')button.onclick=()=>{
+  if(option.key==='delete-local'||option.key==='delete-cloud'||option.key==='delete-all')button.onclick=()=>{
    closeHomeMenus();homeDeleteTarget={item,scope:option.key};
-   const browser=!!globalThis.VertexBrowser?.enabled,inCloud=VertexHomeModel.availability(item).cloud;
-   $('home-delete-title').textContent=option.key==='delete-all'?'¿Eliminar definitivamente?':'¿Eliminar de este dispositivo?';
+   const browser=!!globalThis.VertexBrowser?.enabled,avail=VertexHomeModel.availability(item);
+   $('home-delete-title').textContent=option.key==='delete-all'?'¿Eliminar definitivamente?':option.key==='delete-cloud'?'¿Eliminar de Google Drive?':'¿Eliminar de este dispositivo?';
    $('home-delete-description').textContent=item.name||item.carName||'Sesión';
-   if(option.key==='delete-all'&&inCloud){
+   if(option.key==='delete-cloud'){
+    $('home-delete-warning').textContent=avail.local?'Se eliminará únicamente el respaldo en Google Drive. Tu copia local en este dispositivo se conserva.':'Se eliminará el respaldo en Google Drive. Esta sesión no está descargada en este dispositivo y esta acción no se puede deshacer.';
+    $('home-delete-confirm').textContent='Eliminar de Google Drive';
+   }else if(option.key==='delete-all'&&avail.cloud){
     $('home-delete-warning').textContent='Se eliminarán definitivamente tanto la copia en este dispositivo como el respaldo en Google Drive. Esta acción no se puede deshacer.';
     $('home-delete-confirm').textContent='Eliminar de todos lados';
-   }else if(inCloud){
+   }else if(avail.cloud){
     $('home-delete-warning').textContent='Se eliminará únicamente la copia local en este dispositivo para liberar espacio. Tu respaldo en Google Drive se conserva y podrás seguir viéndolo en streaming o descargarlo de nuevo.';
     $('home-delete-confirm').textContent='Eliminar copia local';
    }else{
@@ -205,11 +207,12 @@ function setupHome(){
  $('home-delete-confirm').onclick=async()=>{
   if(!homeDeleteTarget)return;const {item:target,scope}=homeDeleteTarget;const state=VertexHomeModel.availability(target);$('home-delete-confirm').disabled=true;$('home-delete-error').hidden=true;
   try{
-   if(state.local)await api('delete/'+target.id,{confirm:true,removeLocal:true});
-   if(scope==='delete-all'&&state.cloud)await VertexCloud.deleteCloudSession(target.id,target.cloud?.driveFolderId);
+   if(scope!=='delete-cloud'&&state.local)await api('delete/'+target.id,{confirm:true,removeLocal:true});
+   if((scope==='delete-cloud'||scope==='delete-all')&&state.cloud)await VertexCloud.deleteCloudSession(target.id,target.cloud?.driveFolderId);
    $('home-delete-dialog').close();homeDeleteTarget=null;
-   if(scope==='delete-local'&&state.cloud){await HomeLibrary.refresh();$('message').textContent='Copia local eliminada. Tu respaldo en Google Drive se conserva.';}
-   else{HomeLibrary.removed(target.id);$('message').textContent=scope==='delete-all'&&state.cloud?'Sesión eliminada de este dispositivo y de Google Drive.':'Sesión eliminada de este dispositivo.';}
+   if(scope==='delete-cloud'&&state.local){await HomeLibrary.refresh();$('message').textContent='Respaldo eliminado de Google Drive. Tu copia local se conserva.';}
+   else if(scope==='delete-local'&&state.cloud){await HomeLibrary.refresh();$('message').textContent='Copia local eliminada. Tu respaldo en Google Drive se conserva.';}
+   else{HomeLibrary.removed(target.id);$('message').textContent=scope==='delete-cloud'?'Sesión eliminada de Google Drive.':scope==='delete-all'&&state.cloud?'Sesión eliminada de este dispositivo y de Google Drive.':'Sesión eliminada de este dispositivo.';}
   }
   catch(error){$('home-delete-error').textContent=error.message;$('home-delete-error').hidden=false;}
   finally{$('home-delete-confirm').disabled=false;}
