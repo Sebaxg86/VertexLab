@@ -37,9 +37,62 @@ for (const [index, metric] of metricDefs.entries()) {
   $('telemetry-rows').append(card);
 }
 
+let settingsMenuPlaceholder=null,settingsMenuTimer=null,settingsBackdropTimer=null;
+function settingsBackdrop(){
+  let el=$('analysis-menu-backdrop');
+  if(!el){
+    el=document.createElement('div');
+    el.id='analysis-menu-backdrop';
+    el.className='home-popover-backdrop';
+    el.setAttribute('aria-hidden','true');
+    el.hidden=true;
+    el.addEventListener('pointerdown',event=>{event.stopPropagation();});
+    el.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();setMenu(false);});
+    document.body.append(el);
+  }
+  return el;
+}
+function setSettingsBackdrop(open){
+  const el=$('analysis-menu-backdrop')||(open?settingsBackdrop():null);
+  if(!el)return;
+  clearTimeout(settingsBackdropTimer);
+  if(open){
+    el.hidden=false;
+    requestAnimationFrame(()=>{if(!el.hidden)el.classList.add('is-open');});
+  }else{
+    el.classList.remove('is-open');
+    settingsBackdropTimer=setTimeout(()=>{el.hidden=true;},200);
+  }
+}
 function setMenu(open){
+  const panel=$('settings-panel'),trigger=$('settings-toggle');
   if(open&&session)updateSessionActions();
   if(open){setSessionPicker(false);setHeaderDrop('record-name-menu','record-name-trigger',false);}
+  clearTimeout(settingsMenuTimer);
+  if(open&&session){
+    if(!settingsMenuPlaceholder&&panel.parentElement!==document.body){
+      settingsMenuPlaceholder=document.createComment('settings-panel-anchor');
+      panel.before(settingsMenuPlaceholder);
+      document.body.append(panel);
+    }
+    const rect=trigger.getBoundingClientRect();
+    panel.classList.add('is-focused-menu');
+    panel.style.top=Math.round(rect.bottom+10)+'px';
+    panel.style.right=Math.max(12,Math.round(innerWidth-rect.right))+'px';
+    panel.style.left='auto';
+    setSettingsBackdrop(true);
+  }else{
+    setSettingsBackdrop(false);
+    if(settingsMenuPlaceholder){
+      settingsMenuTimer=setTimeout(()=>{
+        if(trigger.getAttribute('aria-expanded')==='true')return;
+        panel.classList.remove('is-focused-menu');
+        panel.style.top='';panel.style.right='';panel.style.left='';
+        settingsMenuPlaceholder.replaceWith(panel);
+        settingsMenuPlaceholder=null;
+      },205);
+    }
+  }
   setHeaderDrop('settings-panel','settings-toggle',open);
 }
 $('settings-toggle').onclick=()=>setMenu($('settings-toggle').getAttribute('aria-expanded')!=='true');
@@ -181,14 +234,17 @@ function setVideoTime(value) {
   pendingSeek = Math.max(0, Math.min($('video').duration, value));
   $('video').currentTime = pendingSeek;
 }
-function seek(value) {
+function seek(value, syncVideo = true) {
   if(videoOnly()){
     t=Math.max(0,Math.min(Number.isFinite($('video').duration)?$('video').duration:0,value));
-    setVideoTime(t);$('time').value=t;draw();return;
+    if(syncVideo)setVideoTime(t);
+    $('time').value=t;draw();return;
   }
   const bounds=playbackBounds();
   t=Math.max(bounds.start,Math.min(bounds.end,value));
-  refreshTransport();syncVideoPanes(true);draw();
+  refreshTransport();
+  if(syncVideo)syncVideoPanes(true);
+  draw();
 }
 function setPlaying(value) {
   playing = value;
@@ -470,7 +526,7 @@ function drawMetrics(sample, laps) {
     chart.restore();
   }
 }
-function chartSeek(event) {
+function chartSeek(event, syncVideo = true) {
   if (!session) return;
   const lap = session?.laps.find(item => item.id === reference);
   if (!allMode&&!lap?.rows.length) return;
@@ -480,7 +536,9 @@ function chartSeek(event) {
   const left=['lapTime','raceTime'].includes(event.currentTarget.dataset.key)?58:28;
   const distance = range.start + Math.max(0, Math.min(1, (event.clientX-rect.left-left)/(rect.width-left-8))) * (range.end-range.start);
   const hit=RaceInteraction.hitSegments(chartSegments.get(event.currentTarget.dataset.key)||[],event.clientX-rect.left,event.clientY-rect.top,14,analysisHover?.lapId);
-  if(hit)seekHit(hit);else if(allMode)seek(distance);else seek(playbackBounds().start+distance);
+  if(hit){if(!allMode&&reference!==hit.lapId)seekHit(hit);else seek(hit.time,syncVideo);}
+  else if(allMode)seek(distance,syncVideo);
+  else seek(playbackBounds().start+distance,syncVideo);
 }
 for (const element of $('telemetry-rows').querySelectorAll('canvas')) {
   element.onpointerdown = event => { if (!session) return; chartDragging = true; element.setPointerCapture(event.pointerId); chartSeek(event); };

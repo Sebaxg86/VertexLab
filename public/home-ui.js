@@ -18,6 +18,7 @@ function updateHomeLive(){
  $('home-live-entry').setAttribute('aria-label',browser?'Probar telemetría en tiempo real demo':online?'Entrar a LIVE, Forza conectado':'Entrar al tablero, OFFLINE');
 }
 function openHome(){
+ globalThis.VertexMobileFocus?.exit?.(false);
  globalThis.VertexBrowser?.stopLiveDemo?.();
  openLiveView();homeActive=true;revSweepState=null;
  document.body.classList.add('home-view');$('lab-home').hidden=false;

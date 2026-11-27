@@ -73,6 +73,7 @@ function updateLiveView(){
   $('live-offline-notice').setAttribute('aria-hidden',String(!blocked));
 }
 function setViewLayout(isLive){
+  globalThis.VertexMobileFocus?.exit?.(false);
   homeActive=false;document.body.classList.remove('home-view');$('lab-home').hidden=true;closeHomeMenus();
   if(globalThis.VertexBrowser?.enabled&&!VertexBrowser.liveDemoActive?.())isLive=false;
   document.body.classList.toggle('live-view',isLive);

@@ -49,8 +49,9 @@ function setupRacingUI(){
   $('name').onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();requestManualRecording();}};
   $('manual-record-cancel').onclick=closeManualRecordingDialog;
   $('manual-record-dialog').addEventListener('cancel',event=>{event.preventDefault();if(!manualBusy)closeManualRecordingDialog();});
-  document.addEventListener('pointerdown',event=>{if(!event.target.closest('.settings-wrap'))setMenu(false);if(!event.target.closest('.record-name-wrap'))closeName();});
+  document.addEventListener('pointerdown',event=>{if(!event.target.closest('.settings-wrap,#settings-panel,#analysis-menu-backdrop'))setMenu(false);if(!event.target.closest('.record-name-wrap'))closeName();});
   document.addEventListener('keydown',event=>{if(event.key!=='Escape')return;if($('settings-toggle').getAttribute('aria-expanded')==='true'){setMenu(false);$('settings-toggle').focus();}if($('record-name-trigger').getAttribute('aria-expanded')==='true'){closeName();$('record-name-trigger').focus();}});
-  for(const [panel,trigger] of [['settings-panel','settings-toggle'],['record-name-menu','record-name-trigger']])$(panel).addEventListener('focusout',()=>requestAnimationFrame(()=>{if(!$(panel).parentElement.contains(document.activeElement))setHeaderDrop(panel,trigger,false);}));
+  $('settings-panel').addEventListener('focusout',()=>requestAnimationFrame(()=>{const active=document.activeElement;if(!$('settings-panel').contains(active)&&!$('settings-toggle').contains(active))setMenu(false);}));
+  $('record-name-menu').addEventListener('focusout',()=>requestAnimationFrame(()=>{if(!$('record-name-menu').parentElement.contains(document.activeElement))setHeaderDrop('record-name-menu','record-name-trigger',false);}));
   syncCaptureControls(null);
 }

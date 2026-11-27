@@ -74,6 +74,7 @@ function setMetricLayout(){
   card.classList.toggle('is-expanded',expandedMetric===key);
   card.querySelector('.metric-expand')?.setAttribute('aria-expanded',String(expandedMetric===key));
  }
+ globalThis.VertexMobileFocus?.sync?.();
 }
 function toggleMetric(key){
  const was=expandedMetric;expandedMetric=was===key?null:key;clearAnalysisHover();setMetricLayout();
