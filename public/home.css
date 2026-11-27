@@ -57,25 +57,28 @@ body.home-view .home-account-wrap{display:flex;align-items:center;position:absol
 .viewer-cta-chevrons .c3{animation-delay:.36s}
 @keyframes ctaChevronWave{0%,100%{opacity:.18;filter:none}45%{opacity:1;filter:drop-shadow(0 0 7px #ff4059)}}
 @keyframes ctaArrowNudge{0%,100%{transform:translateX(-3px)}50%{transform:translateX(3px)}}
-.viewer-download-cta{position:relative;overflow:hidden;isolation:isolate;display:inline-flex;align-items:center;gap:12px;padding:10px 22px 10px 18px;border:1px solid #ff455d;clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);background:linear-gradient(125deg,#a51832 0%,#d92646 48%,#7a1026 100%);color:#fff;text-decoration:none;white-space:nowrap;box-shadow:0 0 22px #ff335238,inset 0 1px 0 #ff9aaa55;transition:transform .2s cubic-bezier(.22,1,.36,1),filter .22s ease,box-shadow .22s ease}
-.viewer-download-cta::before{content:'';position:absolute;inset:-40% -60%;background:linear-gradient(110deg,transparent 38%,#ffffff44 50%,transparent 62%);transform:translateX(-110%);animation:ctaSheen 4.2s cubic-bezier(.22,1,.36,1) infinite;pointer-events:none}
-.viewer-download-cta:hover{transform:translateY(-2px) scale(1.02);filter:brightness(1.14) drop-shadow(0 0 14px #ff3b5766);box-shadow:0 6px 28px #ff2b4a55,inset 0 1px 0 #ffc2cc88}
+.brand-accent{font-style:inherit;color:#ff3945}
+.viewer-download-cta{position:relative;overflow:hidden;isolation:isolate;display:inline-flex;align-items:center;gap:12px;padding:10px 22px 10px 18px;border:1px solid #ff455d;clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);background:linear-gradient(125deg,#1d1017 0%,#120b10 60%,#26111a 100%);color:#fff;text-decoration:none;white-space:nowrap;box-shadow:0 0 22px #ff33522b,inset 0 1px 0 #ff455d55;transition:transform .2s cubic-bezier(.22,1,.36,1),filter .22s ease,box-shadow .22s ease,border-color .2s ease}
+.viewer-download-cta::before{content:'';position:absolute;inset:-40% -60%;background:linear-gradient(110deg,transparent 38%,#ff455d38 50%,transparent 62%);transform:translateX(-110%);animation:ctaSheen 4.2s cubic-bezier(.22,1,.36,1) infinite;pointer-events:none}
+.viewer-download-cta:hover{transform:translateY(-2px) scale(1.02);border-color:#ff667a;filter:brightness(1.12) drop-shadow(0 0 14px #ff3b5755);box-shadow:0 6px 28px #ff2b4a44,inset 0 1px 0 #ff8a9977}
 .viewer-download-cta:hover::before{animation:none;transform:translateX(115%);transition:transform .55s cubic-bezier(.22,1,.36,1)}
-.viewer-download-cta:active{transform:translateY(0) scale(.98);filter:brightness(1.05)}
-.viewer-download-cta svg{width:20px;height:20px;fill:none;stroke:#fff;stroke-width:2.2;flex-shrink:0;filter:drop-shadow(0 0 6px #0006)}
-.viewer-cta-text{display:flex;flex-direction:column;line-height:1.08}
-.viewer-cta-text small{font-family:RaceNumbers,'Segoe UI',sans-serif;font-size:9px;letter-spacing:1.8px;color:#ffd0d8;opacity:.9}
-.viewer-cta-text b{font-family:RaceDisplay,'Arial Narrow',sans-serif;font-style:italic;font-size:19px;letter-spacing:1.3px;color:#fff;display:inline-flex;align-items:center;gap:6px}
-.viewer-cta-text i{font-style:normal;display:inline-block;transition:transform .22s cubic-bezier(.22,1,.36,1)}
-.viewer-download-cta:hover .viewer-cta-text i{transform:translate(3px,-2px)}
+.viewer-download-cta:active{transform:translateY(0) scale(.98)}
+.viewer-download-cta svg{width:20px;height:20px;fill:none;stroke:#ff455d;stroke-width:2.2;flex-shrink:0}
+.viewer-cta-text{display:flex;flex-direction:column;line-height:1.12}
+.viewer-cta-text small{font-family:RaceNumbers,'Segoe UI',sans-serif;font-size:10px;letter-spacing:1.6px;color:#b8a4b0}
+.viewer-cta-text small b{font-family:RaceDisplay,'Arial Narrow',sans-serif;font-style:italic;font-size:12px;letter-spacing:1.2px;color:#fff;font-weight:700}
+.viewer-cta-text strong{font-family:RaceDisplay,'Arial Narrow',sans-serif;font-style:italic;font-size:19px;letter-spacing:1.3px;color:#fff;font-weight:700;display:inline-flex;align-items:center;gap:6px}
+.viewer-cta-text i{font-style:normal;color:#ff455d;display:inline-block;transition:transform .22s cubic-bezier(.22,1,.36,1)}
+.viewer-download-cta:hover .viewer-cta-text i{transform:translate(3px,-2px);color:#ff6b7e}
 @keyframes ctaSheen{0%,62%{transform:translateX(-110%)}100%{transform:translateX(120%)}}
 @media(prefers-reduced-motion:reduce){.viewer-download-cta::before{animation:none;display:none}.viewer-download-cta,.viewer-cta-text i{transition:none}.viewer-cta-chevrons,.viewer-cta-chevrons path{animation:none;opacity:.7}}
 .viewer-download-cta[hidden],body.home-view .viewer-download-cta{display:none}
 body.browser-viewer .home-live-foot{display:none}
 .home-download-link{position:absolute;bottom:26px;left:clamp(28px,5vw,100px);right:24px;max-width:fit-content;z-index:5;display:inline-flex;flex-wrap:wrap;align-items:baseline;gap:8px 12px;padding:12px 18px;border:1px solid #6b2c3c;border-left:3px solid #ff455d;background:#140c11d9;backdrop-filter:blur(8px);font-family:RaceNumbers,'Segoe UI',sans-serif;font-size:13px;letter-spacing:1.4px;color:#cbb8c4;text-decoration:none;transition:border-color .2s,background .2s,box-shadow .2s,transform .18s}
 .home-download-link b{font-family:RaceDisplay,'Arial Narrow',sans-serif;font-style:italic;font-size:18px;letter-spacing:1.2px;color:#fff;font-weight:700;border-bottom:2px solid #ff455d;padding-bottom:1px;transition:color .2s,border-color .2s}
+.home-download-link i{font-style:normal;color:#ff455d}
 .home-download-link:hover{border-color:#ff455d;background:#1f1018ee;box-shadow:0 8px 28px #ff33522e;transform:translateY(-2px);color:#f3e6ee}
-.home-download-link:hover b{color:#ff6b7e;border-color:#ff6b7e}
+.home-download-link:hover b{border-color:#ff6b7e}
 @media(max-width:780px){.home-download-link,.viewer-cta-chevrons{display:none}.viewer-cta-text{display:none}.viewer-download-cta{padding:9px 12px}}
 .session-switcher #session-picker{width:100%;min-width:0;max-width:none;left:0;right:auto}#session-picker .picker-session{grid-template-columns:50px 26px minmax(0,1fr) 42px;gap:8px;padding:12px 7px;border-radius:1px}#session-picker .picker-route{width:50px;height:48px}#session-picker .picker-brand{width:26px;min-width:26px}#session-picker .picker-brand img{width:25px;height:28px}#session-picker .picker-session b{font-size:17px}#session-picker .picker-session small{font-size:13px}#session-picker .home-availability{gap:7px}#session-picker .home-availability svg{width:17px;height:17px}
 #picker-live{position:relative;isolation:isolate;overflow:hidden;min-height:82px;display:flex;align-items:center;gap:18px;background:#121115!important;border-color:#402c36!important}#picker-live::before{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(110deg,#174b3266,#227d4c44 55%,#10372233);opacity:0;pointer-events:none}body[data-live-connected=true] #picker-live::before{animation:quickLiveBreathe 2.8s ease-in-out infinite}#picker-live b{font-family:RaceDisplay,sans-serif;font-style:italic;font-size:37px;line-height:1;letter-spacing:2px}#picker-live .picker-live-icon{color:#ff4059!important;background:transparent!important;animation:none!important;box-shadow:none!important;font-size:22px}#picker-live-status{display:none!important}#live-settings>.switch{padding:5px 0 18px;font-family:RaceNumbers,sans-serif;font-size:17px}#open-vertexconnect{width:100%;margin-top:4px}.sync-placeholder:disabled{opacity:.55;cursor:not-allowed}.sync-placeholder small{font-size:11px;margin-top:3px}.sync-placeholder>svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.4}#analysis-cloud-actions{border-top:1px solid #49313d;margin-top:12px;padding-top:10px}@keyframes quickLiveBreathe{0%,100%{opacity:.35}50%{opacity:1}}@media(prefers-reduced-motion:reduce){#view-transition{transition:none}body[data-live-connected=true] #picker-live::before{animation:none;opacity:.7}}
