@@ -151,12 +151,12 @@ body:not([data-live-connected=true]) #picker-live:focus-visible{box-shadow:inset
 }
 
 /* Header shortcut back to Home from a session. */
-.analysis-view #lab-logo {
+:is(.analysis-view, .live-view) #lab-logo {
   position: relative;
   transition: filter .24s ease, transform .18s ease;
 }
 
-.analysis-view #lab-logo::after {
+:is(.analysis-view, .live-view) #lab-logo::after {
   content: '';
   position: absolute;
   inset: auto 0 -6px;
@@ -169,28 +169,28 @@ body:not([data-live-connected=true]) #picker-live:focus-visible{box-shadow:inset
   transition: transform .35s cubic-bezier(.22, 1, .36, 1);
 }
 
-.analysis-view #lab-logo:is(:hover, :focus-visible) {
+:is(.analysis-view, .live-view) #lab-logo:is(:hover, :focus-visible) {
   filter: drop-shadow(0 0 9px #ff405977);
   transform: translateY(-1px);
 }
 
-.analysis-view #lab-logo:is(:hover, :focus-visible, :active)::after {
+:is(.analysis-view, .live-view) #lab-logo:is(:hover, :focus-visible, :active)::after {
   transform: scaleX(1);
 }
 
-.analysis-view #lab-logo:active {
+:is(.analysis-view, .live-view) #lab-logo:active {
   filter: drop-shadow(0 0 13px #ff4059b0) brightness(1.2);
   transform: translateY(1px) scale(.96);
   transition-duration: 70ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .analysis-view #lab-logo,
-  .analysis-view #lab-logo::after {
+  :is(.analysis-view, .live-view) #lab-logo,
+  :is(.analysis-view, .live-view) #lab-logo::after {
     transition: none;
   }
 
-  .analysis-view #lab-logo:is(:hover, :focus-visible, :active) {
+  :is(.analysis-view, .live-view) #lab-logo:is(:hover, :focus-visible, :active) {
     transform: none;
   }
 }
