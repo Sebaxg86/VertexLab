@@ -25,7 +25,7 @@ async function localVideoResponse(request,id,clientId){
       return VertexMedia.cloudResponse(request,{size:cloud.size,type:cloud.type},(start,end)=>new Promise((resolve,reject)=>{
         const channel=new MessageChannel();const timer=setTimeout(()=>{channel.port1.close();reject(Error('Cloud media read timed out'));},30000);
         channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data.error?reject(Error(event.data.error)):resolve(event.data.buffer);};
-        client.postMessage({type:'vertex-cloud-media-range',id,fileId:cloud.fileId,start,end},[channel.port2]);
+        client.postMessage({type:'vertex-cloud-media-range',id,fileId:cloud.fileId,start,end,size:cloud.size},[channel.port2]);
       }));
     }
     let source=localMedia.get(id);

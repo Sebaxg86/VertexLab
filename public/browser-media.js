@@ -36,7 +36,7 @@
     const length=part.end-part.start+1;headers['Content-Length']=String(length);
     if(part.status===206)headers['Content-Range']=`bytes ${part.start}-${part.end}/${video.size}`;
     let cursor=part.start,cancelled=false;
-    const chunkSize=1024*1024;
+    const chunkSize=2*1024*1024;
     const stream=request.method==='HEAD'?null:new ReadableStream({
       async pull(controller){
         if(cancelled)return;
