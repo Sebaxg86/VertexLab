@@ -245,7 +245,6 @@
     headerCta.href=DOWNLOAD_URL;headerCta.target='_blank';headerCta.rel='noopener noreferrer';
     headerCta.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 15v6h16v-6"/></svg><span class="viewer-cta-text"><small><b>VERTEX<em class="brand-accent">LAB</em></b> · WINDOWS</small><strong>DESCARGAR AHORA <i>↗</i></strong></span>';
     headerCta.addEventListener('click',event=>{
-      if(!matchMedia('(max-width:600px)').matches)return;
       event.preventDefault();
       let dialog=$('viewer-download-modal');
       if(!dialog){
