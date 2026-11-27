@@ -1,0 +1,4 @@
+project_id = "vertexlab"
+
+[functions.drive-auth]
+verify_jwt = false
