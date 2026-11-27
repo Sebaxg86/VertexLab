@@ -186,15 +186,16 @@
     if(matchMedia('(pointer: coarse)').matches)document.querySelector('.map-footer>span').textContent='Zoom con +/− · arrastra para mover';
     $('picker-live').hidden=!session;
     $('picker-live').querySelector('b').textContent='LIVE DEMO';
+    $('picker-live-status').textContent='Vista previa';
+    $('picker-live-status').hidden=false;
     $('manual-controls').hidden=true;
+    document.body.dataset.liveConnected='true';
     const cta=$('viewer-download-wrap');
     if(cta)cta.hidden=!liveDemoActive;
     if(liveDemoActive){
-      document.body.dataset.liveConnected='true';
       document.querySelector('.settings-wrap').hidden=true;
       return;
     }
-    document.body.dataset.liveConnected='false';
     $('export-session').lastElementChild.textContent='Guardar archivo .vrtx original';
     $('delete-session').lastElementChild.textContent='Cerrar sesión de esta pestaña';
     if(!session){$('title').textContent='Abre una sesión';$('view-eyebrow').textContent='VISOR PORTABLE';$('session-info').textContent='Biblioteca privada de este dispositivo';}

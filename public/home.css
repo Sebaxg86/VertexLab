@@ -22,13 +22,18 @@ body.home-view{height:100dvh;min-height:0;overflow:hidden;background:#08080a}.ho
 .home-menu-divider{border:0;border-top:1px solid #352731;margin:6px 4px}
 .home-account-wrap{display:none}
 body.home-view .home-account-wrap{display:flex;align-items:center;position:absolute;right:24px;top:50%;transform:translateY(-50%);z-index:20}
-.home-account-trigger{display:inline-flex;align-items:center;gap:9px;padding:9px 16px;border:1px solid #6b2c3c;border-radius:3px;background:linear-gradient(145deg,#25121a,#140e13);color:#f4e8ee;font-family:RaceNumbers,'Segoe UI',sans-serif;font-size:13px;letter-spacing:.9px;cursor:pointer;transition:border-color .2s,background .2s,box-shadow .2s,transform .15s}
-.home-account-trigger:hover{border-color:#ff4b62;background:linear-gradient(145deg,#331622,#1a1017);box-shadow:0 0 18px #ff40592a;transform:translateY(-1px)}
-.home-account-trigger[data-signed-in="true"]{border-color:#4b3743;background:#161117}
+.home-account-trigger{position:relative;overflow:hidden;isolation:isolate;display:inline-flex;align-items:center;gap:10px;padding:10px 18px;border:1px solid #ff455d;border-radius:0;clip-path:polygon(9px 0,100% 0,100% calc(100% - 9px),calc(100% - 9px) 100%,0 100%,0 9px);background:linear-gradient(125deg,#1d1017 0%,#120b10 60%,#26111a 100%);color:#fff;font-family:RaceDisplay,'Arial Narrow',sans-serif;font-style:italic;font-size:17px;letter-spacing:1.2px;cursor:pointer;box-shadow:0 0 18px #ff335224,inset 0 1px 0 #ff455d44;transition:border-color .2s,background .2s,box-shadow .2s,transform .18s cubic-bezier(.22,1,.36,1),filter .2s}
+.home-account-trigger::before{content:'';position:absolute;inset:-40% -60%;background:linear-gradient(110deg,transparent 38%,#ff455d34 50%,transparent 62%);transform:translateX(-115%);transition:transform .5s cubic-bezier(.22,1,.36,1);pointer-events:none}
+.home-account-trigger:hover{border-color:#ff667a;filter:brightness(1.12);box-shadow:0 6px 24px #ff2b4a3d,inset 0 1px 0 #ff8a9966;transform:translateY(-2px)}
+.home-account-trigger:hover::before{transform:translateX(115%)}
+.home-account-trigger:active{transform:translateY(0) scale(.98)}
+.home-account-trigger[data-signed-in="true"]{border-color:#5a3748;font-family:RaceNumbers,'Segoe UI',sans-serif;font-style:normal;font-size:14px;letter-spacing:.9px}
 .home-account-trigger[data-signed-in="true"]:hover{border-color:#ff4b62}
+.home-account-trigger[data-signed-in="true"][data-drive="true"]{border-color:#3a6a53;box-shadow:0 0 18px #68dfa01c,inset 0 1px 0 #68dfa038}
+.home-account-trigger[data-signed-in="true"][data-drive="true"]:hover{border-color:#68dfa0;box-shadow:0 6px 24px #68dfa02e,inset 0 1px 0 #91f1bb66}
 .home-account-dot{width:8px;height:8px;border-radius:50%;background:#ff4b62;flex-shrink:0}
 .home-account-trigger[data-signed-in="true"] .home-account-dot{background:#7d6d78}
-.home-account-trigger[data-signed-in="true"][data-drive="true"] .home-account-dot{background:#68dfa0;box-shadow:0 0 8px #68dfa088}
+.home-account-trigger[data-signed-in="true"][data-drive="true"] .home-account-dot{background:#68dfa0;box-shadow:0 0 8px #68dfa0aa}
 .cloud-auth-dialog{max-width:440px;width:calc(100% - 32px);padding:30px 28px;border:1px solid #6d3a48;border-top:2px solid #ff4b62;border-radius:6px;background:linear-gradient(150deg,#1a1218,#100d12);color:#f3eaf0;box-shadow:0 28px 110px #000d}
 .cloud-auth-dialog::backdrop{background:#050408b8;backdrop-filter:blur(12px)}
 .cloud-auth-dialog h2{font-family:RaceDisplay,'Arial Narrow',sans-serif;font-style:italic;font-size:30px;letter-spacing:1px;margin:10px 0 8px}
