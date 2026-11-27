@@ -30,19 +30,25 @@
   }
   function cloudResponse(request,video,fetchRange){
     if(!video||!Number.isSafeInteger(video.size)||video.size<1||typeof fetchRange!=='function')return new Response('Invalid cloud video',{status:422});
-    const part=range(request.headers.get('Range'),video.size);
+    const rawHeader=request.headers.get('Range');
+    const part=range(rawHeader,video.size);
     const headers={'Accept-Ranges':'bytes','Content-Type':video.type||'video/mp4','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
     if(!part)return new Response(null,{status:416,headers:{...headers,'Content-Range':`bytes */${video.size}`}});
-    const length=part.end-part.start+1;headers['Content-Length']=String(length);
-    if(part.status===206)headers['Content-Range']=`bytes ${part.start}-${part.end}/${video.size}`;
+    // Cap open-ended Range requests (bytes=start-) to 4 MiB so the browser fetches fresh 206 windows
+    // cleanly without holding one Service Worker stream open across gigabytes.
+    const maxWindow=4*1024*1024;
+    const openEnded=!!rawHeader&&/^bytes=\d+-$/.test(rawHeader.trim());
+    const effectiveEnd=openEnded?Math.min(part.end,part.start+maxWindow-1):part.end;
+    const length=effectiveEnd-part.start+1;headers['Content-Length']=String(length);
+    if(part.status===206)headers['Content-Range']=`bytes ${part.start}-${effectiveEnd}/${video.size}`;
     let cursor=part.start,cancelled=false;
-    const chunkSize=2*1024*1024;
+    const chunkSize=1024*1024;
     const stream=request.method==='HEAD'?null:new ReadableStream({
       async pull(controller){
         if(cancelled)return;
-        if(cursor>part.end){controller.close();return;}
+        if(cursor>effectiveEnd){controller.close();return;}
         try{
-          const end=Math.min(part.end,cursor+chunkSize-1);
+          const end=Math.min(effectiveEnd,cursor+chunkSize-1);
           const buffer=await fetchRange(cursor,end);
           if(cancelled)return;
           const bytes=buffer instanceof Uint8Array?buffer:new Uint8Array(buffer);

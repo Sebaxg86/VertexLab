@@ -75,6 +75,13 @@ test('cloudResponse streams HTTP 206 byte ranges on demand without reading the f
 
  const bad=Media.cloudResponse(new Request('https://example.test/__vertex_media/'+ID_C+'/video',{headers:{Range:`bytes=${total}-${total+10}`}}),{size:total,type:'video/mp4'},fetchRange);
  assert.equal(bad.status,416);
+
+ // Open-ended range on a large video caps to a 4 MiB 206 window
+ const large=100*1024*1024;
+ const windowed=Media.cloudResponse(new Request('https://example.test/__vertex_media/'+ID_C+'/video',{headers:{Range:'bytes=0-'}}),{size:large,type:'video/mp4'},fetchRange);
+ assert.equal(windowed.status,206);
+ assert.equal(windowed.headers.get('Content-Range'),`bytes 0-${4*1024*1024-1}/${large}`);
+ assert.equal(windowed.headers.get('Content-Length'),String(4*1024*1024));
 });
 
 test('cloud-client initializes cleanly with default public Supabase and Google OAuth config',()=>{

@@ -268,17 +268,28 @@
  }
 
  async function fetchDriveBytes(fileId,range=null){
-  const token=await getDriveAccessToken();
   const url=VertexCloudModel.driveMediaUrl(fileId);
-  const headers={Authorization:'Bearer '+token};
-  if(range)headers.Range=`bytes=${range.start}-${range.end}`;
-  let response=await fetch(url,{headers});
-  if(response.status===401){
-   const refreshed=await getDriveAccessToken(true);
-   response=await fetch(url,{headers:{...headers,Authorization:'Bearer '+refreshed}});
+  let lastError=null;
+  for(let attempt=0;attempt<3;attempt++){
+   try{
+    const token=await getDriveAccessToken(attempt>0&&lastError?.status===401);
+    const headers={Authorization:'Bearer '+token};
+    if(range)headers.Range=`bytes=${range.start}-${range.end}`;
+    let response=await fetch(url,{headers});
+    if(response.status===401){
+     const refreshed=await getDriveAccessToken(true);
+     response=await fetch(url,{headers:{...headers,Authorization:'Bearer '+refreshed}});
+    }
+    if(response.ok||response.status===206)return await response.arrayBuffer();
+    lastError=Object.assign(Error('No se pudo leer el archivo desde Google Drive (HTTP '+response.status+')'),{status:response.status});
+    if(![429,500,502,503,504].includes(response.status))throw lastError;
+   }catch(error){
+    lastError=error;
+    if(attempt===2)throw error;
+   }
+   await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)*(attempt+1)));
   }
-  if(!response.ok&&response.status!==206)throw Error('No se pudo leer el archivo desde Google Drive (HTTP '+response.status+')');
-  return response.arrayBuffer();
+  throw lastError||Error('No se pudo leer el archivo desde Google Drive');
  }
 
  function storeRangeCache(key,buffer){
