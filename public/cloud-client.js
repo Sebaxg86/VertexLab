@@ -208,17 +208,31 @@
   }
  }
 
+ function savePendingAuth(key,value){
+  try{localStorage.setItem(key,JSON.stringify({value,at:Date.now()}));}catch{}
+ }
+ function takePendingAuth(key){
+  try{
+   const raw=localStorage.getItem(key);
+   localStorage.removeItem(key);
+   if(!raw)return null;
+   const parsed=JSON.parse(raw);
+   if(!parsed?.at||Date.now()-parsed.at>10*60*1000)return null;
+   return parsed.value;
+  }catch{return null;}
+ }
+
  async function signIn(desiredUsername=''){
   if(!configured())throw Error('Configura Supabase antes de iniciar sesión');
   const clean=normalizeUsername(desiredUsername);
   if(clean){
    if(!USERNAME_RE.test(clean))throw Error('Usa entre 3 y 24 caracteres (letras, números, punto, guion o guion bajo).');
-   try{sessionStorage.setItem(PENDING_USERNAME_KEY,clean);}catch{}
+   savePendingAuth(PENDING_USERNAME_KEY,clean);
   }else{
-   try{sessionStorage.removeItem(PENDING_USERNAME_KEY);}catch{}
+   try{localStorage.removeItem(PENDING_USERNAME_KEY);}catch{}
   }
   const pkce=await createPkce();
-  sessionStorage.setItem(PKCE_KEY,JSON.stringify({kind:'supabase',verifier:pkce.verifier}));
+  savePendingAuth(PKCE_KEY,{kind:'supabase',verifier:pkce.verifier});
   const params=new URLSearchParams({
    provider:'google',
    redirect_to:redirectUri(),
@@ -244,7 +258,7 @@
   if(!config.googleClientId)throw Error('Falta configurar el Client ID de Google OAuth');
   const pkce=await createPkce();
   const nonce='vl-drive:'+base64url(crypto.getRandomValues(new Uint8Array(12)));
-  sessionStorage.setItem(PKCE_KEY,JSON.stringify({kind:'drive',verifier:pkce.verifier,state:nonce}));
+  savePendingAuth(PKCE_KEY,{kind:'drive',verifier:pkce.verifier,state:nonce});
   const params=new URLSearchParams({
    client_id:config.googleClientId,
    redirect_uri:redirectUri(),
@@ -492,9 +506,7 @@
   const code=params.get('code');
   const cbState=params.get('state')||'';
   if(!code)return false;
-  let pending=null;
-  try{pending=JSON.parse(sessionStorage.getItem(PKCE_KEY)||'null');}catch{}
-  sessionStorage.removeItem(PKCE_KEY);
+  const pending=takePendingAuth(PKCE_KEY);
   history.replaceState(null,'',location.pathname+(location.hash||''));
 
   if(cbState.startsWith('vl-drive:')){
@@ -526,8 +538,7 @@
     user:{id:data.user.id,email:data.user.email,displayName:data.user.user_metadata?.full_name||data.user.user_metadata?.name||data.user.email}
    });
    await refreshProfile();
-   let pendingUser='';
-   try{pendingUser=sessionStorage.getItem(PENDING_USERNAME_KEY)||'';sessionStorage.removeItem(PENDING_USERNAME_KEY);}catch{}
+   const pendingUser=takePendingAuth(PENDING_USERNAME_KEY)||'';
    if(pendingUser&&!profile?.username){
     try{await saveUsername(pendingUser);}catch(e){const msg=document.getElementById('message');if(msg)msg.textContent=e.message;}
    }
@@ -624,6 +635,7 @@
   refresh:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.5-4.5M4 4v4h4M4 13a8 8 0 0 0 14.5 4.5M20 20v-4h-4"/></svg>',
   unlink:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 6.6A6.5 6.5 0 0 0 5.7 10 4 4 0 0 0 6 18h11m3.7-2.3A5 5 0 0 0 18 8a6.5 6.5 0 0 0-8.4-3.7M3 3l18 18"/></svg>',
   logout:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-2M9 12h11m-3-3 3 3-3 3"/></svg>',
+  install:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 8v6m-2.5-2.5L12 14l2.5-2.5M10 18h4"/></svg>',
   sliders:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="10" cy="18" r="2" fill="currentColor"/></svg>'
  };
 
@@ -775,6 +787,13 @@
   const addAdvanced=()=>{
    if(!root.VertexBrowser?.enabled)return;
    addDivider();
+   const installKind=root.VertexBrowser.canInstall?.();
+   if(installKind){
+    addButton('Instalar VertexLab como app',installKind==='ios'?'Agregar a pantalla de inicio en iOS':'Acceso directo a pantalla completa',()=>{
+     if(typeof closeHomeMenus==='function')closeHomeMenus();
+     root.VertexBrowser.installApp?.();
+    },{icon:MenuIcons.install});
+   }
    addButton('Ajustes avanzados','Almacenamiento y reproducción local',()=>{
     if(typeof closeHomeMenus==='function')closeHomeMenus();
     root.VertexBrowser.openStorageSettings?.();

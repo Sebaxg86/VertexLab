@@ -18,7 +18,7 @@ for name in ('cars.json', 'car-brands.json', 'THIRD_PARTY_NOTICES.md'):
     shutil.copy2(ROOT / name, OUT / name)
 html = (ROOT / 'public/index.html').read_text(encoding='utf-8')
 html = html.replace('<body class="home-view">', '<body class="home-view browser-viewer" data-mode="viewer" data-session-open="false">')
-html = html.replace('</head>', '<meta name="theme-color" content="#141014"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="VertexLab"></head>')
+html = html.replace('</head>', '<meta name="theme-color" content="#141014"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-192.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="VertexLab"></head>')
 html = html.replace('<script src="timeline.js">', '<script src="browser-core.js"></script><script src="browser-library.js"></script><script src="browser-runtime.js"></script><script src="timeline.js">')
 versioned_assets = []
 def version_asset(match):
@@ -34,10 +34,10 @@ html = re.sub(r'(src|href)="([^"/?]+\.(?:js|css))"', version_asset, html)
 (OUT / '.nojekyll').write_text('')
 
 
-(OUT / 'manifest.webmanifest').write_text(json.dumps(dict(name='VertexLab', short_name='VertexLab',
-    description='Video y telemetría sincronizados desde tus archivos .vrtx', start_url='./', scope='./',
-    display='standalone', background_color='#100d13', theme_color='#141014', lang='es',
-    icons=[dict(src=f'icon-{size}.png',sizes=f'{size}x{size}',type='image/png',purpose='any') for size in (192,512)]),ensure_ascii=False),encoding='utf-8')
+(OUT / 'manifest.webmanifest').write_text(json.dumps(dict(id='./', name='VertexLab', short_name='VertexLab',
+    description='Telemetría y video sincronizados de Forza en cualquier pantalla', start_url='./', scope='./',
+    display='standalone', background_color='#08080a', theme_color='#141014', lang='es',
+    icons=[dict(src=f'icon-{size}.png',sizes=f'{size}x{size}',type='image/png',purpose=purpose) for size in (192,512) for purpose in ('any','maskable')]),ensure_ascii=False),encoding='utf-8')
 files = sorted(p.name for p in OUT.iterdir() if p.is_file() and p.name != 'sw.js' and not p.name.startswith('.'))
 revision = hashlib.sha256(b''.join((OUT / name).read_bytes() for name in files)).hexdigest()[:16]
 worker = """importScripts('media-service-worker.js');

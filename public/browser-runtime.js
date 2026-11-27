@@ -2,7 +2,36 @@
 (function(root){
   const enabled=document.body.dataset.mode==='viewer',sessions=new Map();let catalog=null;let initialized;let openStorageSettings=()=>{};
   const DOWNLOAD_URL='https://github.com/sebaxg86/VertexLab/releases/latest';
-  let liveDemoActive=false,demoData=null,demoTimer=null,demoStart=0;
+  let liveDemoActive=false,demoData=null,demoTimer=null,demoStart=0,deferredInstallPrompt=null;
+  function isStandalone(){return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;}
+  function canInstall(){
+    if(!enabled||isStandalone())return null;
+    if(deferredInstallPrompt)return 'prompt';
+    if(mobileApple)return 'ios';
+    return null;
+  }
+  async function installApp(){
+    if(deferredInstallPrompt){
+      const promptEvent=deferredInstallPrompt;
+      deferredInstallPrompt=null;
+      await promptEvent.prompt();
+      await promptEvent.userChoice.catch(()=>{});
+      globalThis.VertexCloud?.renderMenu?.();
+      return;
+    }
+    if(mobileApple&&!isStandalone()){
+      let dialog=$('pwa-ios-dialog');
+      if(!dialog){
+        dialog=document.createElement('dialog');
+        dialog.id='pwa-ios-dialog';
+        dialog.className='cloud-auth-dialog';
+        dialog.innerHTML='<span class="eyebrow">INSTALAR EN IPHONE / IPAD</span><h2>Agregar a pantalla de inicio</h2><p class="auth-subtitle">Para abrir VertexLab a pantalla completa como app nativa en iOS:</p><ol class="pwa-ios-steps"><li>Pulsa el botón <b>Compartir</b> (icono de cuadro con flecha hacia arriba) en la barra de Safari.</li><li>Desliza y elige <b>Agregar a pantalla de inicio</b>.</li><li>Pulsa <b>Agregar</b> arriba a la derecha.</li></ol><div class="cloud-auth-footer"><button type="button" id="pwa-ios-close" class="cloud-auth-cancel">Entendido</button></div>';
+        document.body.append(dialog);
+        dialog.querySelector('#pwa-ios-close').onclick=()=>dialog.close();
+      }
+      dialog.showModal();
+    }
+  }
   const mobileApple=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   const saved=new Map();
   async function initialize(){return initialized??=(async()=>{for(const record of await VertexLibrary.records())saved.set(record.id,record);})();}
@@ -227,6 +256,8 @@
     }
     $('delete-session').onclick=action(async()=>{if(!session)return;const id=session.meta.id;clearVideo();await request('delete/'+id,{});openHome();await list();$('message').textContent='Sesión cerrada. Tu archivo original no se ha eliminado.';});
     if('serviceWorker' in navigator&&isSecureContext)navigator.serviceWorker.register(new URL('sw.js',document.baseURI),{updateViaCache:'none'}).catch(()=>{});
+    window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();deferredInstallPrompt=event;globalThis.VertexCloud?.renderMenu?.();});
+    window.addEventListener('appinstalled',()=>{deferredInstallPrompt=null;globalThis.VertexCloud?.renderMenu?.();$('message').textContent='VertexLab instalada como app en este dispositivo.';});
     navigator.serviceWorker?.addEventListener('message',async event=>{
       if(event.data?.type!=='vertex-media-range'||!event.ports[0])return;
       const port=event.ports[0];
@@ -275,5 +306,5 @@
     if(old){release(old);sessions.delete(record.id);}
     saved.set(record.id,record);
   }
-  root.VertexBrowser={enabled,mobileApple,singleVideo:()=>!$('library-two-videos')?.checked,prepareVideo,open,request,videoURL,original,source,importFile,registerSavedRecord,openStorageSettings:()=>openStorageSettings(),openLiveDemo,stopLiveDemo,liveDemoActive:()=>liveDemoActive,decorate,setup};
+  root.VertexBrowser={enabled,mobileApple,singleVideo:()=>!$('library-two-videos')?.checked,prepareVideo,open,request,videoURL,original,source,importFile,registerSavedRecord,openStorageSettings:()=>openStorageSettings(),openLiveDemo,stopLiveDemo,liveDemoActive:()=>liveDemoActive,canInstall,installApp,decorate,setup};
 })(globalThis);
