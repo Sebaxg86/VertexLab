@@ -34,7 +34,11 @@ function setupPortableUI(){
   };
   $('export-session').onclick=action(async()=>{
     if(!session)return;
-    if(globalThis.VertexBrowser?.enabled){const file=VertexBrowser.original(session.meta.id),url=URL.createObjectURL(file),link=document.createElement('a');link.href=url;link.download=file.name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);setMenu(false);$('message').textContent='Se descarga el archivo original; conserva el estado de análisis con el que fue exportado.';return;}
+    if(globalThis.VertexBrowser?.enabled){
+      setPlaying(false);setMenu(false);
+      await exportLibrarySessions([session.meta],capturePortableView());
+      return;
+    }
     if(objectUrl)throw Error('El video abierto temporalmente debe asociarse a la sesión antes de exportar.');
     setPlaying(false);setMenu(false);const view=capturePortableView();
     const finish=startSessionLoading('Preparando archivo .vrtx','Empaquetando el video original y la telemetría');

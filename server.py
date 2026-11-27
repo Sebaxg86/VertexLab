@@ -1,4 +1,5 @@
 import argparse
+from copy import copy
 import json
 import mimetypes
 import os
@@ -60,6 +61,8 @@ class Runtime:
         self.cloud_sessions_cache = {}
         self.cloud_jobs = {}
         self.cloud_jobs_lock = threading.Lock()
+        self.cloud_account_lock = threading.RLock()
+        self.cloud_account_epoch = 0
 
     def status(self):
         with self.lock:
@@ -164,16 +167,24 @@ class Runtime:
         return rows
 
     def cloud_action(self, action, body):
+        with self.cloud_account_lock:
+            return self._cloud_action(action, body)
+
+    def _cloud_action(self, action, body):
         if action == 'session':
             token = str(body.get('accessToken') or '').strip()
             user = body.get('user') if isinstance(body.get('user'), dict) else None
             if not token or not user or not user.get('id'):
                 raise ValueError('Sesión de cuenta inválida')
+            if (self.cloud.user or {}).get('id') != user['id']:
+                self.cloud_account_epoch += 1
+                self.cloud_sessions_cache = {}
             self.cloud.set_session(token, user)
             self.cloud.fetch_profile()
             self.refresh_cloud_index()
             return self.cloud.status()
         if action == 'logout':
+            self.cloud_account_epoch += 1
             self.cloud.clear_session()
             self.cloud_sessions_cache = {}
             return self.cloud.status()
@@ -192,6 +203,7 @@ class Runtime:
                 return self.cloud.set_drive_folder(created['id'], created['name'])
             return self.cloud.set_drive_folder(body.get('folderId'), body.get('folderName', 'VertexLab'))
         if action == 'drive/disconnect':
+            self.cloud_account_epoch += 1
             result = self.cloud.disconnect_drive()
             self.cloud_sessions_cache = {}
             return result
@@ -206,13 +218,18 @@ class Runtime:
                     return dict(ok=True, started=True, job=dict(active))
                 job = dict(id=sid, action='upload', phase='Iniciando subida', percent=1, done=False, error=None)
                 self.cloud_jobs[sid] = job
+            cloud = copy(self.cloud)
+            data_dir = self.data
+            epoch = self.cloud_account_epoch
             def run_upload():
                 def on_progress(phase, percent):
                     with self.cloud_jobs_lock:
                         self.cloud_jobs[sid].update(phase=phase, percent=max(0, min(99, int(percent))))
                 try:
-                    row = self.cloud.sync_session(self.data, sid, car_name_fn=car_name, brands=BRANDS, progress=on_progress)
-                    self.cloud_sessions_cache[sid] = row
+                    row = cloud.sync_session(data_dir, sid, car_name_fn=car_name, brands=BRANDS, progress=on_progress)
+                    with self.cloud_account_lock:
+                        if epoch == self.cloud_account_epoch:
+                            self.cloud_sessions_cache[sid] = row
                     with self.cloud_jobs_lock:
                         self.cloud_jobs[sid].update(phase='Sincronizada con Google Drive', percent=100, done=True, error=None)
                 except Exception as exc:
@@ -234,12 +251,14 @@ class Runtime:
                     return dict(ok=True, started=True, job=dict(active))
                 job = dict(id=sid, action='download', phase='Iniciando descarga', percent=1, done=False, error=None)
                 self.cloud_jobs[sid] = job
+            cloud = copy(self.cloud)
+            data_dir = self.data
             def run_download():
                 def on_progress(phase, percent):
                     with self.cloud_jobs_lock:
                         self.cloud_jobs[sid].update(phase=phase, percent=max(0, min(99, int(percent))))
                 try:
-                    result = self.cloud.download_session(self.data, crow, progress=on_progress)
+                    result = cloud.download_session(data_dir, crow, progress=on_progress)
                     with self.cloud_jobs_lock:
                         self.cloud_jobs[sid].update(
                             phase='Ya está en este dispositivo' if result.get('alreadyLocal') else 'Descargada en este dispositivo',
@@ -255,7 +274,12 @@ class Runtime:
             if body.get('confirm') is not True:
                 raise ValueError('Confirma la eliminación en Google Drive')
             crow = self.cloud_sessions_cache.get(sid)
-            folder_id = crow.get('drive_folder_id') if crow else body.get('driveFolderId')
+            if not crow:
+                self.refresh_cloud_index()
+                crow = self.cloud_sessions_cache.get(sid)
+            if not crow:
+                raise ValueError('La sesión no se encontró en Google Drive')
+            folder_id = crow.get('drive_folder_id')
             result = self.cloud.delete_cloud_session(sid, folder_id)
             self.cloud_sessions_cache.pop(sid, None)
             return result

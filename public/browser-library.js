@@ -31,10 +31,10 @@
       await update(record);return record;
     }catch(error){await writable?.abort().catch(()=>{});if(handle&&record.filename){const directory=record.directory||await (await navigator.storage.getDirectory()).getDirectoryHandle('sessions');await directory.removeEntry(record.filename).catch(()=>{});}throw Error(error.name==='QuotaExceededError'?'No hay espacio suficiente. Puedes abrir el archivo temporalmente.':error.message);}
   }
-  async function saveComponents(item,{metaText,telemetryText,videoReader,videoSize,videoMime},progress){
+  async function saveComponents(item,{metaText,telemetryText,videoReader,videoSize,videoMime,videoName},progress){
     const destination=await setting('directory');
     const id=item.meta.id;
-    const record={id,kind:'components',meta:item.meta,preview:item.preview,name:(item.meta.name||id)+'.vrtx',size:Number(videoSize)||0,video:videoSize?{offset:0,size:Number(videoSize),type:videoMime||'video/mp4'}:null,videoMime:videoMime||'video/mp4'};
+    const record={id,kind:'components',meta:item.meta,preview:item.preview,name:(item.meta.name||id)+'.vrtx',size:Number(videoSize)||0,video:videoSize?{offset:0,size:Number(videoSize),type:videoMime||'video/mp4'}:null,videoMime:videoMime||'video/mp4',videoName};
     const estimate=await navigator.storage?.estimate?.();
     if(!destination&&estimate?.quota&&estimate.quota-estimate.usage<(record.size+telemetryText.length)*1.1)throw Error('No hay espacio suficiente en este dispositivo para descargar esta sesión.');
     let dir=null;

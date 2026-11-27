@@ -158,7 +158,14 @@
     item.url=new URL('__vertex_media/'+id+'/video',registration.scope).href;
   }
   function videoURL(id){const item=get(id);if(item.url)return item.url;if(!item.video||!item.file)return null;item.url=URL.createObjectURL(item.file.slice(item.video.offset,item.video.offset+item.video.size,item.video.type));return item.url;}
-  async function source(id){await initialize();if(sessions.has(id))return get(id).file;if(saved.has(id))return VertexLibrary.file(saved.get(id));throw Error('La sesión no está disponible en este dispositivo');}
+  async function source(id,view){
+    await initialize();
+    const record=saved.get(id);
+    if(record?.kind==='components')return prepareComponentExport(record,view);
+    if(sessions.has(id)&&get(id).file)return get(id).file;
+    if(record)return VertexLibrary.file(record);
+    throw Error('Descarga la sesión en este dispositivo antes de exportarla');
+  }
   async function importFile(file,progress){const result=await open(file,progress,{forceSave:true});release(sessions.get(result.id));sessions.delete(result.id);return result;}
   function original(id){return get(id).file;}
   function stopLiveDemo(){

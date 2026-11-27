@@ -88,7 +88,7 @@ class FakeCloudTransport:
             if 'Range' in headers:
                 start_s, end_s = headers['Range'].replace('bytes=', '').split('-')
                 start, end = int(start_s), int(end_s)
-                return 206, {}, payload[start:end + 1]
+                return 206, {'Content-Range': f'bytes {start}-{end}/{len(payload)}'}, payload[start:end + 1]
             return 200, {}, payload
 
         if '/drive/v3/files/' in url and method == 'DELETE':
@@ -199,6 +199,22 @@ class CloudSyncTests(unittest.TestCase):
             meta_path.write_text(json.dumps(meta), encoding='utf-8')
             with self.assertRaises(CloudError):
                 service.sync_session(src_dir, sid)
+
+
+class DownloadRangeTests(unittest.TestCase):
+    def test_invalid_range_leaves_existing_file_untouched(self):
+        from cloud_sync import DriveClient
+        for response in [(200, {}, b'abcdefgh'),
+                         (206, {'Content-Range': 'bytes 0-3/8'}, b'ab'),
+                         (206, {'Content-Range': 'bytes 4-7/8'}, b'abcd')]:
+            with tempfile.TemporaryDirectory() as directory:
+                target = Path(directory) / 'video.mp4'
+                target.write_bytes(b'original')
+                client = DriveClient('test-token', http=lambda *a, **kw: response)
+                with self.assertRaises(CloudError):
+                    client.download_file('abcdefghijk', target, total_size=8, chunk_size=4)
+                self.assertEqual(target.read_bytes(), b'original')
+                self.assertEqual(list(Path(directory).iterdir()), [target])
 
 
 if __name__ == '__main__':

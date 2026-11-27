@@ -241,8 +241,8 @@ function setupHome(){
  $('home-delete-confirm').onclick=async()=>{
   if(!homeDeleteTarget)return;const {item:target,scope}=homeDeleteTarget;const state=VertexHomeModel.availability(target);$('home-delete-confirm').disabled=true;$('home-delete-error').hidden=true;
   try{
-   if(scope!=='delete-cloud'&&state.local)await api('delete/'+target.id,{confirm:true,removeLocal:true});
    if((scope==='delete-cloud'||scope==='delete-all')&&state.cloud)await VertexCloud.deleteCloudSession(target.id,target.cloud?.driveFolderId);
+   if(scope!=='delete-cloud'&&state.local)await api('delete/'+target.id,{confirm:true,removeLocal:true});
    $('home-delete-dialog').close();homeDeleteTarget=null;
    if(scope==='delete-cloud'&&state.local){await HomeLibrary.refresh();$('message').textContent='Respaldo eliminado de Google Drive. Tu copia local se conserva.';}
    else if(scope==='delete-local'&&state.cloud){await HomeLibrary.refresh();$('message').textContent='Copia local eliminada. Tu respaldo en Google Drive se conserva.';}

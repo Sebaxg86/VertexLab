@@ -95,3 +95,23 @@ test('a truly missing ZIP directory stops after the single fallback with a recov
  });
  assert.equal(retries,1);assert.match(message,/Vuelve a importar/);assert.doesNotMatch(message,/End of central directory/);
 });
+
+test('a downloaded component session exports and reopens as a valid VRTX',async()=>{
+ const {writeComponentPackage}=require('../public/library-transfer.js');
+ const video=new Blob([new Uint8Array([1,2,3,4])],{type:'video/webm'});
+ const parts={
+  metaText:JSON.stringify({name:'Cloud session',created:10,ended:20,version:2}),
+  telemetryText:JSON.stringify({t:0,timestamp:1,lap:0,x:1,z:2,speed:10})+'\n',
+  videoFile:video
+ };
+ for(const videoFile of [video,null]){
+  const file=await writeComponentPackage({...parts,videoFile},{featured:true,videoPath:'internal'}, {t:.25},zip,hash);
+  const result=await read(file,{zip,hash,core});
+  assert.equal(result.meta.videoPath,undefined);
+  assert.equal(result.meta.featured,true);
+  assert.equal(result.view.t,.25);
+  assert.equal(result.laps[0].rows[0].speed,10);
+  if(videoFile)assert.deepEqual(await file.slice(result.video.offset,result.video.offset+result.video.size).arrayBuffer(),await video.arrayBuffer());
+  else assert.equal(result.video,null);
+ }
+});

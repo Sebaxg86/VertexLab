@@ -37,7 +37,7 @@ function transferReader(z,file){
  }
  return new LocalReader();
 }
-function downloadLibraryFile(file,name){const url=URL.createObjectURL(file),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),600000);}
+function downloadLibraryFile(file,name){const url=URL.createObjectURL(file),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>{URL.revokeObjectURL(url);void releaseExport(file);},600000);}
 function downloadLibraryURL(result){const link=document.createElement('a');link.href=result.url;link.download=result.name;document.body.append(link);link.click();link.remove();}
 async function transferTemp(name){
  if(!navigator.storage?.getDirectory)return null;
@@ -45,7 +45,74 @@ async function transferTemp(name){
  let writable;const cleanup=async()=>{await writable?.abort().catch(()=>{});await root.removeEntry(directory.name,{recursive:true}).catch(()=>{});};
  try{const handle=await directory.getFileHandle(name,{create:true});if(!handle.createWritable){await cleanup();return null;}writable=await handle.createWritable();return {handle,stream:writable,cleanup};}catch(error){await cleanup();throw error;}
 }
-async function exportLibrarySessions(items){
+let transferHashTask;
+async function transferHash() {
+ if(globalThis.hashwasm)return globalThis.hashwasm;
+ if(!transferHashTask)transferHashTask=new Promise((resolve,reject)=>{
+  const script=document.createElement('script');
+  script.src='vendor-sha256-4.13.0.js';
+  script.onload=()=>resolve(globalThis.hashwasm);
+  script.onerror=()=>{transferHashTask=null;script.remove();reject(Error('No se pudo cargar la verificación de archivos'));};
+  document.head.append(script);
+ });
+ return transferHashTask;
+}
+
+async function writeComponentPackage(parts, overrides, view, zip, hash, destination) {
+ const original=JSON.parse(parts.metaText);
+ const metadataKeys=['id','name','created','ended','duration','offset','version',
+  'carOrdinal','carClass','carPI','automatic','events','syncSegments','syncState','featured'];
+ const meta={};
+ for(const key of metadataKeys){
+  const value=overrides?.[key]??original[key];
+  if(value!==undefined)meta[key]=value;
+ }
+ meta.version??=1;
+ if(typeof view?.offset==='number')meta.offset=view.offset;
+ const videoTypes={'video/mp4':'mp4','video/x-matroska':'mkv','video/quicktime':'mov',
+  'video/webm':'webm','video/x-flv':'flv','video/mp2t':'ts','video/x-m4v':'m4v'};
+ const savedExtension=/^video\.(mp4|mkv|mov|webm|flv|ts|m4v)$/i.exec(parts.videoName||'');
+ const extension=savedExtension?.[1].toLowerCase()||videoTypes[parts.videoFile?.type]||'mp4';
+ const video=parts.videoFile?'video.'+extension:null;
+ const members={
+  'session.json':new Blob([JSON.stringify(meta)]),
+  'view.json':new Blob([JSON.stringify(view||{})]),
+  'telemetry.jsonl':new Blob([parts.telemetryText])
+ };
+ if(video)members[video]=parts.videoFile;
+ const writer=new zip.ZipWriter(destination||new zip.BlobWriter(),{zip64:true});
+ const files={};
+ for(const [name,blob] of Object.entries(members)){
+  const digest=await hash.createSHA256();
+  const source=blob.stream().pipeThrough(new TransformStream({transform(chunk,controller){
+   digest.update(chunk);
+   controller.enqueue(chunk);
+  }}));
+  await writer.add(name,source,{level:name===video?0:6});
+  files[name]={size:blob.size,sha256:digest.digest('hex')};
+ }
+ await writer.add('manifest.json',new zip.TextReader(JSON.stringify({format:'VertexLab session',version:1,files,video})));
+ return writer.close();
+}
+
+async function prepareComponentExport(record, view) {
+ const [parts,z,hash]=await Promise.all([VertexLibrary.loadComponents(record),libraryZip(),transferHash()]);
+ const name=(record.meta.name||record.id)+'.vrtx';
+ const temporary=await transferTemp('session.vrtx');
+ try{
+  const blob=await writeComponentPackage({...parts,videoName:record.videoName||record.meta?.cloud?.videoName},record.meta,view,z,hash,temporary?.stream);
+  const file=new File([temporary?await temporary.handle.getFile():blob],name);
+  if(temporary)exportCleanup.set(file,temporary.cleanup);
+  return file;
+ }catch(error){await temporary?.cleanup();throw error;}
+}
+const exportCleanup=new WeakMap();
+async function releaseExport(file) {
+ const cleanup=exportCleanup.get(file);
+ if(cleanup){exportCleanup.delete(file);await cleanup();}
+}
+
+async function exportLibrarySessions(items, view){
  if(!items.length)return;
  if(items.length>10000)throw Error('Exporta hasta 10000 sesiones por archivo ZIP');
  closeHomeMenus();
@@ -55,7 +122,7 @@ async function exportLibrarySessions(items){
  let temporary,stream;
  try{
   if(!browser){const result=await api('portable/export-batch',{ids:items.map(item=>item.id),date:VertexBatchModel.day()});downloadLibraryURL(result);}
-  else if(items.length===1){const file=await VertexBrowser.source(items[0].id);downloadLibraryFile(file,file.name);}
+  else if(items.length===1){const file=await VertexBrowser.source(items[0].id,view);downloadLibraryFile(file,file.name);}
   else{
    const z=await libraryZip();temporary=await transferTemp(name);
    stream=temporary?.stream;
@@ -63,8 +130,10 @@ async function exportLibrarySessions(items){
    let totalBytes=0;
    for(let index=0;index<items.length;index++){
     const file=await VertexBrowser.source(items[index].id),safe=file.name.replace(/[\\/<>:"|?*\x00-\x1f]/g,'_');
-    totalBytes+=file.size;if(totalBytes>256*1024**3)throw Error('El ZIP supera el límite de 256 GiB');
-    await writer.add(String(index+1).padStart(3,'0')+'-'+safe,transferReader(z,file),{level:0,onprogress:(done,total)=>progress('Sesión '+(index+1)+' de '+items.length+' · '+Math.round(done/Math.max(1,total)*100)+'%')});
+    try{
+     totalBytes+=file.size;if(totalBytes>256*1024**3)throw Error('El ZIP supera el límite de 256 GiB');
+     await writer.add(String(index+1).padStart(3,'0')+'-'+safe,transferReader(z,file),{level:0,onprogress:(done,total)=>progress('Sesión '+(index+1)+' de '+items.length+' · '+Math.round(done/Math.max(1,total)*100)+'%')});
+    }finally{await releaseExport(file);}
    }
    const blob=await writer.close();stream=null;
    downloadLibraryFile(temporary?await temporary.handle.getFile():blob,name);if(temporary){const saved=temporary;setTimeout(()=>saved.cleanup(),600000);temporary=null;}
@@ -101,3 +170,5 @@ async function importLibraryBundle(file){
  }
  finally{await reader?.close();await finish();}
 }
+
+if(typeof module!=="undefined")module.exports.writeComponentPackage=writeComponentPackage;

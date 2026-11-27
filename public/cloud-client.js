@@ -465,6 +465,7 @@
       telemetryText,
       videoSize:item.cloud.videoSize||0,
       videoMime:item.cloud.videoMime||'video/mp4',
+      videoName:item.cloud.videoName,
       videoReader:item.cloud.driveVideoFileId?(start,end)=>fetchDriveBytes(item.cloud.driveVideoFileId,{start,end}):null
      },
      p=>setProgress(p.phase,p.percent)

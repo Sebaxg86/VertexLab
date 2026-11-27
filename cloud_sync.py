@@ -207,25 +207,29 @@ class DriveClient:
                 with temp_path.open('wb') as out:
                     while offset < total_size:
                         end = min(total_size - 1, offset + chunk_size - 1)
-                        status, _, body = self.http(
+                        status, headers, body = self.http(
                             f'{DRIVE_API}/files/{urllib.parse.quote(file_id)}?alt=media',
                             method='GET',
                             headers=self._headers({'Range': f'bytes={offset}-{end}'}),
                             timeout=180,
                         )
-                        if status not in (200, 206):
+                        if status != 206:
                             _json_or_error(status, body, 'Error al descargar fragmento de video desde Google Drive')
+                            raise CloudError('Google Drive no devolvió el rango solicitado')
+                        content_range = next((v for k, v in headers.items() if k.lower() == 'content-range'), None)
+                        if content_range != f'bytes {offset}-{end}/{total_size}' or len(body) != end-offset+1:
+                            raise CloudError('Google Drive devolvió un fragmento de video incompleto o incorrecto')
                         out.write(body)
                         offset += len(body)
                         if progress:
                             progress(offset, total_size)
-                        if not body:
-                            break
             else:
                 data = self.download_bytes(file_id)
                 temp_path.write_bytes(data)
                 if progress:
                     progress(len(data), len(data))
+            if total_size is not None and temp_path.stat().st_size != total_size:
+                raise CloudError('El tamaño del video descargado no coincide con la sesión')
             os.replace(temp_path, destination)
             return destination
         except Exception:

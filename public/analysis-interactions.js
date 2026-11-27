@@ -143,8 +143,8 @@ function setupAnalysisInteractions(){
     return;
    }
    clearVideo();
-   if(isLocal)await api('delete/'+id,{confirm:true,removeLocal:true});
    if(scope==='delete-all'&&inCloud)await VertexCloud.deleteCloudSession(id,folderId);
+   if(isLocal)await api('delete/'+id,{confirm:true,removeLocal:true});
    $('delete-dialog').close();openHome();await list();
    $('message').textContent=scope==='delete-all'&&inCloud?'Sesión eliminada de este dispositivo y de Google Drive.':inCloud?'Copia local eliminada. Tu respaldo en Google Drive se conserva.':'Sesión y video eliminados.';
   }
