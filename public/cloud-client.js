@@ -146,15 +146,24 @@
   return auth.accessToken;
  }
 
- async function pushSessionToLocal(){
+ async function pushSessionToLocal(required=false){
   if(root.VertexBrowser?.enabled||!signedIn())return;
+  const token=await ensureValidJwt();
+  if(!token){
+   if(required)throw Error('Tu sesión de VertexLab expiró. Vuelve a iniciar sesión desde el menú •••.');
+   return;
+  }
   try{
-   await fetch('/api/cloud/session',{
+   const res=await fetch('/api/cloud/session',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({accessToken:await ensureValidJwt(),user:auth.user})
+    body:JSON.stringify({accessToken:token,user:auth.user})
    });
-  }catch{}
+   if(required&&!res.ok){
+    const err=await res.json().catch(()=>({}));
+    throw Error(err.error||'No se pudo sincronizar tu sesión con el servicio local');
+   }
+  }catch(error){if(required)throw error;}
  }
 
  async function refreshProfile(){
@@ -365,7 +374,7 @@
 
  async function syncSession(id){
   if(!root.VertexBrowser?.enabled){
-   await pushSessionToLocal();
+   await pushSessionToLocal(true);
    const response=await fetch('/api/cloud/sync/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
    const data=await response.json();
    if(!response.ok)throw Error(data.error||'No se pudo sincronizar la sesión');
@@ -378,7 +387,7 @@
 
  async function downloadSession(id){
   if(!root.VertexBrowser?.enabled){
-   await pushSessionToLocal();
+   await pushSessionToLocal(true);
    const response=await fetch('/api/cloud/download/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
    const data=await response.json();
    if(!response.ok)throw Error(data.error||'No se pudo descargar la sesión');
@@ -427,7 +436,7 @@
 
  async function deleteCloudSession(id,driveFolderId){
   if(!root.VertexBrowser?.enabled){
-   await pushSessionToLocal();
+   await pushSessionToLocal(true);
    const response=await fetch('/api/cloud/delete/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:true,driveFolderId})});
    const data=await response.json();
    if(!response.ok)throw Error(data.error||'No se pudo eliminar de Google Drive');

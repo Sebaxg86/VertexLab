@@ -116,18 +116,18 @@ Deno.serve(async (request) => {
   if (!authHeader.startsWith('Bearer ')) {
     return jsonResponse({ error: 'Inicia sesión en VertexLab para continuar' }, 401, origin);
   }
-
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-    auth: { persistSession: false },
-  });
-  const { data: userData, error: userError } = await userClient.auth.getUser();
+  const jwt = authHeader.slice('Bearer '.length).trim();
+  const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
+  const { data: userData, error: userError } = await admin.auth.getUser(jwt);
   if (userError || !userData?.user) {
-    return jsonResponse({ error: 'Sesión de VertexLab inválida o expirada' }, 401, origin);
+    console.error('drive-auth getUser failed:', userError?.message);
+    return jsonResponse(
+      { error: 'Sesión de VertexLab inválida o expirada' + (userError?.message ? ': ' + userError.message : '') },
+      401,
+      origin,
+    );
   }
   const userId = userData.user.id;
-
-  const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
 
   async function readStoredToken() {
     const { data, error } = await admin.rpc('get_drive_token', { p_user_id: userId });
