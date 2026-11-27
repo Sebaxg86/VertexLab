@@ -207,7 +207,7 @@
     const headerCta=document.createElement('a');
     headerCta.id='viewer-download-cta';headerCta.className='viewer-download-cta';
     headerCta.href=DOWNLOAD_URL;headerCta.target='_blank';headerCta.rel='noopener noreferrer';headerCta.hidden=true;
-    headerCta.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 15v6h16v-6"/></svg><span>Descargar para Windows</span>';
+    headerCta.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 15v6h16v-6"/></svg><span class="viewer-cta-text"><small>VERTEXCONNECT · WINDOWS</small><b>DESCARGAR AHORA <i>↗</i></b></span>';
     document.querySelector('.app-header')?.append(headerCta);
     const homeZone=document.querySelector('.home-live-zone');
     if(homeZone){
