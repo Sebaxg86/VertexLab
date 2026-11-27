@@ -1,0 +1,483 @@
+/* VertexLab Cloud Client: Supabase Auth (account) + separate Google Drive sync & range streaming. */
+(function(root){
+ const CONFIG_KEY='vertexlab.cloud.config.v1';
+ const SESSION_KEY='vertexlab.cloud.session.v1';
+ const PKCE_KEY='vertexlab.cloud.pkce.v1';
+ const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.file';
+ const MAX_CACHE_BYTES=8*1024*1024;
+
+ let config=loadConfig();
+ let auth=loadSession();
+ let profile=null;
+ let driveToken=null;
+ let driveTokenExpiry=0;
+ let cloudSessions=[];
+ const rangeCache=new Map();
+ let rangeCacheBytes=0;
+ const listeners=new Set();
+
+ function loadConfig(){
+  if(root.VERTEXLAB_CLOUD_CONFIG&&root.VERTEXLAB_CLOUD_CONFIG.supabaseUrl)return {...root.VERTEXLAB_CLOUD_CONFIG};
+  try{const raw=localStorage.getItem(CONFIG_KEY);if(raw)return JSON.parse(raw);}catch{}
+  return {supabaseUrl:'',supabaseAnonKey:'',googleClientId:''};
+ }
+ function saveConfig(next){
+  config={
+   supabaseUrl:String(next.supabaseUrl||'').trim().replace(/\/+$/,''),
+   supabaseAnonKey:String(next.supabaseAnonKey||'').trim(),
+   googleClientId:String(next.googleClientId||'').trim()
+  };
+  try{localStorage.setItem(CONFIG_KEY,JSON.stringify(config));}catch{}
+  emit();
+ }
+ function loadSession(){
+  try{const raw=localStorage.getItem(SESSION_KEY);if(raw)return JSON.parse(raw);}catch{}
+  return null;
+ }
+ function saveSession(next){
+  auth=next||null;
+  try{if(auth)localStorage.setItem(SESSION_KEY,JSON.stringify(auth));else localStorage.removeItem(SESSION_KEY);}catch{}
+  emit();
+ }
+ function emit(){for(const fn of listeners)try{fn(state());}catch{}}
+ function onChange(fn){listeners.add(fn);return ()=>listeners.delete(fn);}
+
+ function configured(){return !!(config.supabaseUrl&&config.supabaseAnonKey);}
+ function signedIn(){return !!(auth?.accessToken&&auth?.user?.id);}
+ function driveConnected(){return !!(signedIn()&&profile?.drive_connected);}
+ function state(){
+  return {
+   configured:configured(),
+   signedIn:signedIn(),
+   user:auth?.user||null,
+   driveConnected:driveConnected(),
+   driveEmail:profile?.drive_email||null,
+   driveRootFolderId:profile?.drive_root_folder_id||null,
+   driveRootFolderName:profile?.drive_root_folder_name||null,
+   googleClientId:config.googleClientId||null
+  };
+ }
+ function actionState(){return {connected:driveConnected()};}
+ function cachedSessions(){return cloudSessions;}
+
+ function base64url(bytes){
+  let bin='';for(const b of bytes)bin+=String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+ }
+ async function createPkce(){
+  const raw=crypto.getRandomValues(new Uint8Array(32));
+  const verifier=base64url(raw);
+  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));
+  return {verifier,challenge:base64url(new Uint8Array(digest))};
+ }
+ function redirectUri(){return location.origin+location.pathname;}
+
+ async function sbFetch(path,options={}){
+  if(!configured())throw Error('Configura tu proyecto de Supabase para usar la nube');
+  const token=await ensureValidJwt();
+  const headers={'apikey':config.supabaseAnonKey,'Content-Type':'application/json',...(options.headers||{})};
+  if(token)headers.Authorization='Bearer '+token;
+  const response=await fetch(config.supabaseUrl+path,{...options,headers});
+  const text=await response.text();
+  let data={};try{data=text?JSON.parse(text):{};}catch{}
+  if(!response.ok)throw Error(data.error_description||data.error||data.message||('Error de nube HTTP '+response.status));
+  return data;
+ }
+
+ async function ensureValidJwt(){
+  if(!auth?.accessToken)return null;
+  if(auth.expiresAt&&Date.now()<auth.expiresAt-60000)return auth.accessToken;
+  if(!auth.refreshToken)return auth.accessToken;
+  const response=await fetch(config.supabaseUrl+'/auth/v1/token?grant_type=refresh_token',{
+   method:'POST',
+   headers:{'apikey':config.supabaseAnonKey,'Content-Type':'application/json'},
+   body:JSON.stringify({refresh_token:auth.refreshToken})
+  });
+  const data=await response.json();
+  if(!response.ok||!data.access_token){saveSession(null);profile=null;cloudSessions=[];return null;}
+  saveSession({
+   accessToken:data.access_token,
+   refreshToken:data.refresh_token||auth.refreshToken,
+   expiresAt:Date.now()+(Number(data.expires_in)||3600)*1000,
+   user:{id:data.user.id,email:data.user.email,displayName:data.user.user_metadata?.full_name||data.user.user_metadata?.name||data.user.email}
+  });
+  return auth.accessToken;
+ }
+
+ async function pushSessionToLocal(){
+  if(root.VertexBrowser?.enabled||!signedIn())return;
+  try{
+   await fetch('/api/cloud/session',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({accessToken:await ensureValidJwt(),user:auth.user})
+   });
+  }catch{}
+ }
+
+ async function refreshProfile(){
+  if(!signedIn()){profile=null;cloudSessions=[];emit();return null;}
+  const rows=await sbFetch('/rest/v1/profiles?id=eq.'+encodeURIComponent(auth.user.id)+'&select=*');
+  profile=Array.isArray(rows)?rows[0]||null:null;
+  emit();
+  return profile;
+ }
+
+ async function refreshCloudSessions(){
+  if(!signedIn()){cloudSessions=[];return [];}
+  const rows=await sbFetch('/rest/v1/cloud_sessions?select=*&order=created_epoch.desc,id.asc');
+  cloudSessions=Array.isArray(rows)?rows.map(VertexCloudModel.cloudRowToLibraryItem).filter(Boolean):[];
+  emit();
+  return cloudSessions;
+ }
+
+ async function signIn(){
+  if(!configured())throw Error('Configura Supabase antes de iniciar sesión');
+  const pkce=await createPkce();
+  sessionStorage.setItem(PKCE_KEY,JSON.stringify({kind:'supabase',verifier:pkce.verifier}));
+  const params=new URLSearchParams({
+   provider:'google',
+   redirect_to:redirectUri(),
+   code_challenge:pkce.challenge,
+   code_challenge_method:'s256'
+  });
+  location.assign(config.supabaseUrl+'/auth/v1/authorize?'+params.toString());
+ }
+
+ async function signOut(){
+  if(signedIn()&&configured()){
+   try{await sbFetch('/auth/v1/logout',{method:'POST'});}catch{}
+  }
+  if(!root.VertexBrowser?.enabled){
+   try{await fetch('/api/cloud/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});}catch{}
+  }
+  saveSession(null);profile=null;driveToken=null;driveTokenExpiry=0;cloudSessions=[];rangeCache.clear();rangeCacheBytes=0;
+  emit();
+ }
+
+ async function connectDrive(){
+  if(!signedIn())throw Error('Primero inicia sesión en tu cuenta de VertexLab');
+  if(!config.googleClientId)throw Error('Falta configurar el Client ID de Google OAuth');
+  const pkce=await createPkce();
+  const nonce='vl-drive:'+base64url(crypto.getRandomValues(new Uint8Array(12)));
+  sessionStorage.setItem(PKCE_KEY,JSON.stringify({kind:'drive',verifier:pkce.verifier,state:nonce}));
+  const params=new URLSearchParams({
+   client_id:config.googleClientId,
+   redirect_uri:redirectUri(),
+   response_type:'code',
+   scope:DRIVE_SCOPE,
+   access_type:'offline',
+   prompt:'consent',
+   include_granted_scopes:'true',
+   state:nonce,
+   code_challenge:pkce.challenge,
+   code_challenge_method:'S256'
+  });
+  location.assign('https://accounts.google.com/o/oauth2/v2/auth?'+params.toString());
+ }
+
+ async function disconnectDrive(){
+  await sbFetch('/functions/v1/drive-auth',{method:'POST',body:JSON.stringify({action:'disconnect'})});
+  driveToken=null;driveTokenExpiry=0;cloudSessions=[];
+  if(profile){profile.drive_connected=false;profile.drive_email=null;profile.drive_root_folder_id=null;profile.drive_root_folder_name=null;}
+  if(!root.VertexBrowser?.enabled){
+   try{await fetch('/api/cloud/drive/disconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});}catch{}
+  }
+  emit();
+ }
+
+ async function getDriveAccessToken(force=false){
+  if(!force&&driveToken&&Date.now()<driveTokenExpiry-60000)return driveToken;
+  const data=await sbFetch('/functions/v1/drive-auth',{method:'POST',body:JSON.stringify({action:'token'})});
+  driveToken=data.accessToken;
+  driveTokenExpiry=Date.now()+(Number(data.expiresIn)||3600)*1000;
+  profile={...(profile||{}),drive_connected:true,drive_email:data.driveEmail,drive_root_folder_id:data.driveRootFolderId,drive_root_folder_name:data.driveRootFolderName};
+  emit();
+  return driveToken;
+ }
+
+ async function listFolders(){
+  const token=await getDriveAccessToken();
+  const q="mimeType='application/vnd.google-apps.folder' and trashed=false";
+  const params=new URLSearchParams({q,fields:'files(id,name,modifiedTime)',orderBy:'name',pageSize:'100'});
+  const response=await fetch('https://www.googleapis.com/drive/v3/files?'+params,{headers:{Authorization:'Bearer '+token}});
+  const data=await response.json();
+  if(!response.ok)throw Error(data.error?.message||'No se pudieron listar carpetas de Google Drive');
+  return data.files||[];
+ }
+
+ async function createFolder(name){
+  const token=await getDriveAccessToken();
+  const response=await fetch('https://www.googleapis.com/drive/v3/files?fields=id,name',{
+   method:'POST',
+   headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+   body:JSON.stringify({name:String(name||'VertexLab').trim().slice(0,128),mimeType:'application/vnd.google-apps.folder'})
+  });
+  const data=await response.json();
+  if(!response.ok)throw Error(data.error?.message||'No se pudo crear la carpeta en Google Drive');
+  return selectFolder(data.id,data.name);
+ }
+
+ async function selectFolder(folderId,folderName){
+  const data=await sbFetch('/functions/v1/drive-auth',{method:'POST',body:JSON.stringify({action:'folder',folderId,folderName})});
+  profile={...(profile||{}),drive_root_folder_id:data.driveRootFolderId,drive_root_folder_name:data.driveRootFolderName};
+  emit();
+  return data;
+ }
+
+ async function fetchDriveBytes(fileId,range=null){
+  const token=await getDriveAccessToken();
+  const url=VertexCloudModel.driveMediaUrl(fileId);
+  const headers={Authorization:'Bearer '+token};
+  if(range)headers.Range=`bytes=${range.start}-${range.end}`;
+  let response=await fetch(url,{headers});
+  if(response.status===401){
+   const refreshed=await getDriveAccessToken(true);
+   response=await fetch(url,{headers:{...headers,Authorization:'Bearer '+refreshed}});
+  }
+  if(!response.ok&&response.status!==206)throw Error('No se pudo leer el archivo desde Google Drive (HTTP '+response.status+')');
+  return response.arrayBuffer();
+ }
+
+ async function fetchDriveRangeCached(fileId,start,end){
+  const key=`${fileId}:${start}-${end}`;
+  if(rangeCache.has(key)){
+   const cached=rangeCache.get(key);
+   rangeCache.delete(key);rangeCache.set(key,cached);
+   return cached.slice(0);
+  }
+  const buffer=await fetchDriveBytes(fileId,{start,end});
+  if(buffer.byteLength<=2*1024*1024){
+   while(rangeCacheBytes+buffer.byteLength>MAX_CACHE_BYTES&&rangeCache.size){
+    const oldest=rangeCache.keys().next().value;
+    rangeCacheBytes-=rangeCache.get(oldest).byteLength;
+    rangeCache.delete(oldest);
+   }
+   rangeCache.set(key,buffer);rangeCacheBytes+=buffer.byteLength;
+  }
+  return buffer.slice(0);
+ }
+
+ async function gunzipToText(buffer){
+  if(typeof DecompressionStream==='undefined')throw Error('Este navegador no soporta descompresión gzip de telemetría en la nube');
+  const stream=new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Response(stream).text();
+ }
+
+ async function openCloudSession(item,progress){
+  if(!item?.cloud?.driveMetaFileId||!item?.cloud?.driveTelemetryFileId)throw Error('Metadatos de nube incompletos para esta sesión');
+  progress?.({phase:'Cargando sesión desde Google Drive',percent:15});
+  const metaBuf=await fetchDriveBytes(item.cloud.driveMetaFileId);
+  const meta=VertexBrowserCore.metadata(JSON.parse(new TextDecoder().decode(metaBuf)));
+  meta.id=item.id;meta.featured=!!item.featured;meta.offset=Number(item.offset ?? meta.offset)||0;
+  meta.availability=item.availability||{local:false,cloud:true};
+  meta.cloud=item.cloud;
+  meta.videoPath=item.cloud.driveVideoFileId?'streaming desde Google Drive':null;
+
+  progress?.({phase:'Descargando telemetría',percent:55});
+  const telBuf=await fetchDriveBytes(item.cloud.driveTelemetryFileId);
+  const telText=item.cloud.telemetryEncoding==='gzip'?await gunzipToText(telBuf):new TextDecoder().decode(telBuf);
+  progress?.({phase:'Procesando vueltas',percent:85});
+  const builder=new VertexBrowserCore.LapBuilder();
+  for(const line of telText.split('\n')){if(line.trim())builder.push(JSON.parse(line));}
+  const laps=builder.finish();
+  progress?.({phase:'Listo para reproducir en streaming',percent:100});
+  return {
+   meta,
+   laps,
+   cloudVideo:item.cloud.driveVideoFileId?{fileId:item.cloud.driveVideoFileId,size:item.cloud.videoSize,type:item.cloud.videoMime||'video/mp4'}:null
+  };
+ }
+
+ async function syncSession(id){
+  if(!root.VertexBrowser?.enabled){
+   const response=await fetch('/api/cloud/sync/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+   const data=await response.json();
+   if(!response.ok)throw Error(data.error||'No se pudo sincronizar la sesión');
+   await refreshCloudSessions();
+   return data;
+  }
+  throw Error('La subida directa desde el visor web estará disponible en la siguiente actualización; sincroniza desde VertexLab en tu PC.');
+ }
+
+ async function downloadSession(id){
+  if(!root.VertexBrowser?.enabled){
+   const response=await fetch('/api/cloud/download/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+   const data=await response.json();
+   if(!response.ok)throw Error(data.error||'No se pudo descargar la sesión');
+   return data;
+  }
+  throw Error('Para descargar sesiones a este dispositivo en el visor web usa el archivo .vrtx o reproduce en streaming.');
+ }
+
+ async function deleteCloudSession(id,driveFolderId){
+  if(!root.VertexBrowser?.enabled){
+   const response=await fetch('/api/cloud/delete/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:true,driveFolderId})});
+   const data=await response.json();
+   if(!response.ok)throw Error(data.error||'No se pudo eliminar de Google Drive');
+   cloudSessions=cloudSessions.filter(item=>item.id!==id);
+   emit();
+   return data;
+  }
+  if(driveFolderId){
+   const token=await getDriveAccessToken();
+   await fetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(driveFolderId),{method:'DELETE',headers:{Authorization:'Bearer '+token}});
+  }
+  await sbFetch('/rest/v1/cloud_sessions?user_id=eq.'+encodeURIComponent(auth.user.id)+'&id=eq.'+encodeURIComponent(id),{method:'DELETE'});
+  cloudSessions=cloudSessions.filter(item=>item.id!==id);
+  emit();
+  return {ok:true};
+ }
+
+ async function handleCallback(){
+  const params=new URLSearchParams(location.search);
+  const code=params.get('code');
+  const cbState=params.get('state')||'';
+  if(!code)return false;
+  let pending=null;
+  try{pending=JSON.parse(sessionStorage.getItem(PKCE_KEY)||'null');}catch{}
+  sessionStorage.removeItem(PKCE_KEY);
+  history.replaceState(null,'',location.pathname+(location.hash||''));
+
+  if(cbState.startsWith('vl-drive:')){
+   if(!pending||pending.kind!=='drive'||pending.state!==cbState)throw Error('Estado de autorización de Google Drive inválido');
+   const data=await sbFetch('/functions/v1/drive-auth',{
+    method:'POST',
+    body:JSON.stringify({action:'exchange',code,redirectUri:redirectUri(),codeVerifier:pending.verifier})
+   });
+   driveToken=data.accessToken;
+   driveTokenExpiry=Date.now()+(Number(data.expiresIn)||3600)*1000;
+   profile={...(profile||{}),drive_connected:true,drive_email:data.driveEmail,drive_root_folder_id:data.driveRootFolderId,drive_root_folder_name:data.driveRootFolderName};
+   await pushSessionToLocal();
+   await refreshCloudSessions();
+   return true;
+  }
+
+  if(configured()&&pending?.kind==='supabase'){
+   const response=await fetch(config.supabaseUrl+'/auth/v1/token?grant_type=pkce',{
+    method:'POST',
+    headers:{'apikey':config.supabaseAnonKey,'Content-Type':'application/json'},
+    body:JSON.stringify({auth_code:code,code_verifier:pending.verifier})
+   });
+   const data=await response.json();
+   if(!response.ok||!data.access_token)throw Error(data.error_description||data.msg||'No se pudo completar el inicio de sesión');
+   saveSession({
+    accessToken:data.access_token,
+    refreshToken:data.refresh_token,
+    expiresAt:Date.now()+(Number(data.expires_in)||3600)*1000,
+    user:{id:data.user.id,email:data.user.email,displayName:data.user.user_metadata?.full_name||data.user.user_metadata?.name||data.user.email}
+   });
+   await refreshProfile();
+   await pushSessionToLocal();
+   await refreshCloudSessions();
+   return true;
+  }
+  return false;
+ }
+
+ function attachServiceWorkerBridge(){
+  navigator.serviceWorker?.addEventListener('message',async event=>{
+   if(event.data?.type!=='vertex-cloud-media-range'||!event.ports[0])return;
+   const port=event.ports[0];
+   try{
+    const {fileId,start,end}=event.data;
+    const buffer=await fetchDriveRangeCached(fileId,start,end);
+    port.postMessage({buffer},[buffer]);
+   }catch(error){port.postMessage({error:error.message});}
+   finally{port.close();}
+  });
+ }
+
+ function renderMenu(){
+  const menu=document.getElementById('home-cloud-menu');
+  if(!menu)return;
+  menu.replaceChildren();
+  const s=state();
+  const addButton=(label,sub,onClick,danger=false)=>{
+   const btn=document.createElement('button');
+   if(danger)btn.classList.add('danger-action');
+   btn.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18a4 4 0 0 1-.3-8A6.5 6.5 0 0 1 18 8a5 5 0 0 1 0 10Z"/></svg>';
+   const span=document.createElement('span');span.textContent=label;
+   if(sub){const small=document.createElement('small');small.textContent=sub;span.append(small);}
+   btn.append(span);
+   btn.onclick=onClick;
+   menu.append(btn);
+  };
+
+  if(!s.configured){
+   addButton('Configurar nube (Supabase + Drive)','Pendiente de credenciales del proyecto',()=>{
+    if(typeof closeHomeMenus==='function')closeHomeMenus();
+    const url=prompt('Supabase URL (https://xxxx.supabase.co):',config.supabaseUrl||'');
+    if(url===null)return;
+    const anon=prompt('Supabase Anon Key:',config.supabaseAnonKey||'');
+    if(anon===null)return;
+    const gid=prompt('Google OAuth Client ID:',config.googleClientId||'');
+    if(gid===null)return;
+    saveConfig({supabaseUrl:url,supabaseAnonKey:anon,googleClientId:gid});
+    const msg=document.getElementById('message');if(msg)msg.textContent='Configuración de nube guardada en este navegador.';
+   });
+   return;
+  }
+
+  if(!s.signedIn){
+   addButton('Iniciar sesión en VertexLab','Crea o abre tu cuenta con Google',()=>{if(typeof closeHomeMenus==='function')closeHomeMenus();signIn().catch(e=>{const msg=document.getElementById('message');if(msg)msg.textContent=e.message;});});
+   return;
+  }
+
+  const caption=document.createElement('span');
+  caption.className='home-menu-caption';
+  caption.textContent=(s.user.email||'CUENTA VERTEXLAB').toUpperCase();
+  menu.append(caption);
+
+  if(!s.driveConnected){
+   addButton('Vincular Google Drive','Se recordará en todos tus dispositivos',()=>{if(typeof closeHomeMenus==='function')closeHomeMenus();connectDrive().catch(e=>{const msg=document.getElementById('message');if(msg)msg.textContent=e.message;});});
+  }else{
+   addButton('Carpeta de Google Drive',s.driveRootFolderName||'VertexLab (predeterminada)',async()=>{
+    if(typeof closeHomeMenus==='function')closeHomeMenus();
+    const name=prompt('Nombre de carpeta nueva en Google Drive (o deja vacío para conservar la actual):',s.driveRootFolderName||'VertexLab');
+    if(!name)return;
+    try{await createFolder(name);const msg=document.getElementById('message');if(msg)msg.textContent='Carpeta de Google Drive actualizada: '+name;}
+    catch(e){const msg=document.getElementById('message');if(msg)msg.textContent=e.message;}
+   });
+   addButton('Actualizar biblioteca en la nube',s.driveEmail||'Sincronizar índice',async()=>{
+    if(typeof closeHomeMenus==='function')closeHomeMenus();
+    try{await refreshCloudSessions();if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();}
+    catch(e){const msg=document.getElementById('message');if(msg)msg.textContent=e.message;}
+   });
+   addButton('Desconectar Google Drive','Tus archivos en Drive se conservan',async()=>{
+    if(typeof closeHomeMenus==='function')closeHomeMenus();
+    try{await disconnectDrive();if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();}
+    catch(e){const msg=document.getElementById('message');if(msg)msg.textContent=e.message;}
+   },true);
+  }
+  addButton('Cerrar sesión de VertexLab','Desconecta esta cuenta en este dispositivo',async()=>{
+   if(typeof closeHomeMenus==='function')closeHomeMenus();
+   await signOut();
+   if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();
+  });
+ }
+
+ async function init(){
+  attachServiceWorkerBridge();
+  try{
+   const handled=await handleCallback();
+   if(!handled&&configured()&&signedIn()){
+    await refreshProfile();
+    await pushSessionToLocal();
+    await refreshCloudSessions();
+   }
+  }catch(error){
+   const msg=document.getElementById('message');
+   if(msg)msg.textContent=error.message;
+  }
+  renderMenu();
+ }
+
+ root.VertexCloud={
+  init,state,actionState,cachedSessions,onChange,saveConfig,
+  signIn,signOut,connectDrive,disconnectDrive,
+  listFolders,createFolder,selectFolder,getDriveAccessToken,
+  refreshProfile,refreshCloudSessions,openCloudSession,
+  syncSession,downloadSession,deleteCloudSession,renderMenu
+ };
+})(globalThis);

@@ -37,14 +37,19 @@ function openHomeSessionMenu(item,trigger){
  homeMenuTrigger=trigger.id;
  const menu=$('home-row-menu');menu.replaceChildren();
  const caption=document.createElement('span');caption.className='home-menu-caption';caption.textContent='OPCIONES DE SESIÓN';menu.append(caption);
- for(const option of [...VertexHomeModel.actions(item,latest?.recording).slice(0,1),{key:'export',label:'Exportar sesión',enabled:VertexHomeModel.availability(item).local&&item.id!==latest?.recording},...VertexHomeModel.actions(item,latest?.recording).slice(1)]){
+ const cloudState=globalThis.VertexCloud?.actionState?.();
+ const baseActions=VertexHomeModel.actions(item,latest?.recording,cloudState);
+ for(const option of [...baseActions.slice(0,1),{key:'export',label:'Exportar sesión',enabled:VertexHomeModel.availability(item).local&&item.id!==latest?.recording},...baseActions.slice(1)]){
   const button=document.createElement('button');button.disabled=!option.enabled;
   if(option.danger)button.classList.add('danger-action');
   button.innerHTML=option.key==='export'?HomeGlyphs.export:option.key==='favorite'?HomeGlyphs.star:option.key.startsWith('delete')?HomeGlyphs.remove:HomeGlyphs.cloud;
   const text=document.createElement('span');text.textContent=option.label;
-  if(option.soon){const note=document.createElement('small');note.textContent='Próximamente · Google Drive';text.append(note);}
+  if(option.soon){const note=document.createElement('small');note.textContent='Conecta Google Drive';text.append(note);}
   button.append(text);
   if(option.key==='export')button.onclick=action(async()=>{await exportLibrarySessions([item]);});
+  if(option.key==='sync')button.onclick=action(async()=>{closeHomeMenus();$('message').textContent='Sincronizando con Google Drive…';await VertexCloud.syncSession(item.id);await HomeLibrary.refresh();$('message').textContent='Sesión sincronizada con Google Drive.';});
+  if(option.key==='download')button.onclick=action(async()=>{closeHomeMenus();$('message').textContent='Descargando sesión a este dispositivo…';const res=await VertexCloud.downloadSession(item.id);await HomeLibrary.refresh();$('message').textContent=res.alreadyLocal?'Esta sesión ya está en este dispositivo.':'Sesión descargada a este dispositivo.';});
+  if(option.key==='delete-cloud')button.onclick=action(async()=>{closeHomeMenus();if(!confirm('¿Eliminar la copia en Google Drive de "'+(item.name||item.carName||'esta sesión')+'"?'))return;await VertexCloud.deleteCloudSession(item.id,item.cloud?.driveFolderId);await HomeLibrary.refresh();$('message').textContent='Copia eliminada de Google Drive.';});
   if(option.key==='favorite')button.onclick=action(async()=>{closeHomeMenus();const result=await api('feature/'+item.id,{featured:!item.featured});item.featured=result.featured;HomeLibrary.changed(item);$('home-settings-'+item.id)?.focus({preventScroll:true});});
   if(option.key==='delete-local'||option.key==='delete-all')button.onclick=()=>{
    closeHomeMenus();homeDeleteTarget=item;
@@ -151,7 +156,8 @@ function setupHome(){
   finally{homeSelectingAll=false;syncHomeExportControls();HomeLibrary.render(true);}
  };
  syncHomeExportControls();
- $('home-cloud-trigger').onclick=()=>{const open=$('home-cloud-trigger').getAttribute('aria-expanded')!=='true';closeHomeMenus();if(open){setHeaderDrop('home-cloud-menu','home-cloud-trigger',true);positionHomeMenu($('home-cloud-menu'),$('home-cloud-trigger'));}};
+ $('home-cloud-trigger').onclick=()=>{const open=$('home-cloud-trigger').getAttribute('aria-expanded')!=='true';closeHomeMenus();if(open){globalThis.VertexCloud?.renderMenu?.();setHeaderDrop('home-cloud-menu','home-cloud-trigger',true);positionHomeMenu($('home-cloud-menu'),$('home-cloud-trigger'));}};
+ globalThis.VertexCloud?.init?.().then(()=>HomeLibrary.refresh()).catch(()=>{});
  $('home-library-scroll').addEventListener('scroll',()=>{closeHomeMenus();HomeLibrary.schedule();},{passive:true});
  new ResizeObserver(()=>HomeLibrary.schedule()).observe($('home-library-scroll'));
  $('picker-sessions').addEventListener('scroll',()=>{const box=$('picker-sessions');if(box.scrollTop+box.clientHeight>=box.scrollHeight-100)HomeLibrary.morePicker();},{passive:true});

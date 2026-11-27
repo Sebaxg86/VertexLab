@@ -8,12 +8,15 @@ function updateSessionActions(){
  const cloud=$('analysis-cloud-actions');if(cloud){
   cloud.replaceChildren();
   const item={...session?.meta,id:session?.meta.id,availability:session?.meta.availability||{local:true,cloud:false}};
-  for(const option of VertexHomeModel.actions(item,latest?.recording).filter(option=>option.key!=='favorite')){
+  for(const option of VertexHomeModel.actions(item,latest?.recording,globalThis.VertexCloud?.actionState?.()).filter(option=>option.key!=='favorite')){
    const button=document.createElement('button');button.className='session-action'+(option.danger?' danger-action':'')+(option.soon?' sync-placeholder':'');button.disabled=!session||!option.enabled;
    button.innerHTML=option.key.startsWith('delete')?HomeGlyphs.remove:HomeGlyphs.cloud;
    const text=document.createElement('span');text.textContent=option.label;
-   if(option.soon){const note=document.createElement('small');note.textContent='Próximamente';text.append(note);}
+   if(option.soon){const note=document.createElement('small');note.textContent='Conecta Google Drive';text.append(note);}
    button.append(text);
+   if(option.key==='sync')button.onclick=action(async()=>{setMenu(false);$('message').textContent='Sincronizando con Google Drive…';await VertexCloud.syncSession(session.meta.id);session.meta.availability={...(session.meta.availability||{local:true}),cloud:true};updateSessionActions();await list();$('message').textContent='Sesión sincronizada con Google Drive.';});
+   if(option.key==='download')button.onclick=action(async()=>{setMenu(false);$('message').textContent='Descargando sesión a este dispositivo…';await VertexCloud.downloadSession(session.meta.id);session.meta.availability={...(session.meta.availability||{cloud:true}),local:true};updateSessionActions();await list();$('message').textContent='Sesión descargada a este dispositivo.';});
+   if(option.key==='delete-cloud')button.onclick=action(async()=>{setMenu(false);if(!confirm('¿Eliminar la copia en Google Drive?'))return;await VertexCloud.deleteCloudSession(session.meta.id,session.meta.cloud?.driveFolderId);if(session.meta.availability)session.meta.availability.cloud=false;updateSessionActions();await list();$('message').textContent='Copia eliminada de Google Drive.';});
    if(option.key==='delete-local'||option.key==='delete-all')button.onclick=()=>requestAnalysisDelete(option.key);
    cloud.append(button);
   }

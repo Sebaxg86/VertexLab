@@ -46,7 +46,9 @@
       const query=new URLSearchParams(path.split('?')[1]);
       const catalog=new Map([...saved].map(([id,item])=>[id,{...item.meta,preview:item.preview,availability:{local:true,cloud:false}}]));
       for(const [id,item] of sessions)catalog.set(id,{...item.meta,preview:item.preview,availability:{local:true,cloud:false,temporary:!saved.has(id)}});
-      return VertexHomeModel.page([...catalog.values()],query.get('offset'),query.get('limit'));
+      const cloudItems=globalThis.VertexCloud?.cachedSessions?.()||[];
+      const merged=globalThis.VertexCloudModel?VertexCloudModel.mergeLibrary([...catalog.values()],cloudItems):[...catalog.values()];
+      return VertexHomeModel.page(merged,query.get('offset'),query.get('limit'));
     }
     const [action,id]=path.split('/');
     if(action==='feature'){
@@ -62,6 +64,16 @@
     }
     if(action==='sessions'){for(const [otherId,other] of sessions){if(otherId!==id&&saved.has(otherId)){release(other);sessions.delete(otherId);}}}
     if(action==='sessions'&&!sessions.has(id)&&saved.has(id)){const record=saved.get(id);await open(await VertexLibrary.file(record),progress=>{document.querySelector('.session-loading-card>span').textContent=progress.phase+' · '+progress.percent+'%';},{id,persist:false,rangeRead:true});Object.assign(get(id).meta,record.meta);}
+    if(action==='sessions'&&!sessions.has(id)&&!saved.has(id)){
+      const cloudItem=(globalThis.VertexCloud?.cachedSessions?.()||[]).find(item=>item.id===id);
+      if(cloudItem){
+        const opened=await VertexCloud.openCloudSession(cloudItem,progress=>{const el=document.querySelector('.session-loading-card>span');if(el)el.textContent=progress.phase+' · '+progress.percent+'%';});
+        const [cars,brands]=await catalogs();
+        const info=cars[String(opened.meta.carOrdinal)],carName=typeof info==='string'?info:info?.name||opened.meta.name;
+        opened.meta.carName=carName;opened.meta.brand=brands[String(opened.meta.carOrdinal)]||null;
+        sessions.set(id,{meta:opened.meta,laps:opened.laps,file:null,video:null,cloudVideo:opened.cloudVideo,url:null,preview:cloudItem.preview});
+      }
+    }
     const item=get(id);
     if(action==='sessions')return {meta:{...item.meta},laps:item.laps};
     if(action==='delete'){release(item);sessions.delete(id);return {ok:true};}
@@ -69,7 +81,17 @@
     throw Error('Esta función requiere VertexLab Capture en la PC');
   }
   async function prepareVideo(id){
-    const item=get(id);if(!item.video||item.url)return;
+    const item=get(id);
+    if(item.cloudVideo&&!item.url){
+      const registration=await navigator.serviceWorker?.ready;
+      const controller=navigator.serviceWorker?.controller;
+      if(!controller||!registration)throw Error('Recarga VertexLab para activar el reproductor de streaming desde Google Drive.');
+      const channel=new MessageChannel();
+      await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{channel.port1.close();reject(Error('El reproductor en la nube necesita recargarse.'));},4000);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data.ok?resolve():reject(Error('No se pudo preparar el streaming de video'));};controller.postMessage({type:'vertex-cloud-media',id,fileId:item.cloudVideo.fileId,size:item.cloudVideo.size,type:item.cloudVideo.type},[channel.port2]);});
+      item.url=new URL('__vertex_media/'+id+'/video',registration.scope).href;
+      return;
+    }
+    if(!item.video||item.url)return;
     if(!$('library-range-video')?.checked)return;
     if(saved.has(id)){const record=saved.get(id);record.video=item.video;await VertexLibrary.update(record);}
     const registration=await navigator.serviceWorker?.ready;
@@ -79,7 +101,7 @@
     await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{channel.port1.close();reject(Error('El reproductor local necesita actualizarse. Cierra todas las ventanas de VertexLab y vuelve a abrirlo.'));},4000);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data.ok?resolve():reject(Error('No se pudo preparar el video local'));};controller.postMessage({type:'vertex-media',id,video:item.video,size:item.file.size},[channel.port2]);});
     item.url=new URL('__vertex_media/'+id+'/video',registration.scope).href;
   }
-  function videoURL(id){const item=get(id);if(!item.video)return null;if(!item.url)item.url=URL.createObjectURL(item.file.slice(item.video.offset,item.video.offset+item.video.size,item.video.type));return item.url;}
+  function videoURL(id){const item=get(id);if(item.url)return item.url;if(!item.video||!item.file)return null;item.url=URL.createObjectURL(item.file.slice(item.video.offset,item.video.offset+item.video.size,item.video.type));return item.url;}
   async function source(id){await initialize();if(sessions.has(id))return get(id).file;if(saved.has(id))return VertexLibrary.file(saved.get(id));throw Error('La sesión no está disponible en este dispositivo');}
   async function importFile(file,progress){const result=await open(file,progress,{forceSave:true});release(sessions.get(result.id));sessions.delete(result.id);return result;}
   function original(id){return get(id).file;}
