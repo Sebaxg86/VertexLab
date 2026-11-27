@@ -28,5 +28,31 @@
     });
     return new Response(stream,{status:part.status,headers});
   }
-  root.VertexMedia={range,response};if(typeof module!=='undefined')module.exports=root.VertexMedia;
+  function cloudResponse(request,video,fetchRange){
+    if(!video||!Number.isSafeInteger(video.size)||video.size<1||typeof fetchRange!=='function')return new Response('Invalid cloud video',{status:422});
+    const part=range(request.headers.get('Range'),video.size);
+    const headers={'Accept-Ranges':'bytes','Content-Type':video.type||'video/mp4','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
+    if(!part)return new Response(null,{status:416,headers:{...headers,'Content-Range':`bytes */${video.size}`}});
+    const length=part.end-part.start+1;headers['Content-Length']=String(length);
+    if(part.status===206)headers['Content-Range']=`bytes ${part.start}-${part.end}/${video.size}`;
+    let cursor=part.start,cancelled=false;
+    const chunkSize=1024*1024;
+    const stream=request.method==='HEAD'?null:new ReadableStream({
+      async pull(controller){
+        if(cancelled)return;
+        if(cursor>part.end){controller.close();return;}
+        try{
+          const end=Math.min(part.end,cursor+chunkSize-1);
+          const buffer=await fetchRange(cursor,end);
+          if(cancelled)return;
+          const bytes=buffer instanceof Uint8Array?buffer:new Uint8Array(buffer);
+          if(bytes.byteLength!==end-cursor+1)throw Error('Incomplete cloud media range');
+          cursor=end+1;
+          controller.enqueue(bytes);
+        }catch(error){if(!cancelled)controller.error(error);}
+      },cancel(){cancelled=true;}
+    });
+    return new Response(stream,{status:part.status,headers});
+  }
+  root.VertexMedia={range,response,cloudResponse};if(typeof module!=='undefined')module.exports=root.VertexMedia;
 })(globalThis);

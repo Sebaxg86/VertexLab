@@ -12,15 +12,15 @@
   return {start,end,top:start*rowHeight,bottom:(count-end)*rowHeight};
  }
  function availability(item){return {local:item.availability?.local!==false,cloud:item.availability?.cloud===true,temporary:item.availability?.temporary===true};}
- function actions(item,activeId){
-  const state=availability(item),active=item.id===activeId;
+ function actions(item,activeId,cloudState){
+  const state=availability(item),active=item.id===activeId,connected=!!cloudState?.connected;
   return [
    {key:'favorite',label:item.featured?'Quitar favorito':'Marcar favorito',enabled:true},
-   ...(state.local?[{key:'sync',label:'Sincronizar con Google Drive',enabled:false,soon:true}]:[]),
-   ...(!state.local&&state.cloud?[{key:'download',label:'Descargar a este dispositivo',enabled:false,soon:true}]:[]),
+   ...(state.local&&!state.cloud?[{key:'sync',label:'Sincronizar con Google Drive',enabled:connected&&!active,soon:!connected}]:[]),
+   ...(!state.local&&state.cloud?[{key:'download',label:'Descargar a este dispositivo',enabled:connected,soon:!connected}]:[]),
    ...(state.local?[{key:'delete-local',label:'Eliminar de este dispositivo…',enabled:!active,danger:true}]:[]),
-   ...(state.cloud?[{key:'delete-cloud',label:'Eliminar de Google Drive…',enabled:false,soon:true,danger:true}]:[]),
-   {key:'delete-all',label:'Eliminar definitivamente…',enabled:!active&&!state.cloud,danger:true}
+   ...(state.cloud?[{key:'delete-cloud',label:'Eliminar de Google Drive…',enabled:connected&&!active,soon:!connected,danger:true}]:[]),
+   {key:'delete-all',label:'Eliminar definitivamente…',enabled:!active&&(!state.cloud||connected),danger:true}
   ];
  }
  function snapTop(top,max,rowHeight=112){max=Math.max(0,max);top=Math.max(0,Math.min(max,top));if(max-top<=1)return max;return Math.max(0,Math.min(Math.floor(max/rowHeight),Math.round(top/rowHeight)))*rowHeight;}
