@@ -24,16 +24,45 @@ function openHome(){
  $('workspace').hidden=true;$('live-workspace').hidden=true;$('player').hidden=true;
  history.replaceState(null,'','#home');closeHomeMenus();updateHomeLive();HomeLibrary.render(true);
 }
+let homeBackdropTimer=null;
+function homeBackdrop(){
+ let el=$('home-popover-backdrop');
+ if(!el){
+  el=document.createElement('div');
+  el.id='home-popover-backdrop';
+  el.className='home-popover-backdrop';
+  el.setAttribute('aria-hidden','true');
+  el.hidden=true;
+  el.addEventListener('pointerdown',event=>{event.stopPropagation();});
+  el.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();closeHomeMenus();});
+  document.body.append(el);
+ }
+ return el;
+}
+function setHomeBackdrop(open){
+ const el=$('home-popover-backdrop')||(open?homeBackdrop():null);
+ if(!el)return;
+ clearTimeout(homeBackdropTimer);
+ if(open){
+  el.hidden=false;
+  requestAnimationFrame(()=>{if(!el.hidden)el.classList.add('is-open');});
+ }else{
+  el.classList.remove('is-open');
+  homeBackdropTimer=setTimeout(()=>{el.hidden=true;},200);
+ }
+}
 function closeHomeMenus(){
  for(const [panelId,triggerId] of [['home-cloud-menu','home-cloud-trigger'],['home-profile-menu','home-account-trigger'],['home-import-menu','home-import'],['home-row-menu',homeMenuTrigger]]){
   const panel=$(panelId),trigger=triggerId&&$(triggerId);
   if(trigger)setHeaderDrop(panelId,triggerId,false);else if(panel){panel.classList.remove('is-open');panel.inert=true;panel.hidden=true;}
  }
+ setHomeBackdrop(false);
 }
 function positionHomeMenu(panel,trigger){
  const rect=trigger.getBoundingClientRect(),width=panel.offsetWidth||275,height=panel.offsetHeight;
  panel.style.left=Math.max(12,Math.min(innerWidth-width-12,rect.right-width))+'px';
  panel.style.top=Math.max(12,rect.bottom+height+12>innerHeight?rect.top-height-8:rect.bottom+8)+'px';
+ setHomeBackdrop(true);
 }
 function openHomeSessionMenu(item,trigger){
  const open=trigger.getAttribute('aria-expanded')!=='true';closeHomeMenus();if(!open)return;
