@@ -10,8 +10,20 @@
  const mapPanel=document.querySelector('.map-panel');
  const transport=document.querySelector('#player');
  const panels=[telemetry,mapPanel,transport];
+ const scrollRoot=document.querySelector('.analysis-layout');
  const scrollBox=document.querySelector('#telemetry-scroll');
  const time=document.querySelector('#time');
+
+ if(!globalThis.VertexBrowser?.enabled){
+  const video=document.querySelector('.video-panel'),workspace=document.getElementById('workspace');
+  if(video&&workspace){
+   const videoAnchor=document.createComment('mobile-video-anchor');
+   video.before(videoAnchor);
+   const syncVideoHost=()=>{if(mobile.matches)workspace.prepend(video);else videoAnchor.after(video);};
+   mobile.addEventListener('change',syncVideoHost);
+   syncVideoHost();
+  }
+ }
 
  const veil=document.createElement('div');
  veil.className='mobile-focus-veil';
@@ -47,6 +59,14 @@
   pill.setAttribute('aria-hidden','true');
   pill.textContent='Tocar para explorar';
   telemetryHeading.append(pill);
+ }
+ const mapHeading=mapPanel?.querySelector('.panel-heading');
+ if(mapHeading){
+  const pill=document.createElement('span');
+  pill.className='mobile-tap-pill';
+  pill.setAttribute('aria-hidden','true');
+  pill.textContent='Tocar para explorar';
+  mapHeading.append(pill);
  }
 
  const scrubPill=document.createElement('output');
@@ -307,7 +327,7 @@
   panel.addEventListener('pointerdown',e=>{
    if(!mobile.matches||!session)return;
    if(active!==panel){
-    panelTap={panel,id:e.pointerId,x:e.clientX,y:e.clientY,scrollY:window.scrollY,moved:false};
+    panelTap={panel,id:e.pointerId,x:e.clientX,y:e.clientY,scrollY:window.scrollY,scrollTop:scrollRoot?.scrollTop||0,moved:false};
     return;
    }
    if(panel===transport&&e.target.closest('.timeline-control')){
@@ -331,7 +351,7 @@
   panel.addEventListener('pointermove',e=>{
    if(!mobile.matches||!session)return;
    if(panelTap&&panelTap.panel===panel&&panelTap.id===e.pointerId){
-    if(Math.hypot(e.clientX-panelTap.x,e.clientY-panelTap.y)>10||Math.abs(window.scrollY-panelTap.scrollY)>6){
+    if(Math.hypot(e.clientX-panelTap.x,e.clientY-panelTap.y)>10||Math.abs(window.scrollY-panelTap.scrollY)>6||Math.abs((scrollRoot?.scrollTop||0)-panelTap.scrollTop)>6){
      panelTap.moved=true;
     }
    }
