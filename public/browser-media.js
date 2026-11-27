@@ -34,9 +34,9 @@
     const part=range(rawHeader,video.size);
     const headers={'Accept-Ranges':'bytes','Content-Type':video.type||'video/mp4','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
     if(!part)return new Response(null,{status:416,headers:{...headers,'Content-Range':`bytes */${video.size}`}});
-    // Cap open-ended Range requests (bytes=start-) to 4 MiB so the browser fetches fresh 206 windows
+    // Cap open-ended Range requests (bytes=start-) to 8 MiB so the browser fetches fresh 206 windows
     // cleanly without holding one Service Worker stream open across gigabytes.
-    const maxWindow=4*1024*1024;
+    const maxWindow=8*1024*1024;
     const openEnded=!!rawHeader&&/^bytes=\d+-$/.test(rawHeader.trim());
     const effectiveEnd=openEnded?Math.min(part.end,part.start+maxWindow-1):part.end;
     const length=effectiveEnd-part.start+1;headers['Content-Length']=String(length);

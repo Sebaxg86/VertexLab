@@ -101,7 +101,25 @@
   return {start:clampedStart,end:stop,length:stop-clampedStart+1};
  }
 
- const api={validSessionId,validDriveId,cloudRowToLibraryItem,mergeLibrary,driveMediaUrl,driveRangeRequest,chunkBounds};
+ const playbackBlockSize=2*1024*1024;
+ function playbackBlocks(start,end,totalSize){
+  if(!Number.isSafeInteger(totalSize)||!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||
+    start<0||end<start||end>=totalSize||end-start>=playbackBlockSize)throw Error('Rango de reproducción inválido');
+  if(end-start+1<64*1024)return {blocks:[{start,end}],ahead:[]};
+  const block=offset=>({start:offset,end:Math.min(totalSize-1,offset+playbackBlockSize-1)});
+  const first=block(Math.floor(start/playbackBlockSize)*playbackBlockSize);
+  const blocks=end<=first.end?[first]:[first,block(first.end+1)];
+  const ahead=[];
+  let next=blocks.at(-1).end+1;
+  for(let i=0;i<2&&next<totalSize;i++){
+   const part=block(next);
+   ahead.push(part);
+   next=part.end+1;
+  }
+  return {blocks,ahead};
+ }
+
+ const api={validSessionId,validDriveId,cloudRowToLibraryItem,mergeLibrary,driveMediaUrl,driveRangeRequest,chunkBounds,playbackBlocks};
  root.VertexCloudModel=api;
  if(typeof module!=='undefined')module.exports=api;
 })(globalThis);

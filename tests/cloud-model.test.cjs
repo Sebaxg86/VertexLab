@@ -76,12 +76,12 @@ test('cloudResponse streams HTTP 206 byte ranges on demand without reading the f
  const bad=Media.cloudResponse(new Request('https://example.test/__vertex_media/'+ID_C+'/video',{headers:{Range:`bytes=${total}-${total+10}`}}),{size:total,type:'video/mp4'},fetchRange);
  assert.equal(bad.status,416);
 
- // Open-ended range on a large video caps to a 4 MiB 206 window
+ // Open-ended range on a large video caps to an 8 MiB 206 window
  const large=100*1024*1024;
  const windowed=Media.cloudResponse(new Request('https://example.test/__vertex_media/'+ID_C+'/video',{headers:{Range:'bytes=0-'}}),{size:large,type:'video/mp4'},fetchRange);
  assert.equal(windowed.status,206);
- assert.equal(windowed.headers.get('Content-Range'),`bytes 0-${4*1024*1024-1}/${large}`);
- assert.equal(windowed.headers.get('Content-Length'),String(4*1024*1024));
+ assert.equal(windowed.headers.get('Content-Range'),`bytes 0-${8*1024*1024-1}/${large}`);
+ assert.equal(windowed.headers.get('Content-Length'),String(8*1024*1024));
 });
 
 test('cloud-client initializes cleanly with default public Supabase and Google OAuth config',()=>{
@@ -92,4 +92,16 @@ test('cloud-client initializes cleanly with default public Supabase and Google O
  assert.equal(st.signedIn,false);
  assert.equal(st.driveConnected,false);
  assert.ok(st.googleClientId&&st.googleClientId.endsWith('.apps.googleusercontent.com'));
+});
+
+test('Drive playback reuses aligned blocks across seeks and leaves tiny browser probes exact',()=>{
+ const mib=1024*1024;
+ const first=Cloud.playbackBlocks(0,mib-1,9*mib);
+ const next=Cloud.playbackBlocks(mib,2*mib-1,9*mib);
+ assert.deepEqual(first,next);
+ assert.deepEqual(first.ahead,[{start:2*mib,end:4*mib-1},{start:4*mib,end:6*mib-1}]);
+ const crossing=Cloud.playbackBlocks(7*mib+100,8*mib+99,9*mib);
+ assert.deepEqual(crossing.blocks,[{start:6*mib,end:8*mib-1},{start:8*mib,end:9*mib-1}]);
+ assert.deepEqual(crossing.ahead,[]);
+ assert.deepEqual(Cloud.playbackBlocks(0,1,9*mib),{blocks:[{start:0,end:1}],ahead:[]});
 });

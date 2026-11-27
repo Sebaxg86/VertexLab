@@ -21,6 +21,7 @@
  let cloudSessions=[];
  const rangeCache=new Map();
  const inflightRanges=new Map();
+ let prefetchCount=0;
  let rangeCacheBytes=0;
  const listeners=new Set();
  const jobListeners=new Set();
@@ -249,7 +250,7 @@
   if(!root.VertexBrowser?.enabled){
    try{await fetch('/api/cloud/logout',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});}catch{}
   }
-  saveSession(null);profile=null;driveToken=null;driveTokenExpiry=0;cloudSessions=[];rangeCache.clear();rangeCacheBytes=0;
+  saveSession(null);profile=null;driveToken=null;driveTokenExpiry=0;cloudSessions=[];clearDriveRanges();
   emit();
  }
 
@@ -276,7 +277,7 @@
 
  async function disconnectDrive(){
   await sbFetch('/functions/v1/drive-auth',{method:'POST',body:JSON.stringify({action:'disconnect'})});
-  driveToken=null;driveTokenExpiry=0;cloudSessions=[];
+  driveToken=null;driveTokenExpiry=0;cloudSessions=[];clearDriveRanges();
   if(profile){profile.drive_connected=false;profile.drive_email=null;profile.drive_root_folder_id=null;profile.drive_root_folder_name=null;}
   if(!root.VertexBrowser?.enabled){
    try{await fetch('/api/cloud/drive/disconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});}catch{}
@@ -348,6 +349,12 @@
   throw lastError||Error('No se pudo leer el archivo desde Google Drive');
  }
 
+ function clearDriveRanges(){
+  rangeCache.clear();
+  inflightRanges.clear();
+  rangeCacheBytes=0;
+ }
+
  function storeRangeCache(key,buffer){
   if(buffer.byteLength>4*1024*1024)return;
   if(rangeCache.has(key)){rangeCacheBytes-=rangeCache.get(key).byteLength;rangeCache.delete(key);}
@@ -368,24 +375,32 @@
   }
   if(inflightRanges.has(key))return inflightRanges.get(key);
   const task=fetchDriveBytes(fileId,{start,end}).then(buffer=>{
-   storeRangeCache(key,buffer);
+   if(inflightRanges.get(key)===task)storeRangeCache(key,buffer);
    return buffer;
-  }).finally(()=>{inflightRanges.delete(key);});
+  }).finally(()=>{if(inflightRanges.get(key)===task)inflightRanges.delete(key);});
   inflightRanges.set(key,task);
   return task;
  }
 
- async function fetchDriveRangeCached(fileId,start,end,totalSize=null){
-  const buffer=await fetchRangeOnce(fileId,start,end);
-  const span=end-start+1;
-  if(Number.isSafeInteger(totalSize)&&span>=512*1024&&end+1<totalSize){
-   const nextStart=end+1,nextEnd=Math.min(totalSize-1,nextStart+span-1);
-   const nextKey=`${fileId}:${nextStart}-${nextEnd}`;
-   if(!rangeCache.has(nextKey)&&!inflightRanges.has(nextKey)){
-    fetchRangeOnce(fileId,nextStart,nextEnd).catch(()=>{});
-   }
+ async function fetchDriveRangeCached(fileId,start,end,totalSize){
+  const {blocks,ahead}=VertexCloudModel.playbackBlocks(start,end,totalSize);
+  const pending=blocks.map(part=>fetchRangeOnce(fileId,part.start,part.end));
+  for(const part of ahead){
+   if(prefetchCount>=2)break;
+   const key=`${fileId}:${part.start}-${part.end}`;
+   if(rangeCache.has(key)||inflightRanges.has(key))continue;
+   prefetchCount++;
+   fetchRangeOnce(fileId,part.start,part.end).catch(()=>{}).finally(()=>{prefetchCount--;});
   }
-  return buffer.slice(0);
+  const buffers=await Promise.all(pending);
+  if(blocks.length===1)return buffers[0].slice(start-blocks[0].start,end-blocks[0].start+1);
+  const output=new Uint8Array(end-start+1);
+  for(const [index,part] of blocks.entries()){
+   const from=Math.max(start,part.start);
+   const to=Math.min(end,part.end);
+   output.set(new Uint8Array(buffers[index],from-part.start,to-from+1),from-start);
+  }
+  return output.buffer;
  }
 
  async function gunzipToText(buffer){
