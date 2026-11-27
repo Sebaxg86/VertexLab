@@ -41,6 +41,7 @@ function homeBackdrop(){
  return el;
 }
 function setHomeBackdrop(open){
+ if(open&&!matchMedia('(max-width:600px)').matches)return;
  const el=$('home-popover-backdrop')||(open?homeBackdrop():null);
  if(!el)return;
  clearTimeout(homeBackdropTimer);

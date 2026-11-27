@@ -69,7 +69,8 @@ function setMenu(open){
   if(open&&session)updateSessionActions();
   if(open){setSessionPicker(false);setHeaderDrop('record-name-menu','record-name-trigger',false);}
   clearTimeout(settingsMenuTimer);
-  if(open&&session){
+  const mobileMenu=matchMedia('(max-width:600px)').matches;
+  if(open&&session&&mobileMenu){
     if(!settingsMenuPlaceholder&&panel.parentElement!==document.body){
       settingsMenuPlaceholder=document.createComment('settings-panel-anchor');
       panel.before(settingsMenuPlaceholder);
