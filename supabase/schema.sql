@@ -18,6 +18,7 @@ $$;
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text,
+  username text check (username is null or username ~ '^[a-zA-Z0-9._-]{3,24}$'),
   display_name text,
   avatar_url text,
   drive_connected boolean not null default false,
@@ -27,6 +28,10 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create unique index if not exists idx_profiles_username_lower
+  on public.profiles (lower(username))
+  where username is not null;
 
 drop trigger if exists trg_profiles_updated_at on public.profiles;
 create trigger trg_profiles_updated_at
