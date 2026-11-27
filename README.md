@@ -1,7 +1,10 @@
 # VertexLab
 
-Aplicación web local para FH6: telemetría LIVE, registro automático por vehículo,
-grabación de OBS con pausas y análisis de video, trazadas y entradas por distancia.
+Telemetría y análisis para Forza Horizon 6. VertexConnect captura en Windows y
+sincroniza video de OBS. VertexLab permite comparar vueltas por tiempo y revisar
+sesiones locales o sincronizadas con Google Drive, también desde el visor web.
+
+Para retomar el desarrollo en otro equipo, consulta [CONTEXTO.md](CONTEXTO.md).
 
 ## Iniciar en Windows
 
@@ -34,7 +37,7 @@ Puedes cambiar puertos: `server.py --udp-port 5302 --port 8766`.
 
 La contraseña no se escribe en disco, no se devuelve en la API y no se incluye en
 Git. Reconecta OBS al reiniciar VertexLab; también puedes proporcionar la contraseña
-con `RACELAB_OBS_PASSWORD` en el entorno. OBS debe estar abierto previamente.
+con `VERTEXLAB_OBS_PASSWORD` en el entorno. OBS debe estar abierto previamente.
 VertexLab controla exclusivamente grabaciones que él mismo inicia. Si OBS ya está
 grabando, guarda sólo telemetría y muestra el conflicto. No inicia ni detiene streams.
 Las órdenes de OBS se confirman consultando su estado durante un máximo de cinco
@@ -303,7 +306,7 @@ Se restauran las vueltas seleccionadas, referencia, los dos videos de comparaci�
 
 El formato v1 es un ZIP64 con `manifest.json`, `session.json`, `view.json`, `telemetry.jsonl` y, si existe, `video.<extensión>`. El manifiesto contiene tamaños y SHA-256 de cada componente. Se validan integridad, nombres exactos, versión, espacio libre, muestras y sincronización antes de publicar la sesión. No se extraen rutas del ZIP ni se usan rutas de video suministradas en sus metadatos. El límite del paquete es 256 GiB, con telemetría de hasta 4 GiB. El empaquetado, subida local e importación usan bloques sin cargar el video entero en RAM; la exportación temporal necesita espacio adicional en disco y caduca a los 30 minutos si no se descarga.
 
-Esta fase transporta sesiones: no incluye el programa dentro del archivo, no registra doble clic en Windows y no implementa todavía Google Drive; el visor web descrito abajo permite abrir el archivo en teléfonos. La reproducción conserva la compatibilidad del codec original con el navegador del equipo de destino. No convierte formatos ni reduce la calidad para hacerlos compatibles.
+El archivo portable permite trasladar una sesión entre equipos y abrirla en el visor web, también desde teléfonos. La reproducción depende de que el navegador admita el códec original.
 
 La carpeta del repositorio se conserva en su ubicación actual para mantener accesos existentes. El nombre visible es VertexLab. Se admite `VERTEXLAB_OBS_PASSWORD` y, por compatibilidad, `RACELAB_OBS_PASSWORD`.
 
@@ -314,7 +317,7 @@ Las luces de RPM reinician un barrido visual de 220 ms desde cero al detectar ca
 
 Disponible en https://sebaxg86.github.io/VertexLab/ . Exporta el `.vrtx` en la PC, cópialo al dispositivo y pulsa **Abrir archivo .vrtx** en el visor. No necesita Python, OBS ni que la PC siga encendida. El archivo se procesa en el dispositivo: no se suben grabaciones al sitio ni a GitHub. Conserva la interfaz de análisis, vueltas, comparación de dos videos y sincronización por tramos. La captura LIVE y el control de OBS permanecen en la aplicación local de Windows.
 
-La biblioteca web persiste en el dispositivo cuando está activado el guardado en Almacenamiento de sesiones. Las aperturas temporales solo viven en la pestaña. **Cerrar sesión de esta pestaña** libera sus recursos sin borrar el original. **Guardar archivo .vrtx original** descarga el archivo abierto; todavía no incorpora los cambios de vista hechos en el visor web. Google Drive queda para una fase posterior.
+La biblioteca web persiste en el dispositivo cuando está activado el guardado en Almacenamiento de sesiones. Las aperturas temporales solo viven en la pestaña. **Cerrar sesión de esta pestaña** libera sus recursos sin borrar el original. Además se puede iniciar sesión con una cuenta VertexLab, vincular Google Drive y reproducir desde la nube las grabaciones sincronizadas.
 
 El visor incluye manifiesto instalable y caché sin conexión: después de una primera visita completa puede abrirse sin servidor. El sistema operativo puede eliminar esa caché; guarda siempre tus archivos originales. No almacena los videos en la caché. El diseño se verificó en Chromium con tamaños de escritorio y teléfono; queda pendiente probar en dispositivos Android/iPhone físicos. El navegador debe admitir el codec del video original: el visor no convierte formatos.
 
@@ -327,7 +330,7 @@ Construcción local: `python tools/build_viewer.py`, seguido de `python -m http.
 
 El engranaje **Almacenamiento de sesiones** aparece también sin una sesión abierta. Permite guardar automáticamente las sesiones importadas o abrirlas temporalmente, consultar la cuota y solicitar almacenamiento persistente. En navegadores con `showDirectoryPicker` permite escoger una carpeta de destino; los paquetes se guardan con identificador único y extensión `.vrtx`. Cambiar la carpeta afecta las próximas importaciones, sin mover las anteriores. La biblioteca conserva la referencia a cada ubicación y vuelve a pedir permiso de lectura cuando el navegador lo exige.
 
-En Safari/iPhone y otros navegadores sin selector de carpeta se usa almacenamiento privado del sitio (OPFS cuando puede escribir archivos; IndexedDB como alternativa). No es una carpeta visible en Archivos. El índice, las preferencias y las estrellas persisten en IndexedDB; la telemetría se lee al seleccionar cada sesión, sin cargar todas las grabaciones al iniciar. Quitar de la biblioteca conserva el paquete guardado; no libera ese espacio. Borrar datos del sitio o la expulsión de almacenamiento del navegador puede eliminar las copias privadas: conserva siempre el original. No hay sincronización entre dispositivos todavía.
+En Safari/iPhone y otros navegadores sin selector de carpeta se usa almacenamiento privado del sitio (OPFS cuando puede escribir archivos; IndexedDB como alternativa). No es una carpeta visible en Archivos. El índice, las preferencias y las estrellas locales persisten en IndexedDB; la telemetría se lee al seleccionar cada sesión, sin cargar todas las grabaciones al iniciar. Quitar de la biblioteca conserva el paquete guardado; no libera ese espacio. Borrar datos del sitio o la expulsión de almacenamiento del navegador puede eliminar las copias privadas: conserva siempre el original. Las sesiones sincronizadas con Drive están disponibles al iniciar sesión con la misma cuenta VertexLab.
 
 En pantallas de hasta 600 px el video permanece arriba, debajo del header, mientras se exploran las gráficas y el recorrido. Conserva los mismos elementos de video, reproducción y sincronización, sin recrearlos al desplazar.
 
@@ -379,7 +382,7 @@ La comparación de vueltas alinea gráficas y marcadores por tiempo transcurrido
 
 ## VertexLab + VertexConnect para Windows
 
-VertexConnect es el acompañante instalado: recibe UDP, controla OBS y sirve la misma interfaz de análisis localmente, sin internet. No reintroduce la aplicación nativa de análisis descartada. GitHub Pages conserva el visor independiente; todavía no hay cuentas, Google Drive ni emparejamiento con la web pública.
+VertexConnect recibe UDP, controla OBS y sirve la interfaz de análisis en la PC. La captura y el análisis local funcionan sin internet. El visor de GitHub Pages puede abrir archivos portables o reproducir las sesiones sincronizadas con Drive mediante la misma cuenta VertexLab.
 
 El primer arranque abre un asistente Forza → OBS o solo telemetría → Todo listo. Continuar exige paquetes válidos recientes en el primer paso; el segundo exige una conexión OBS comprobada o la casilla explícita de solo telemetría. No se graba durante la configuración inicial. El puerto UDP predeterminado es 5301 y la interfaz local de Connect usa http://127.0.0.1:8766. El antiguo start.cmd usa 8765: no deben ejecutarse simultáneamente sobre el mismo puerto UDP. Si hay conflicto, el asistente permite liberar el puerto y reintentar Aplicar, o elegir otro puerto y configurarlo también en Forza.
 
@@ -394,16 +397,16 @@ El servicio admite --headless, --port y --config para comprobaciones aisladas. L
 
 ## Home de VertexLab
 
-Cada apertura entra en Home, aunque la URL anterior apunte a LIVE o a una sesión. El logo permite volver al inicio desde el análisis o LIVE. La mitad izquierda indica LIVE / OFFLINE a partir de la misma recepción real y tolerancia a cortes del tablero; el visor público muestra OFFLINE porque todavía no está emparejado con Connect. La mitad derecha muestra la biblioteca con trazadas y marcas originales, favoritos, importación .vrtx e indicadores separados de disponibilidad local y en nube.
+Cada apertura entra en Home, aunque la URL anterior apunte a LIVE o a una sesión. El logo permite volver al inicio desde el análisis o LIVE. La mitad izquierda indica LIVE / OFFLINE según la señal del juego en la PC de captura y ofrece LIVE DEMO en el visor público. La mitad derecha muestra la biblioteca con trazadas, emblemas, favoritos, importación `.vrtx` e indicadores separados de disponibilidad local y en la nube.
 
 La biblioteca solicita bloques de 12 a /api/library?offset=0&limit=12 (máximo 48), sin leer el video ni todas las muestras de análisis. El servidor calcula miniaturas solo para la página solicitada; el navegador mantiene únicamente las filas visibles y un margen de tres por lado. El selector del header carga más sesiones cuando se desplaza hasta el final. Marcar favorito en el visor modifica solo sus metadatos guardados; no requiere abrir el archivo completo.
 
-Las opciones de Google Drive son una maqueta funcional del menú, deshabilitadas y rotuladas Próximamente. No se afirma que ninguna sesión esté respaldada en nube. Eliminar de este dispositivo o definitivamente requiere confirmar en un diálogo: en captura local elimina los metadatos, la telemetría y el video asociado mediante las mismas protecciones existentes (sesión activa, archivo compartido y archivo bloqueado). En el visor elimina la copia administrada por VertexLab y su registro, conservando el .vrtx original importado. Las operaciones remotas no están implementadas.
+El menú de cada sesión ofrece acciones según su disponibilidad local y en Drive, como sincronizar, descargar o eliminar una copia. Los borrados requieren confirmación. La captura local protege sesiones activas, archivos compartidos y archivos bloqueados. El visor elimina su copia administrada y conserva el archivo `.vrtx` original importado. Si falla un borrado en Drive, se conserva la copia local.
 
 
 El scroll de la biblioteca conserva los nodos de las filas que siguen visibles, sin repetir animaciones de entrada. La rueda avanza por filas y al terminar un desplazamiento con teclado, barra o tacto se alinea el borde superior a una fila completa; el borde inferior puede cortar la última. El acceso desde Home a LIVE usa una transición breve que respeta movimiento reducido.
 
-El selector del header es Acceso rápido, tiene el mismo ancho que su disparador e incluye los iconos de disponibilidad de la biblioteca, sin controles de gestión ni importación. En LIVE no repite el acceso a LIVE. En análisis ese acceso conserva su indicador rojo estático y el fondo verde respira solo cuando hay señal real. La configuración de LIVE contiene únicamente detección automática y Abrir VertexConnect; el análisis muestra Destacar, Exportar y las opciones futuras de Google Drive. El borrado y la importación se gestionan desde la biblioteca.
+El selector del header es Acceso rápido, tiene el mismo ancho que su disparador e incluye los iconos de disponibilidad de la biblioteca, sin controles de gestión ni importación. En LIVE no repite el acceso a LIVE. En análisis ese acceso conserva su indicador rojo estático y el fondo verde respira solo cuando hay señal real. La configuración de LIVE contiene detección automática y Abrir VertexConnect. El análisis ofrece Destacar, Exportar y acciones de almacenamiento según la disponibilidad de la sesión. La importación se gestiona desde la biblioteca.
 
 La captura manual se abre desde Grabación Manual en el centro del header de LIVE. El nombre es opcional; REC abre una confirmación antes de iniciar. Durante la captura aparecen Detener y el tiempo transcurrido. La detección automática se indica a la derecha y se configura desde el engranaje.
 
