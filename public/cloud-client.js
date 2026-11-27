@@ -3,6 +3,8 @@
  const CONFIG_KEY='vertexlab.cloud.config.v1';
  const SESSION_KEY='vertexlab.cloud.session.v1';
  const PKCE_KEY='vertexlab.cloud.pkce.v1';
+ const PENDING_USERNAME_KEY='vertexlab.cloud.pending_username.v1';
+ const USERNAME_RE=/^[a-zA-Z0-9._-]{3,24}$/;
  const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.file';
  const MAX_CACHE_BYTES=24*1024*1024;
  const DEFAULT_CONFIG={
@@ -92,6 +94,7 @@
    configured:configured(),
    signedIn:signedIn(),
    user:auth?.user||null,
+   username:profile?.username||null,
    driveConnected:driveConnected(),
    driveEmail:profile?.drive_email||null,
    driveRootFolderId:profile?.drive_root_folder_id||null,
@@ -182,8 +185,38 @@
   return cloudSessions;
  }
 
- async function signIn(){
+ function normalizeUsername(raw){
+  return String(raw||'').trim().replace(/^@+/,'');
+ }
+
+ async function saveUsername(raw){
+  if(!signedIn())throw Error('Inicia sesión primero');
+  const clean=normalizeUsername(raw);
+  if(!USERNAME_RE.test(clean))throw Error('Usa entre 3 y 24 caracteres (letras, números, punto, guion o guion bajo).');
+  try{
+   const rows=await sbFetch('/rest/v1/profiles?id=eq.'+encodeURIComponent(auth.user.id),{
+    method:'PATCH',
+    headers:{Prefer:'return=representation'},
+    body:JSON.stringify({username:clean})
+   });
+   profile=Array.isArray(rows)&&rows[0]?rows[0]:{...(profile||{}),username:clean};
+   emit();renderAccountHeader();renderProfileMenu();renderMenu();
+   return profile;
+  }catch(error){
+   if(/duplicate|unique|23505|409/i.test(error.message))throw Error('Ese nombre de usuario ya está en uso. Prueba con otro.');
+   throw error;
+  }
+ }
+
+ async function signIn(desiredUsername=''){
   if(!configured())throw Error('Configura Supabase antes de iniciar sesión');
+  const clean=normalizeUsername(desiredUsername);
+  if(clean){
+   if(!USERNAME_RE.test(clean))throw Error('Usa entre 3 y 24 caracteres (letras, números, punto, guion o guion bajo).');
+   try{sessionStorage.setItem(PENDING_USERNAME_KEY,clean);}catch{}
+  }else{
+   try{sessionStorage.removeItem(PENDING_USERNAME_KEY);}catch{}
+  }
   const pkce=await createPkce();
   sessionStorage.setItem(PKCE_KEY,JSON.stringify({kind:'supabase',verifier:pkce.verifier}));
   const params=new URLSearchParams({
@@ -493,8 +526,14 @@
     user:{id:data.user.id,email:data.user.email,displayName:data.user.user_metadata?.full_name||data.user.user_metadata?.name||data.user.email}
    });
    await refreshProfile();
+   let pendingUser='';
+   try{pendingUser=sessionStorage.getItem(PENDING_USERNAME_KEY)||'';sessionStorage.removeItem(PENDING_USERNAME_KEY);}catch{}
+   if(pendingUser&&!profile?.username){
+    try{await saveUsername(pendingUser);}catch(e){const msg=document.getElementById('message');if(msg)msg.textContent=e.message;}
+   }
    await pushSessionToLocal();
    await refreshCloudSessions();
+   if(!profile?.username)setTimeout(()=>openAuthDialog('username'),200);
    return true;
   }
   return false;
@@ -588,6 +627,135 @@
   sliders:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="10" cy="18" r="2" fill="currentColor"/></svg>'
  };
 
+ function openAuthDialog(mode='login'){
+  let dialog=document.getElementById('cloud-auth-dialog');
+  if(!dialog){
+   dialog=document.createElement('dialog');
+   dialog.id='cloud-auth-dialog';
+   dialog.className='cloud-auth-dialog';
+   dialog.innerHTML=`<span class="eyebrow" id="cloud-auth-eyebrow">CUENTA VERTEXLAB</span><h2 id="cloud-auth-title">Iniciar sesión</h2><p id="cloud-auth-subtitle" class="auth-subtitle"></p><form id="cloud-auth-form"><div class="cloud-auth-field"><label for="cloud-auth-username">Nombre de usuario</label><div class="cloud-auth-input-wrap"><span>@</span><input id="cloud-auth-username" maxlength="24" autocomplete="username" placeholder="ej. sebaz_gt"></div><small id="cloud-auth-hint">3–24 caracteres (letras, números, . _ -). Si ya tienes cuenta puedes dejarlo vacío.</small></div><button id="cloud-auth-submit" class="cloud-google-btn" type="submit"></button><p id="cloud-auth-error" class="cloud-auth-error" role="alert" hidden></p></form><div class="cloud-auth-footer"><button type="button" id="cloud-auth-cancel" class="cloud-auth-cancel">Cancelar</button></div>`;
+   document.body.append(dialog);
+   dialog.querySelector('#cloud-auth-cancel').onclick=()=>dialog.close();
+   dialog.addEventListener('click',event=>{
+    if(event.target!==dialog)return;
+    const rect=dialog.getBoundingClientRect();
+    if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)dialog.close();
+   });
+  }
+  const googleSvg='<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M21.8 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.5a4.7 4.7 0 0 1-2 3.1v2.6h3.3c1.9-1.8 3-4.4 3-7.5Z"/><path fill="#fff" opacity=".88" d="M12 22c2.7 0 5-.9 6.7-2.4l-3.3-2.6c-.9.6-2.1 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3v2.6A10 10 0 0 0 12 22Z"/><path fill="#fff" opacity=".75" d="M6.4 13.9A6 6 0 0 1 6.1 12c0-.7.1-1.3.3-1.9V7.5H3a10 10 0 0 0 0 9l3.4-2.6Z"/><path fill="#fff" opacity=".92" d="M12 6c1.5 0 2.8.5 3.9 1.5l2.9-2.9A10 10 0 0 0 3 7.5l3.4 2.6C7.2 7.8 9.4 6 12 6Z"/></svg>';
+  const isUsernameOnly=mode==='username';
+  const input=dialog.querySelector('#cloud-auth-username');
+  const submit=dialog.querySelector('#cloud-auth-submit');
+  const errEl=dialog.querySelector('#cloud-auth-error');
+  errEl.hidden=true;
+  dialog.querySelector('#cloud-auth-title').textContent=isUsernameOnly?'Tu nombre de usuario':'Iniciar sesión';
+  dialog.querySelector('#cloud-auth-subtitle').textContent=isUsernameOnly?'Elige cómo aparecerás en tu perfil de VertexLab.':'Elige tu nombre de usuario y continúa con Google para sincronizar tu biblioteca y perfil en cualquier dispositivo.';
+  dialog.querySelector('#cloud-auth-hint').textContent=isUsernameOnly?'3–24 caracteres (letras, números, . _ -).':'3–24 caracteres (letras, números, . _ -). Si ya tienes cuenta puedes dejarlo vacío.';
+  input.value=isUsernameOnly?(profile?.username||''):'';
+  submit.innerHTML=isUsernameOnly?'<span>Guardar nombre de usuario</span>':googleSvg+'<span>Continuar con Google</span>';
+  submit.disabled=false;
+  dialog.querySelector('#cloud-auth-form').onsubmit=async event=>{
+   event.preventDefault();
+   errEl.hidden=true;
+   submit.disabled=true;
+   try{
+    if(isUsernameOnly){
+     await saveUsername(input.value);
+     dialog.close();
+     const msg=document.getElementById('message');if(msg)msg.textContent='Nombre de usuario actualizado: @'+profile.username;
+    }else{
+     await signIn(input.value);
+    }
+   }catch(error){
+    errEl.textContent=error.message;errEl.hidden=false;submit.disabled=false;
+   }
+  };
+  dialog.showModal();
+  input.focus();
+ }
+
+ function renderAccountHeader(){
+  const trigger=document.getElementById('home-account-trigger');
+  const label=document.getElementById('home-account-label');
+  if(!trigger||!label)return;
+  const s=state();
+  trigger.dataset.signedIn=String(s.signedIn);
+  trigger.dataset.drive=String(s.driveConnected);
+  if(!s.signedIn){
+   label.textContent='Iniciar sesión';
+   trigger.setAttribute('aria-label','Iniciar sesión en VertexLab');
+   trigger.onclick=()=>{if(typeof closeHomeMenus==='function')closeHomeMenus();openAuthDialog('login');};
+  }else{
+   const handle=s.username?'@'+s.username:(s.user?.email?.split('@')[0]||'Mi cuenta');
+   label.textContent=handle;
+   trigger.setAttribute('aria-label','Perfil de '+handle);
+   trigger.onclick=()=>{
+    const open=trigger.getAttribute('aria-expanded')!=='true';
+    if(typeof closeHomeMenus==='function')closeHomeMenus();
+    if(open){
+     renderProfileMenu();
+     if(typeof setHeaderDrop==='function')setHeaderDrop('home-profile-menu','home-account-trigger',true);
+     if(typeof positionHomeMenu==='function')positionHomeMenu(document.getElementById('home-profile-menu'),trigger);
+    }
+   };
+  }
+ }
+
+ function renderProfileMenu(){
+  const menu=document.getElementById('home-profile-menu');
+  if(!menu)return;
+  menu.replaceChildren();
+  const s=state();
+  if(!s.signedIn)return;
+  const addButton=(label,sub,onClick,{icon=MenuIcons.drive,danger=false}={})=>{
+   const btn=document.createElement('button');
+   if(danger)btn.classList.add('danger-action');
+   btn.innerHTML=icon;
+   const span=document.createElement('span');span.textContent=label;
+   if(sub){const small=document.createElement('small');small.textContent=sub;span.append(small);}
+   btn.append(span);
+   btn.onclick=onClick;
+   menu.append(btn);
+  };
+  const addDivider=()=>{const hr=document.createElement('hr');hr.className='home-menu-divider';menu.append(hr);};
+
+  const caption=document.createElement('span');
+  caption.className='home-menu-caption';
+  caption.textContent=(s.username?'@'+s.username+' · ':'')+(s.user?.email||'CUENTA VERTEXLAB');
+  menu.append(caption);
+
+  addButton('Nombre de usuario',s.username?'@'+s.username:'Elegir nombre de usuario',()=>{
+   if(typeof closeHomeMenus==='function')closeHomeMenus();
+   openAuthDialog('username');
+  },{icon:MenuIcons.account});
+
+  addDivider();
+  if(!s.driveConnected){
+   addButton('Vincular Google Drive','Se recordará en todos tus dispositivos',()=>{if(typeof closeHomeMenus==='function')closeHomeMenus();connectDrive().catch(e=>{const msg=document.getElementById('message');if(msg)msg.textContent=e.message;});},{icon:MenuIcons.drive});
+  }else{
+   addButton('Carpeta de Google Drive',s.driveRootFolderName||'VertexLab (predeterminada)',()=>{
+    if(typeof closeHomeMenus==='function')closeHomeMenus();
+    openFolderDialog();
+   },{icon:MenuIcons.folder});
+   addButton('Actualizar biblioteca en la nube',s.driveEmail||'Sincronizar índice',async()=>{
+    if(typeof closeHomeMenus==='function')closeHomeMenus();
+    try{await refreshCloudSessions();if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();}
+    catch(e){const msg=document.getElementById('message');if(msg)msg.textContent=e.message;}
+   },{icon:MenuIcons.refresh});
+   addButton('Desconectar Google Drive','Tus archivos en Drive se conservan',async()=>{
+    if(typeof closeHomeMenus==='function')closeHomeMenus();
+    try{await disconnectDrive();if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();}
+    catch(e){const msg=document.getElementById('message');if(msg)msg.textContent=e.message;}
+   },{icon:MenuIcons.unlink,danger:true});
+  }
+  addDivider();
+  addButton('Cerrar sesión de VertexLab','Desconecta esta cuenta en este dispositivo',async()=>{
+   if(typeof closeHomeMenus==='function')closeHomeMenus();
+   await signOut();
+   if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();
+  },{icon:MenuIcons.logout});
+ }
+
  function renderMenu(){
   const menu=document.getElementById('home-cloud-menu');
   if(!menu)return;
@@ -630,7 +798,7 @@
   }
 
   if(!s.signedIn){
-   addButton('Iniciar sesión en VertexLab','Crea o abre tu cuenta con Google',()=>{if(typeof closeHomeMenus==='function')closeHomeMenus();signIn().catch(e=>{const msg=document.getElementById('message');if(msg)msg.textContent=e.message;});},{icon:MenuIcons.account});
+   addButton('Iniciar sesión en VertexLab','Crea o abre tu cuenta con Google',()=>{if(typeof closeHomeMenus==='function')closeHomeMenus();openAuthDialog('login');},{icon:MenuIcons.account});
    addAdvanced();
    return;
   }
@@ -680,14 +848,18 @@
    const msg=document.getElementById('message');
    if(msg)msg.textContent=error.message;
   }
+  renderAccountHeader();
+  renderProfileMenu();
   renderMenu();
  }
 
+ onChange(()=>{renderAccountHeader();renderProfileMenu();});
+
  root.VertexCloud={
   init,state,actionState,cachedSessions,onChange,onJobUpdate,jobFor,pollJobs,saveConfig,
-  signIn,signOut,connectDrive,disconnectDrive,
+  signIn,signOut,saveUsername,openAuthDialog,connectDrive,disconnectDrive,
   listFolders,createFolder,selectFolder,getDriveAccessToken,
   refreshProfile,refreshCloudSessions,openCloudSession,
-  syncSession,downloadSession,deleteCloudSession,renderMenu
+  syncSession,downloadSession,deleteCloudSession,renderMenu,renderAccountHeader,renderProfileMenu
  };
 })(globalThis);

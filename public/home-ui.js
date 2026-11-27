@@ -10,21 +10,24 @@ const HomeGlyphs={
 function updateHomeLive(){
  if(!$('home-live-entry'))return;
  const browser=!!globalThis.VertexBrowser?.enabled,online=!browser&&liveConnection().online;
- $('home-live-entry').dataset.online=String(online);
- setViewText('home-live-title',online?'LIVE':'OFFLINE');
- renderLiveVehicle('home-live-description',online,browser?'La captura en vivo requiere VertexConnect en tu PC de juego.':online?liveCarMemory?.name||'Forza conectado.':'Esperando señal de Forza');
- $('home-live-entry').setAttribute('aria-label',online?'Entrar a LIVE, Forza conectado':'Entrar al tablero, OFFLINE');
+ $('home-live-entry').dataset.online=String(online||browser);
+ setViewText('home-live-title',browser?'LIVE DEMO':online?'LIVE':'OFFLINE');
+ renderLiveVehicle('home-live-description',online,browser?'Prueba la telemetría en tiempo real con un 2022 Toyota GR86. Para capturar tus carreras usa VertexConnect en Windows.':online?liveCarMemory?.name||'Forza conectado.':'Esperando señal de Forza');
+ const enter=$('home-live-entry').querySelector('.home-enter');
+ if(enter)enter.firstChild.textContent=browser?'PROBAR TELEMETRÍA EN TIEMPO REAL ':'ENTRAR AL TABLERO ';
+ $('home-live-entry').setAttribute('aria-label',browser?'Probar telemetría en tiempo real demo':online?'Entrar a LIVE, Forza conectado':'Entrar al tablero, OFFLINE');
 }
 function openHome(){
+ globalThis.VertexBrowser?.stopLiveDemo?.();
  openLiveView();homeActive=true;revSweepState=null;
  document.body.classList.add('home-view');$('lab-home').hidden=false;
  $('workspace').hidden=true;$('live-workspace').hidden=true;$('player').hidden=true;
  history.replaceState(null,'','#home');closeHomeMenus();updateHomeLive();HomeLibrary.render(true);
 }
 function closeHomeMenus(){
- for(const [panelId,triggerId] of [['home-cloud-menu','home-cloud-trigger'],['home-import-menu','home-import'],['home-row-menu',homeMenuTrigger]]){
+ for(const [panelId,triggerId] of [['home-cloud-menu','home-cloud-trigger'],['home-profile-menu','home-account-trigger'],['home-import-menu','home-import'],['home-row-menu',homeMenuTrigger]]){
   const panel=$(panelId),trigger=triggerId&&$(triggerId);
-  if(trigger)setHeaderDrop(panelId,triggerId,false);else{panel.classList.remove('is-open');panel.inert=true;panel.hidden=true;}
+  if(trigger)setHeaderDrop(panelId,triggerId,false);else if(panel){panel.classList.remove('is-open');panel.inert=true;panel.hidden=true;}
  }
 }
 function positionHomeMenu(panel,trigger){
@@ -165,7 +168,7 @@ const HomeLibrary=(()=>{
 })();
 function setupHome(){
  $('lab-logo').onclick=()=>transitionView(openHome);$('lab-logo').onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();transitionView(openHome);}};
- $('home-live-entry').onclick=()=>{if(globalThis.VertexBrowser?.enabled){$('message').textContent='LIVE requiere VertexConnect en tu PC de juego. Aquí puedes analizar tus sesiones .vrtx.';return;}enterHomeLive();};
+ $('home-live-entry').onclick=()=>{if(globalThis.VertexBrowser?.enabled){transitionView(()=>VertexBrowser.openLiveDemo());return;}enterHomeLive();};
  $('home-empty-import').onclick=()=>$('portable-file').click();
  $('home-import').classList.add('home-menu-trigger');
  $('home-import').onclick=()=>{const open=$('home-import').getAttribute('aria-expanded')!=='true';closeHomeMenus();if(open){setHeaderDrop('home-import-menu','home-import',true);positionHomeMenu($('home-import-menu'),$('home-import'));}};
@@ -200,7 +203,7 @@ function setupHome(){
  new ResizeObserver(()=>HomeLibrary.schedule()).observe($('home-library-scroll'));
  $('picker-sessions').addEventListener('scroll',()=>{const box=$('picker-sessions');if(box.scrollTop+box.clientHeight>=box.scrollHeight-100)HomeLibrary.morePicker();},{passive:true});
  $('home-library-retry').onclick=()=>HomeLibrary.loadMore();
- document.addEventListener('pointerdown',event=>{if(!event.target.closest('.home-popover,.home-menu-trigger,.home-row-settings'))closeHomeMenus();});
+ document.addEventListener('pointerdown',event=>{if(!event.target.closest('.home-popover,.home-menu-trigger,.home-row-settings,.home-account-trigger'))closeHomeMenus();});
  document.addEventListener('keydown',event=>{if(event.key==='Escape'){const target=homeMenuTrigger&&$(homeMenuTrigger);closeHomeMenus();if(target?.isConnected)target.focus({preventScroll:true});}});
  window.addEventListener('resize',closeHomeMenus);
  $('home-delete-cancel').onclick=()=>{const id=homeDeleteTarget?.item?.id;$('home-delete-dialog').close();homeDeleteTarget=null;id&&$('home-settings-'+id)?.focus({preventScroll:true});};

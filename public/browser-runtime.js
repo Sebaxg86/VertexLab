@@ -1,6 +1,7 @@
 /* In-memory storage adapter for the static viewer. Session files never leave the device. */
 (function(root){
   const enabled=document.body.dataset.mode==='viewer',sessions=new Map();let catalog=null;let initialized;let openStorageSettings=()=>{};
+  let liveDemoActive=false,demoData=null,demoTimer=null,demoStart=0;
   const mobileApple=/iPad|iPhone|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
   const saved=new Map();
   async function initialize(){return initialized??=(async()=>{for(const record of await VertexLibrary.records())saved.set(record.id,record);})();}
@@ -44,7 +45,8 @@
     if(path==='sessions'){const result=new Map([...saved].map(([id,item])=>[id,{...item.meta,preview:item.preview}]));for(const [id,item] of sessions)result.set(id,{...item.meta,preview:item.preview});return [...result.values()];}
     if(path.startsWith('library?')){
       const query=new URLSearchParams(path.split('?')[1]);
-      const [cars,brands]=await catalogs();
+      let cars={},brands={};
+      if(typeof fetch==='function'){try{[cars,brands]=await catalogs();}catch{}}
       const enrich=item=>{
         const key=String(item.carOrdinal??''),info=cars[key];
         const carName=typeof info==='string'?info:info?.name||item.carName||item.name;
@@ -129,13 +131,66 @@
   async function source(id){await initialize();if(sessions.has(id))return get(id).file;if(saved.has(id))return VertexLibrary.file(saved.get(id));throw Error('La sesión no está disponible en este dispositivo');}
   async function importFile(file,progress){const result=await open(file,progress,{forceSave:true});release(sessions.get(result.id));sessions.delete(result.id);return result;}
   function original(id){return get(id).file;}
+  function stopLiveDemo(){
+    liveDemoActive=false;
+    if(demoTimer){clearInterval(demoTimer);demoTimer=null;}
+  }
+  async function openLiveDemo(){
+    if(!enabled)return;
+    stopLiveDemo();
+    const [[cars,brands],demo]=await Promise.all([
+      catalogs(),
+      demoData?Promise.resolve(demoData):fetch(new URL('live-demo-gr86.json',document.baseURI)).then(r=>{if(!r.ok)throw Error('No se pudo cargar la telemetría demo');return r.json();}).then(d=>(demoData=d))
+    ]);
+    liveDemoActive=true;
+    const brand=brands[String(demo.carOrdinal)]||null;
+    const info=cars[String(demo.carOrdinal)];
+    const carName=typeof info==='string'?info:info?.name||demo.carName;
+    if(brand)headerBrands.set(demo.carOrdinal,brand);
+    liveCarMemory={ordinal:demo.carOrdinal,name:carName,carClass:demo.carClass,carPI:demo.carPI,brand};
+    openLiveView();
+    document.body.classList.remove('live-offline');
+    $('live-dashboard-host').inert=false;
+    $('live-offline-notice').setAttribute('aria-hidden','true');
+    document.body.dataset.liveConnected='true';
+    $('view-eyebrow').textContent='TELEMETRÍA EN TIEMPO REAL · DEMO';
+    $('title').textContent='LIVE DEMO';
+    $('session-info').textContent='Vista previa interactiva';
+    renderLiveVehicle('live-car',true,carName);
+    demoStart=performance.now();
+    const duration=Math.max(1,Number(demo.duration)||35);
+    const samples=demo.samples||[];
+    const tick=()=>{
+      if(!liveDemoActive||session||homeActive){stopLiveDemo();return;}
+      const elapsed=((performance.now()-demoStart)/1000)%duration;
+      let lo=0,hi=samples.length-1;
+      while(lo<hi){const mid=(lo+hi+1)>>1;if(samples[mid].t<=elapsed)lo=mid;else hi=mid-1;}
+      const sample=samples[lo];
+      if(sample&&typeof drawInstruments==='function'){
+        liveSampleMemory=sample;
+        drawInstruments(sample);
+        $('instant-source').textContent='Demo en tiempo real';
+        $('instant-note').textContent='Telemetría grabada · 2022 Toyota GR86';
+      }
+    };
+    tick();
+    demoTimer=setInterval(tick,50);
+  }
   function decorate(){
     if(!enabled)return;
     document.body.dataset.sessionOpen=String(!!session);
     $('analysis-settings').hidden=!session;
     $('settings-title').textContent=session?'SESIÓN / ANÁLISIS':'CONFIGURACIÓN';
     if(matchMedia('(pointer: coarse)').matches)document.querySelector('.map-footer>span').textContent='Zoom con +/− · arrastra para mover';
-    $('picker-live').hidden=!session;$('picker-live').querySelector('b').textContent='OFFLINE';document.body.dataset.liveConnected='false';$('manual-controls').hidden=true;
+    $('picker-live').hidden=!session;
+    $('picker-live').querySelector('b').textContent='LIVE DEMO';
+    $('manual-controls').hidden=true;
+    if(liveDemoActive){
+      document.body.dataset.liveConnected='true';
+      document.querySelector('.settings-wrap').hidden=true;
+      return;
+    }
+    document.body.dataset.liveConnected='false';
     $('export-session').lastElementChild.textContent='Guardar archivo .vrtx original';
     $('delete-session').lastElementChild.textContent='Cerrar sesión de esta pestaña';
     if(!session){$('title').textContent='Abre una sesión';$('view-eyebrow').textContent='VISOR PORTABLE';$('session-info').textContent='Biblioteca privada de este dispositivo';}
@@ -196,5 +251,5 @@
     if(old){release(old);sessions.delete(record.id);}
     saved.set(record.id,record);
   }
-  root.VertexBrowser={enabled,mobileApple,singleVideo:()=>!$('library-two-videos')?.checked,prepareVideo,open,request,videoURL,original,source,importFile,registerSavedRecord,openStorageSettings:()=>openStorageSettings(),decorate,setup};
+  root.VertexBrowser={enabled,mobileApple,singleVideo:()=>!$('library-two-videos')?.checked,prepareVideo,open,request,videoURL,original,source,importFile,registerSavedRecord,openStorageSettings:()=>openStorageSettings(),openLiveDemo,stopLiveDemo,liveDemoActive:()=>liveDemoActive,decorate,setup};
 })(globalThis);

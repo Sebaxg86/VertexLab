@@ -74,7 +74,7 @@ function updateLiveView(){
 }
 function setViewLayout(isLive){
   homeActive=false;document.body.classList.remove('home-view');$('lab-home').hidden=true;closeHomeMenus();
-  if(globalThis.VertexBrowser?.enabled)isLive=false;
+  if(globalThis.VertexBrowser?.enabled&&!VertexBrowser.liveDemoActive?.())isLive=false;
   document.body.classList.toggle('live-view',isLive);
   document.body.classList.toggle('analysis-view', !!session);
   $('manual-controls').hidden=!isLive;document.querySelector('.settings-wrap').hidden=false;
@@ -150,7 +150,7 @@ function setupViewUI(){
  setupQuickLiveTrail();
   $('session-trigger').onclick=()=>setSessionPicker($('session-trigger').getAttribute('aria-expanded')!=='true');
   $('session-trigger').onkeydown=event=>{if(event.key==='ArrowDown'){event.preventDefault();setSessionPicker(true);$('picker-live').focus();}};
-  $('picker-live').onclick=()=>{if(globalThis.VertexBrowser?.enabled){transitionView(openHome);$('message').textContent='LIVE requiere VertexConnect en tu PC de juego.';}else transitionView(openLiveView);};
+  $('picker-live').onclick=()=>{if(globalThis.VertexBrowser?.enabled){transitionView(()=>VertexBrowser.openLiveDemo());}else transitionView(openLiveView);};
   document.addEventListener('pointerdown',event=>{if(!event.target.closest('.session-switcher'))setSessionPicker(false);});
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&$('session-trigger').getAttribute('aria-expanded')==='true')setSessionPicker(false,true);});
   $('session-picker').addEventListener('focusout',()=>{requestAnimationFrame(()=>{if(!document.querySelector('.session-switcher').contains(document.activeElement))setSessionPicker(false);});});
