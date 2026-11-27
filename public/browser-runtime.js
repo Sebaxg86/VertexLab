@@ -327,7 +327,8 @@
     // Reparent the video on small screens so sticky spans the entire analysis, not just Al volante.
     const media=matchMedia('(max-width:600px)'),video=document.querySelector('.video-panel'),placeholder=document.createComment('video position');video.before(placeholder);
     const position=()=>{if(media.matches)$('workspace').prepend(video);else placeholder.after(video);};media.addEventListener('change',position);position();
-    new ResizeObserver(()=>{document.body.style.setProperty('--viewer-header-height',document.querySelector('.app-header').getBoundingClientRect().height+'px');}).observe(document.querySelector('.app-header'));
+    let lastHeaderH=-1;
+    new ResizeObserver(()=>{const h=Math.round(document.querySelector('.app-header').getBoundingClientRect().height);if(h!==lastHeaderH){lastHeaderH=h;document.body.style.setProperty('--viewer-header-height',h+'px');}}).observe(document.querySelector('.app-header'));
   }
   function registerSavedRecord(record){
     if(!record?.id)return;
