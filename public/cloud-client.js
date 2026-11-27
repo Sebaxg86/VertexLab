@@ -365,6 +365,7 @@
 
  async function syncSession(id){
   if(!root.VertexBrowser?.enabled){
+   await pushSessionToLocal();
    const response=await fetch('/api/cloud/sync/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
    const data=await response.json();
    if(!response.ok)throw Error(data.error||'No se pudo sincronizar la sesión');
@@ -377,6 +378,7 @@
 
  async function downloadSession(id){
   if(!root.VertexBrowser?.enabled){
+   await pushSessionToLocal();
    const response=await fetch('/api/cloud/download/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
    const data=await response.json();
    if(!response.ok)throw Error(data.error||'No se pudo descargar la sesión');
@@ -425,6 +427,7 @@
 
  async function deleteCloudSession(id,driveFolderId){
   if(!root.VertexBrowser?.enabled){
+   await pushSessionToLocal();
    const response=await fetch('/api/cloud/delete/'+encodeURIComponent(id),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:true,driveFolderId})});
    const data=await response.json();
    if(!response.ok)throw Error(data.error||'No se pudo eliminar de Google Drive');

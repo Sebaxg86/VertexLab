@@ -15,20 +15,36 @@ function updateSessionActions(){
    if(cloudMatch?.cloud&&!session.meta.cloud)session.meta.cloud=cloudMatch.cloud;
   }
   const item={...session?.meta,id:session?.meta.id,availability:liveAvail,cloud:session?.meta.cloud||cloudMatch?.cloud||null};
+  const activeJob=session?.meta.id?globalThis.VertexCloud?.jobFor?.(session.meta.id):null;
+  updateAnalysisCloudProgress(activeJob);
   for(const option of VertexHomeModel.actions(item,latest?.recording,globalThis.VertexCloud?.actionState?.()).filter(option=>option.key!=='favorite')){
-   const button=document.createElement('button');button.className='session-action'+(option.danger?' danger-action':'')+(option.soon?' sync-placeholder':'');button.disabled=!session||!option.enabled;
+   const button=document.createElement('button');button.className='session-action'+(option.danger?' danger-action':'')+(option.soon?' sync-placeholder':'');button.disabled=!session||!option.enabled||(!!activeJob&&(option.key==='sync'||option.key==='download'||option.key.startsWith('delete')));
    button.innerHTML=option.key.startsWith('delete')?HomeGlyphs.remove:HomeGlyphs.cloud;
    const text=document.createElement('span');text.textContent=option.label;
    if(option.soon){const note=document.createElement('small');note.textContent='Conecta Google Drive';text.append(note);}
    button.append(text);
-   if(option.key==='sync')button.onclick=action(async()=>{setMenu(false);$('message').textContent='Sincronizando con Google Drive…';await VertexCloud.syncSession(session.meta.id);session.meta.availability={...(session.meta.availability||{local:true}),cloud:true};updateSessionActions();await list();$('message').textContent='Sesión sincronizada con Google Drive.';});
-   if(option.key==='download')button.onclick=action(async()=>{setMenu(false);$('message').textContent='Descargando sesión a este dispositivo…';await VertexCloud.downloadSession(session.meta.id);session.meta.availability={...(session.meta.availability||{cloud:true}),local:true};updateSessionActions();await list();$('message').textContent='Sesión descargada a este dispositivo.';});
+   if(option.key==='sync')button.onclick=action(async()=>{setMenu(false);$('message').textContent='Subiendo sesión a Google Drive…';await VertexCloud.syncSession(session.meta.id);updateSessionActions();});
+   if(option.key==='download')button.onclick=action(async()=>{setMenu(false);$('message').textContent='Descargando sesión desde Google Drive…';await VertexCloud.downloadSession(session.meta.id);updateSessionActions();});
    if(option.key==='delete-cloud')button.onclick=action(async()=>{setMenu(false);if(!confirm('¿Eliminar la copia en Google Drive?'))return;await VertexCloud.deleteCloudSession(session.meta.id,session.meta.cloud?.driveFolderId);if(session.meta.availability)session.meta.availability.cloud=false;updateSessionActions();await list();$('message').textContent='Copia eliminada de Google Drive.';});
    if(option.key==='delete-local'||option.key==='delete-all')button.onclick=()=>requestAnalysisDelete(option.key);
    cloud.append(button);
   }
  }
  $('export-session').disabled=!session||latest?.recording===session?.meta.id||(session.meta.version===2&&!session.meta.ended);
+}
+function updateAnalysisCloudProgress(job){
+ let badge=$('analysis-cloud-progress');
+ if(!job||!session){if(badge)badge.hidden=true;return;}
+ if(!badge){
+  badge=document.createElement('span');badge.id='analysis-cloud-progress';badge.className='analysis-cloud-progress';badge.setAttribute('role','status');
+  $('settings-toggle').before(badge);
+ }
+ const pct=Math.max(0,Math.min(100,Math.round(job.percent||0)));
+ const r=10,c=2*Math.PI*r,offset=c*(1-pct/100);
+ badge.hidden=false;
+ badge.title=`${job.phase||'Sincronizando'} · ${pct}%`;
+ badge.setAttribute('aria-label',badge.title);
+ badge.innerHTML=`<svg class="cloud-progress-ring" viewBox="0 0 26 26" aria-hidden="true"><circle class="ring-track" cx="13" cy="13" r="${r}"/><circle class="ring-fill" cx="13" cy="13" r="${r}" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"/></svg><b class="cloud-progress-pct">${pct}</b>`;
 }
 function clearAnalysisHover(){analysisHover=null;legendHoverLap=null;$('analysis-hover').hidden=true;$('map').removeAttribute('data-hover-lap');}
 function showAnalysisHover(hit,event,kind,key=null){
@@ -137,6 +153,12 @@ function setupAnalysisInteractions(){
  $('map').onpointercancel=()=>{mapPointer=null;clearAnalysisHover();};
  $('map').onpointerleave=()=>{if(!mapPointer){clearAnalysisHover();draw();}};
  $('map-zoom-in').onclick=()=>zoomMap(2);$('map-zoom-out').onclick=()=>zoomMap(.5);
+ globalThis.VertexCloud?.onJobUpdate?.(()=>{
+  if(!session)return;
+  const job=VertexCloud.jobFor(session.meta.id);
+  updateAnalysisCloudProgress(job);
+  if(!job)updateSessionActions();
+ });
 }
 function zoomMap(factor,pointer){
  const rect=$('map').getBoundingClientRect(),next=Math.max(.2,Math.min(256,zoom*factor));

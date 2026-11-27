@@ -3,11 +3,12 @@ body.home-view{height:100dvh;min-height:0;overflow:hidden;background:#08080a}.ho
 /* Stable virtual rows: retain existing nodes and never replay entry fades on scroll. */
 .home-session-row{animation:none!important}.home-library-scroll{overflow-anchor:none;scroll-behavior:auto}.home-library-scroll>div{overflow-anchor:none}
 #view-transition{position:fixed;inset:0;z-index:180;pointer-events:none;background:#08080b;opacity:0;transition:opacity .24s ease}#view-transition.is-covering{opacity:1}
-.home-availability [data-storage="cloud"].is-syncing{position:relative;display:inline-grid;place-items:center;width:26px;height:26px;color:#ff4b62}
-.home-availability .cloud-progress-ring{width:26px;height:26px;transform:rotate(-90deg)}
-.home-availability .cloud-progress-ring .ring-track{fill:none;stroke:#3b2730;stroke-width:2.4}
-.home-availability .cloud-progress-ring .ring-fill{fill:none;stroke:#ff4b62;stroke-width:2.4;stroke-linecap:round;transition:stroke-dashoffset .35s ease}
-.home-availability .cloud-progress-pct{position:absolute;font-family:RaceNumbers,sans-serif;font-size:8px;font-weight:700;letter-spacing:0;color:#f3e6ec;line-height:1}
+.home-availability [data-storage="cloud"].is-syncing,.analysis-cloud-progress{position:relative;display:inline-grid;place-items:center;width:26px;height:26px;color:#ff4b62}
+.analysis-cloud-progress[hidden]{display:none}
+.home-availability .cloud-progress-ring,.analysis-cloud-progress .cloud-progress-ring{width:26px;height:26px;transform:rotate(-90deg)}
+.home-availability .cloud-progress-ring .ring-track,.analysis-cloud-progress .cloud-progress-ring .ring-track{fill:none;stroke:#3b2730;stroke-width:2.4}
+.home-availability .cloud-progress-ring .ring-fill,.analysis-cloud-progress .cloud-progress-ring .ring-fill{fill:none;stroke:#ff4b62;stroke-width:2.4;stroke-linecap:round;transition:stroke-dashoffset .35s ease}
+.home-availability .cloud-progress-pct,.analysis-cloud-progress .cloud-progress-pct{position:absolute;font-family:RaceNumbers,sans-serif;font-size:8px;font-weight:700;letter-spacing:0;color:#f3e6ec;line-height:1}
 .cloud-folder-list{display:flex;flex-direction:column;gap:6px;max-height:210px;overflow-y:auto;margin:12px 0 16px;padding:4px 0}
 .cloud-folder-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border:1px solid #3c2b34;background:#19141a;color:#eee5ed;cursor:pointer;font-size:14px}
 .cloud-folder-item:hover:enabled{border-color:#ff4b62;background:#241820}
