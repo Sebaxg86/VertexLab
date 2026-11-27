@@ -244,8 +244,9 @@
     headerCta.id='viewer-download-cta';headerCta.className='viewer-download-cta';
     headerCta.href=DOWNLOAD_URL;headerCta.target='_blank';headerCta.rel='noopener noreferrer';
     headerCta.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 15v6h16v-6"/></svg><span class="viewer-cta-text"><small><b>VERTEX<em class="brand-accent">LAB</em></b> · WINDOWS</small><strong>DESCARGAR AHORA <i>↗</i></strong></span>';
-    headerCta.addEventListener('click',event=>{
+    const openDownloadModal=event=>{
       event.preventDefault();
+      event.stopPropagation();
       let dialog=$('viewer-download-modal');
       if(!dialog){
         dialog=document.createElement('dialog');
@@ -271,7 +272,8 @@
       clearTimeout(dialog._closeTimer);
       dialog.classList.remove('is-closing');
       if(!dialog.open)dialog.showModal();
-    });
+    };
+    headerCta.addEventListener('click',openDownloadModal);
     headerWrap.append(chevrons,headerCta);
     document.querySelector('.app-header')?.append(headerWrap);
     const homeZone=document.querySelector('.home-live-zone');
@@ -280,6 +282,7 @@
       homeLink.id='home-download-link';homeLink.className='home-download-link';
       homeLink.href=DOWNLOAD_URL;homeLink.target='_blank';homeLink.rel='noopener noreferrer';
       homeLink.innerHTML='¿QUIERES CAPTURAR TUS CARRERAS? <b>DESCARGA <span class="brand-word">VERTEX<em class="brand-accent">LAB</em></span> PARA WINDOWS <i>↗</i></b>';
+      homeLink.addEventListener('click',openDownloadModal);
       homeZone.append(homeLink);
     }
     $('delete-session').onclick=action(async()=>{if(!session)return;const id=session.meta.id;clearVideo();await request('delete/'+id,{});openHome();await list();$('message').textContent='Sesión cerrada. Tu archivo original no se ha eliminado.';});
