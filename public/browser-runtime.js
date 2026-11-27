@@ -63,7 +63,24 @@
       release(sessions.get(id));await VertexLibrary.remove(id);saved.delete(id);sessions.delete(id);return {ok:true};
     }
     if(action==='sessions'){for(const [otherId,other] of sessions){if(otherId!==id&&saved.has(otherId)){release(other);sessions.delete(otherId);}}}
-    if(action==='sessions'&&!sessions.has(id)&&saved.has(id)){const record=saved.get(id);await open(await VertexLibrary.file(record),progress=>{document.querySelector('.session-loading-card>span').textContent=progress.phase+' · '+progress.percent+'%';},{id,persist:false,rangeRead:true});Object.assign(get(id).meta,record.meta);}
+    if(action==='sessions'&&!sessions.has(id)&&saved.has(id)){
+      const record=saved.get(id);
+      if(record.kind==='components'){
+        const parts=await VertexLibrary.loadComponents(record);
+        const meta=VertexBrowserCore.metadata(JSON.parse(parts.metaText));
+        Object.assign(meta,record.meta,{id,videoPath:parts.videoFile?'archivo local':null});
+        const [cars,brands]=await catalogs();
+        const info=cars[String(meta.carOrdinal)],carName=typeof info==='string'?info:info?.name||meta.name;
+        meta.carName=carName;meta.brand=brands[String(meta.carOrdinal)]||null;
+        const builder=new VertexBrowserCore.LapBuilder();
+        for(const line of parts.telemetryText.split('\n')){if(line.trim())builder.push(JSON.parse(line));}
+        const laps=builder.finish();
+        sessions.set(id,{meta,laps,file:parts.videoFile,video:parts.videoFile?{offset:0,size:parts.videoFile.size,type:record.videoMime||'video/mp4'}:null,url:null,preview:record.preview});
+      }else{
+        await open(await VertexLibrary.file(record),progress=>{document.querySelector('.session-loading-card>span').textContent=progress.phase+' · '+progress.percent+'%';},{id,persist:false,rangeRead:true});
+        Object.assign(get(id).meta,record.meta);
+      }
+    }
     if(action==='sessions'&&!sessions.has(id)&&!saved.has(id)){
       const cloudItem=(globalThis.VertexCloud?.cachedSessions?.()||[]).find(item=>item.id===id);
       if(cloudItem){
@@ -167,5 +184,6 @@
     const position=()=>{if(media.matches)$('workspace').prepend(video);else placeholder.after(video);};media.addEventListener('change',position);position();
     new ResizeObserver(()=>{document.body.style.setProperty('--viewer-header-height',document.querySelector('.app-header').getBoundingClientRect().height+'px');}).observe(document.querySelector('.app-header'));
   }
-  root.VertexBrowser={enabled,mobileApple,singleVideo:()=>!$('library-two-videos')?.checked,prepareVideo,open,request,videoURL,original,source,importFile,decorate,setup};
+  function registerSavedRecord(record){if(record?.id)saved.set(record.id,record);}
+  root.VertexBrowser={enabled,mobileApple,singleVideo:()=>!$('library-two-videos')?.checked,prepareVideo,open,request,videoURL,original,source,importFile,registerSavedRecord,decorate,setup};
 })(globalThis);

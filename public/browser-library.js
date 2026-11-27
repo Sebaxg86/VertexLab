@@ -31,6 +31,86 @@
       await update(record);return record;
     }catch(error){await writable?.abort().catch(()=>{});if(handle&&record.filename){const directory=record.directory||await (await navigator.storage.getDirectory()).getDirectoryHandle('sessions');await directory.removeEntry(record.filename).catch(()=>{});}throw Error(error.name==='QuotaExceededError'?'No hay espacio suficiente. Puedes abrir el archivo temporalmente.':error.message);}
   }
+  async function saveComponents(item,{metaText,telemetryText,videoReader,videoSize,videoMime},progress){
+    const destination=await setting('directory');
+    const id=item.meta.id;
+    const record={id,kind:'components',meta:item.meta,preview:item.preview,name:(item.meta.name||id)+'.vrtx',size:Number(videoSize)||0,video:videoSize?{offset:0,size:Number(videoSize),type:videoMime||'video/mp4'}:null,videoMime:videoMime||'video/mp4'};
+    const estimate=await navigator.storage?.estimate?.();
+    if(!destination&&estimate?.quota&&estimate.quota-estimate.usage<(record.size+telemetryText.length)*1.1)throw Error('No hay espacio suficiente en este dispositivo para descargar esta sesión.');
+    let dir=null;
+    try{
+      if(destination){
+        if(await destination.queryPermission({mode:'readwrite'})!=='granted')throw Error('Vuelve a elegir la carpeta en Biblioteca para autorizar el guardado.');
+        record.directory=destination;record.storage='folder';dir=await destination.getDirectoryHandle(id,{create:true});
+      }else if(navigator.storage?.getDirectory){
+        const rootDir=await (await navigator.storage.getDirectory()).getDirectoryHandle('sessions',{create:true});
+        record.storage='private';dir=await rootDir.getDirectoryHandle(id,{create:true});
+      }
+      if(dir){
+        const writeSmall=async(name,text)=>{const fh=await dir.getFileHandle(name,{create:true});if(!fh.createWritable)throw Error('NO_WRITABLE');const w=await fh.createWritable();await w.write(text);await w.close();};
+        try{
+          await writeSmall('meta.json',metaText);
+          await writeSmall('telemetry.jsonl',telemetryText);
+          if(videoReader&&videoSize>0){
+            const vfh=await dir.getFileHandle('video.bin',{create:true});
+            const vw=await vfh.createWritable();
+            let offset=0,chunk=4*1024*1024;
+            while(offset<videoSize){
+              const end=Math.min(videoSize-1,offset+chunk-1);
+              const part=await videoReader(offset,end);
+              await vw.write(part);
+              offset=end+1;
+              progress?.({phase:'Descargando video',percent:Math.min(98,15+Math.round(offset/videoSize*83))});
+            }
+            await vw.close();
+          }
+          await update(record);
+          return record;
+        }catch(err){
+          if(err.message!=='NO_WRITABLE'||record.storage==='folder')throw err;
+          const rootDir=await (await navigator.storage.getDirectory()).getDirectoryHandle('sessions');
+          await rootDir.removeEntry(id,{recursive:true}).catch(()=>{});
+          dir=null;
+        }
+      }
+      // IndexedDB fallback (e.g. Safari without createWritable)
+      record.storage='database';
+      record.metaText=metaText;
+      record.telemetryText=telemetryText;
+      if(videoReader&&videoSize>0){
+        const parts=[];let offset=0,chunk=4*1024*1024;
+        while(offset<videoSize){
+          const end=Math.min(videoSize-1,offset+chunk-1);
+          parts.push(await videoReader(offset,end));
+          offset=end+1;
+          progress?.({phase:'Descargando video',percent:Math.min(98,15+Math.round(offset/videoSize*83))});
+        }
+        record.videoBlob=new Blob(parts,{type:videoMime||'video/mp4'});
+      }
+      await update(record);
+      return record;
+    }catch(error){
+      if(dir){
+        const parent=record.directory||await (await navigator.storage.getDirectory()).getDirectoryHandle('sessions');
+        await parent.removeEntry(id,{recursive:true}).catch(()=>{});
+      }
+      throw Error(error.name==='QuotaExceededError'?'No hay espacio suficiente en este dispositivo.':error.message);
+    }
+  }
+  async function loadComponents(record){
+    if(record.storage==='database'){
+      return {metaText:record.metaText,telemetryText:record.telemetryText,videoFile:record.videoBlob?new File([record.videoBlob],record.id+'.mp4',{type:record.videoMime||'video/mp4'}):null};
+    }
+    let parent=record.directory;
+    if(parent){if(await parent.queryPermission({mode:'read'})!=='granted'&&await parent.requestPermission({mode:'read'})!=='granted')throw Error('Autoriza la carpeta para abrir esta sesión.');}
+    else parent=await (await navigator.storage.getDirectory()).getDirectoryHandle('sessions');
+    const dir=await parent.getDirectoryHandle(record.id);
+    const metaText=await (await (await dir.getFileHandle('meta.json')).getFile()).text();
+    const telemetryText=await (await (await dir.getFileHandle('telemetry.jsonl')).getFile()).text();
+    let videoFile=null;
+    if(record.video){const vf=await (await dir.getFileHandle('video.bin')).getFile();videoFile=new File([vf],record.id+'.mp4',{type:record.videoMime||'video/mp4'});}
+    return {metaText,telemetryText,videoFile};
+  }
   async function file(record){
     if(record.storage==='database'){checkSize(record.file,record.size);return new File([record.file],record.name);}
     let directory=record.directory;
@@ -42,13 +122,16 @@
   async function remove(id){
     const record=await transaction('sessions','readonly',s=>s.get(id));if(!record)return;
     if(record.storage!=='database'){
-      if(!/^[a-f0-9]{32}$/.test(id)||record.filename!==id+'.vrtx')throw Error('La ruta de la copia local no es válida');
+      if(!/^[a-f0-9]{32}$/.test(id))throw Error('La ruta de la copia local no es válida');
       let directory=record.directory;
       if(directory){if(await directory.queryPermission({mode:'readwrite'})!=='granted'&&await directory.requestPermission({mode:'readwrite'})!=='granted')throw Error('Autoriza la carpeta para eliminar la copia local');}
       else directory=await (await navigator.storage.getDirectory()).getDirectoryHandle('sessions');
-      try{await directory.removeEntry(record.filename);}catch(error){if(error.name!=='NotFoundError')throw error;}
+      try{
+        if(record.kind==='components')await directory.removeEntry(id,{recursive:true});
+        else{if(record.filename!==id+'.vrtx')throw Error('La ruta de la copia local no es válida');await directory.removeEntry(record.filename);}
+      }catch(error){if(error.name!=='NotFoundError')throw error;}
     }
     await forget(id);
   }
-  root.VertexLibrary={verifyCopy,setting,records,record:id=>transaction('sessions','readonly',s=>s.get(id)),save,file,update,forget,remove};
+  root.VertexLibrary={verifyCopy,setting,records,record:id=>transaction('sessions','readonly',s=>s.get(id)),save,saveComponents,loadComponents,file,update,forget,remove};
 })(globalThis);

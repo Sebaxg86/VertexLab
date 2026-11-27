@@ -372,7 +372,44 @@
    if(data.job){activeJobs.set(id,data.job);emitJobs();pollJobs();}
    return data;
   }
-  throw Error('Para descargar sesiones a este dispositivo en el visor web usa el archivo .vrtx o reproduce en streaming.');
+  const existing=await root.VertexLibrary?.record?.(id);
+  if(existing){return {id,alreadyLocal:true};}
+  const item=cloudSessions.find(row=>row.id===id);
+  if(!item?.cloud?.driveMetaFileId||!item?.cloud?.driveTelemetryFileId)throw Error('La sesión en la nube no tiene metadatos completos');
+  if(activeJobs.get(id)&&!activeJobs.get(id).done)return {started:true,job:activeJobs.get(id)};
+  const setProgress=(phase,percent,done=false,error=null)=>{
+   activeJobs.set(id,{id,action:'download',phase,percent,done,error});
+   emitJobs();
+  };
+  setProgress('Iniciando descarga',2);
+  (async()=>{
+   try{
+    setProgress('Descargando metadatos',5);
+    const metaText=new TextDecoder().decode(await fetchDriveBytes(item.cloud.driveMetaFileId));
+    setProgress('Descargando telemetría',12);
+    const telBuf=await fetchDriveBytes(item.cloud.driveTelemetryFileId);
+    const telemetryText=item.cloud.telemetryEncoding==='gzip'?await gunzipToText(telBuf):new TextDecoder().decode(telBuf);
+    const record=await VertexLibrary.saveComponents(
+     {meta:{...item,availability:{local:true,cloud:true}},preview:item.preview},
+     {
+      metaText,
+      telemetryText,
+      videoSize:item.cloud.videoSize||0,
+      videoMime:item.cloud.videoMime||'video/mp4',
+      videoReader:item.cloud.driveVideoFileId?(start,end)=>fetchDriveBytes(item.cloud.driveVideoFileId,{start,end}):null
+     },
+     p=>setProgress(p.phase,p.percent)
+    );
+    root.VertexBrowser?.registerSavedRecord?.(record);
+    setProgress('Descargada en este dispositivo',100,true);
+    const msg=document.getElementById('message');if(msg)msg.textContent='Sesión descargada a este dispositivo.';
+    if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();
+   }catch(error){
+    setProgress('Error al descargar',0,true,error.message);
+    const msg=document.getElementById('message');if(msg)msg.textContent='Error al descargar: '+error.message;
+   }
+  })();
+  return {started:true,job:activeJobs.get(id)};
  }
 
  async function deleteCloudSession(id,driveFolderId){
@@ -453,6 +490,71 @@
   });
  }
 
+ async function openFolderDialog(){
+  let dialog=document.getElementById('cloud-folder-dialog');
+  if(!dialog){
+   dialog=document.createElement('dialog');
+   dialog.id='cloud-folder-dialog';
+   dialog.className='home-delete-dialog cloud-folder-dialog';
+   dialog.innerHTML=`<span class="eyebrow">GOOGLE DRIVE / DESTINO</span><h2>Carpeta de sesiones</h2><p id="cloud-folder-current"></p><div id="cloud-folder-list" class="cloud-folder-list" role="list"></div><form id="cloud-folder-create" class="cloud-folder-create"><input id="cloud-folder-name" maxlength="120" placeholder="Nombre de nueva carpeta (ej. VertexLab)" autocomplete="off"><button type="submit">Crear y usar</button></form><p id="cloud-folder-error" class="cloud-folder-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" id="cloud-folder-close">Cerrar</button></div>`;
+   document.body.append(dialog);
+   dialog.querySelector('#cloud-folder-close').onclick=()=>dialog.close();
+   dialog.querySelector('#cloud-folder-create').onsubmit=async event=>{
+    event.preventDefault();
+    const input=dialog.querySelector('#cloud-folder-name');
+    const errEl=dialog.querySelector('#cloud-folder-error');
+    const name=input.value.trim();
+    if(!name)return;
+    errEl.hidden=true;
+    const submit=dialog.querySelector('#cloud-folder-create button');
+    submit.disabled=true;
+    try{
+     await createFolder(name);
+     await pushSessionToLocal();
+     input.value='';
+     const msg=document.getElementById('message');if(msg)msg.textContent='Carpeta de Google Drive actualizada: '+name;
+     dialog.close();
+    }catch(error){errEl.textContent=error.message;errEl.hidden=false;}
+    finally{submit.disabled=false;}
+   };
+  }
+  const s=state();
+  dialog.querySelector('#cloud-folder-current').textContent='Carpeta actual: '+(s.driveRootFolderName||'VertexLab (se creará automáticamente al subir)');
+  const listEl=dialog.querySelector('#cloud-folder-list');
+  const errEl=dialog.querySelector('#cloud-folder-error');
+  errEl.hidden=true;
+  listEl.innerHTML='<span class="cloud-folder-loading">Buscando carpetas en Google Drive…</span>';
+  dialog.showModal();
+  try{
+   const folders=(await listFolders()).filter(f=>!/^[0-9a-f]{32}$/.test(f.name||''));
+   listEl.replaceChildren();
+   if(!folders.length){
+    listEl.innerHTML='<span class="cloud-folder-loading">Aún no hay carpetas de VertexLab en tu Drive. Crea una abajo o usa la predeterminada.</span>';
+    return;
+   }
+   for(const folder of folders){
+    const btn=document.createElement('button');
+    btn.type='button';
+    btn.className='cloud-folder-item'+(folder.id===s.driveRootFolderId?' is-selected':'');
+    btn.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V4h7l2 3h9v13H3Z"/></svg><span></span>';
+    btn.querySelector('span').textContent=folder.name+(folder.id===s.driveRootFolderId?' · Actual':'');
+    btn.onclick=async()=>{
+     btn.disabled=true;errEl.hidden=true;
+     try{
+      await selectFolder(folder.id,folder.name);
+      await pushSessionToLocal();
+      const msg=document.getElementById('message');if(msg)msg.textContent='Carpeta de Google Drive seleccionada: '+folder.name;
+      dialog.close();
+     }catch(error){errEl.textContent=error.message;errEl.hidden=false;btn.disabled=false;}
+    };
+    listEl.append(btn);
+   }
+  }catch(error){
+   listEl.replaceChildren();
+   errEl.textContent=error.message;errEl.hidden=false;
+  }
+ }
+
  function renderMenu(){
   const menu=document.getElementById('home-cloud-menu');
   if(!menu)return;
@@ -497,12 +599,9 @@
   if(!s.driveConnected){
    addButton('Vincular Google Drive','Se recordará en todos tus dispositivos',()=>{if(typeof closeHomeMenus==='function')closeHomeMenus();connectDrive().catch(e=>{const msg=document.getElementById('message');if(msg)msg.textContent=e.message;});});
   }else{
-   addButton('Carpeta de Google Drive',s.driveRootFolderName||'VertexLab (predeterminada)',async()=>{
+   addButton('Carpeta de Google Drive',s.driveRootFolderName||'VertexLab (predeterminada)',()=>{
     if(typeof closeHomeMenus==='function')closeHomeMenus();
-    const name=prompt('Nombre de carpeta nueva en Google Drive (o deja vacío para conservar la actual):',s.driveRootFolderName||'VertexLab');
-    if(!name)return;
-    try{await createFolder(name);const msg=document.getElementById('message');if(msg)msg.textContent='Carpeta de Google Drive actualizada: '+name;}
-    catch(e){const msg=document.getElementById('message');if(msg)msg.textContent=e.message;}
+    openFolderDialog();
    });
    addButton('Actualizar biblioteca en la nube',s.driveEmail||'Sincronizar índice',async()=>{
     if(typeof closeHomeMenus==='function')closeHomeMenus();
