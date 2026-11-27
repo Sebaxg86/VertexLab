@@ -250,7 +250,7 @@
     const headerCta=document.createElement('a');
     headerCta.id='viewer-download-cta';headerCta.className='viewer-download-cta';
     headerCta.href=DOWNLOAD_URL;headerCta.target='_blank';headerCta.rel='noopener noreferrer';
-    headerCta.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 15v6h16v-6"/></svg><span class="viewer-cta-text"><small><b>VERTEX<em class="brand-accent">LAB</em></b> · WINDOWS</small><strong>DESCARGAR AHORA <i>↗</i></strong></span>';
+    headerCta.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 15v6h16v-6"/></svg><span class="viewer-cta-text"><small><b>VERTEX<em class="brand-accent">LAB</em></b> · WINDOWS</small><strong>DESCARGAR AHORA <i class="diagonal-arrow" aria-hidden="true">↗</i></strong></span>';
     const openDownloadModal=event=>{
       event.preventDefault();
       event.stopPropagation();
@@ -259,7 +259,7 @@
         dialog=document.createElement('dialog');
         dialog.id='viewer-download-modal';
         dialog.className='cloud-auth-dialog viewer-download-modal';
-        dialog.innerHTML=`<span class="eyebrow">APLICACIÓN DE ESCRITORIO · WINDOWS</span><h2>VERTEX<em class="brand-accent">LAB</em> + CONNECT</h2><p class="auth-subtitle">Lleva tu experiencia al siguiente nivel en tu PC de juego y analiza cada vuelta desde tu teléfono.</p><ul class="download-modal-perks"><li>Telemetría real de Forza en tiempo real (LIVE) para segundo monitor.</li><li>Grabación automática con OBS sincronizada por tramos y pausas.</li><li>Respaldo en tu Google Drive para reproducir en streaming desde cualquier dispositivo.</li></ul><a class="cloud-google-btn viewer-modal-dl" href="${DOWNLOAD_URL}" target="_blank" rel="noopener noreferrer"><span>Descargar para Windows ↗</span></a><div class="cloud-auth-footer"><button type="button" id="viewer-dl-close" class="cloud-auth-cancel">Ahora no</button></div>`;
+        dialog.innerHTML=`<span class="eyebrow">APLICACIÓN DE ESCRITORIO · WINDOWS</span><h2>VERTEX<em class="brand-accent">LAB</em> + CONNECT</h2><p class="auth-subtitle">Lleva tu experiencia al siguiente nivel en tu PC de juego y analiza cada vuelta desde tu teléfono.</p><ul class="download-modal-perks"><li>Telemetría real de Forza en tiempo real (LIVE) para segundo monitor.</li><li>Grabación automática con OBS sincronizada por tramos y pausas.</li><li>Respaldo en tu Google Drive para reproducir en streaming desde cualquier dispositivo.</li></ul><a class="cloud-google-btn viewer-modal-dl" href="${DOWNLOAD_URL}" target="_blank" rel="noopener noreferrer"><span>Descargar para Windows <i class="diagonal-arrow" aria-hidden="true">↗</i></span></a><div class="cloud-auth-footer"><button type="button" id="viewer-dl-close" class="cloud-auth-cancel">Ahora no</button></div>`;
         document.body.append(dialog);
         const closeDownloadModal=()=>{
           if(!dialog.open||dialog.classList.contains('is-closing'))return;
@@ -288,7 +288,7 @@
       const homeLink=document.createElement('a');
       homeLink.id='home-download-link';homeLink.className='home-download-link';
       homeLink.href=DOWNLOAD_URL;homeLink.target='_blank';homeLink.rel='noopener noreferrer';
-      homeLink.innerHTML='¿QUIERES CAPTURAR TUS CARRERAS? <b>DESCARGA <span class="brand-word">VERTEX<em class="brand-accent">LAB</em></span> PARA WINDOWS <i>↗</i></b>';
+      homeLink.innerHTML='¿QUIERES CAPTURAR TUS CARRERAS? <b>DESCARGA <span class="brand-word">VERTEX<em class="brand-accent">LAB</em></span> PARA WINDOWS <i class="diagonal-arrow" aria-hidden="true">↗</i></b>';
       homeLink.addEventListener('click',openDownloadModal);
       homeZone.append(homeLink);
     }

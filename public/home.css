@@ -457,3 +457,24 @@ body:not([data-live-connected=true]) #picker-live:focus-visible{box-shadow:inset
     height: 5px;
   }
 }
+
+@media (max-width: 600px) {
+  body .diagonal-arrow {
+    display: inline-block;
+    flex: none;
+    width: .95rem;
+    height: .95rem;
+    font-size: 0;
+    vertical-align: -.13em;
+    background-color: currentColor;
+    --diagonal-arrow-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 12.5 12.5 3.5m-6 0h6v6' fill='none' stroke='black' stroke-width='1.7'/%3E%3C/svg%3E");
+    -webkit-mask: var(--diagonal-arrow-icon) center / contain no-repeat;
+    mask: var(--diagonal-arrow-icon) center / contain no-repeat;
+  }
+
+  body .home-enter > .diagonal-arrow {
+    width: 1.15rem;
+    height: 1.15rem;
+    font-size: 0;
+  }
+}
