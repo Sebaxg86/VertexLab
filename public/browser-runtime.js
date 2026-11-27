@@ -179,6 +179,7 @@
   }
   function decorate(){
     if(!enabled)return;
+    if(session)stopLiveDemo();
     document.body.dataset.sessionOpen=String(!!session);
     $('analysis-settings').hidden=!session;
     $('settings-title').textContent=session?'SESIÓN / ANÁLISIS':'CONFIGURACIÓN';

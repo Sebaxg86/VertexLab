@@ -49,7 +49,7 @@ body.home-view .home-account-wrap{display:flex;align-items:center;position:absol
 .cloud-auth-cancel{background:transparent;border:1px solid #3f3039;color:#b8a6b2;padding:8px 14px;border-radius:3px;cursor:pointer;font-size:13px}
 @media(max-width:780px){body.home-view .home-account-wrap{right:14px}.home-account-trigger{padding:7px 11px;font-size:11px}}
 .live-view .viewer-download-wrap{grid-column:3;justify-self:end;display:inline-flex;align-items:center;gap:12px;margin:0}
-.viewer-download-wrap[hidden],body.home-view .viewer-download-wrap{display:none}
+.viewer-download-wrap[hidden],body:not(.live-view) .viewer-download-wrap,body.home-view .viewer-download-wrap{display:none}
 .viewer-cta-chevrons{display:inline-flex;align-items:center;pointer-events:none;animation:ctaArrowNudge 1.4s ease-in-out infinite}
 .viewer-cta-chevrons svg{width:42px;height:20px;fill:none;stroke:#ff455d;stroke-width:2.6;stroke-linecap:square;stroke-linejoin:miter}
 .viewer-cta-chevrons path{opacity:.2;animation:ctaChevronWave 1.2s ease-in-out infinite}
