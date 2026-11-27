@@ -108,7 +108,11 @@
     const metaText=await (await (await dir.getFileHandle('meta.json')).getFile()).text();
     const telemetryText=await (await (await dir.getFileHandle('telemetry.jsonl')).getFile()).text();
     let videoFile=null;
-    if(record.video){const vf=await (await dir.getFileHandle('video.bin')).getFile();videoFile=new File([vf],record.id+'.mp4',{type:record.videoMime||'video/mp4'});}
+    if(record.video){
+      const vf=await (await dir.getFileHandle('video.bin')).getFile();
+      if(record.size&&vf.size!==record.size)throw Error('La descarga local del video está incompleta. Elimina la copia local y vuelve a descargarla.');
+      videoFile=vf.slice(0,vf.size,record.videoMime||'video/mp4');
+    }
     return {metaText,telemetryText,videoFile};
   }
   async function file(record){

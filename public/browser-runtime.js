@@ -108,7 +108,7 @@
   }
   async function prepareVideo(id){
     const item=get(id);
-    if(item.cloudVideo&&!item.url){
+    if(item.cloudVideo){
       const registration=await navigator.serviceWorker?.ready;
       const controller=navigator.serviceWorker?.controller;
       if(!controller||!registration)throw Error('Recarga VertexLab para activar el reproductor de streaming desde Google Drive.');
@@ -193,6 +193,11 @@
     const position=()=>{if(media.matches)$('workspace').prepend(video);else placeholder.after(video);};media.addEventListener('change',position);position();
     new ResizeObserver(()=>{document.body.style.setProperty('--viewer-header-height',document.querySelector('.app-header').getBoundingClientRect().height+'px');}).observe(document.querySelector('.app-header'));
   }
-  function registerSavedRecord(record){if(record?.id)saved.set(record.id,record);}
+  function registerSavedRecord(record){
+    if(!record?.id)return;
+    const old=sessions.get(record.id);
+    if(old){release(old);sessions.delete(record.id);}
+    saved.set(record.id,record);
+  }
   root.VertexBrowser={enabled,mobileApple,singleVideo:()=>!$('library-two-videos')?.checked,prepareVideo,open,request,videoURL,original,source,importFile,registerSavedRecord,decorate,setup};
 })(globalThis);
