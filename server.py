@@ -22,6 +22,7 @@ from recorder import Recorder, car_name
 from telemetry import decode, analyze
 from session_preview import second_lap_preview
 from portable import export_session, import_session, import_sessions, MAX_ARCHIVE, MAX_BATCH
+from cloud_sync import CloudSyncService, DriveClient, CloudError
 
 ROOT = Path(__file__).resolve().parent
 BRANDS = json.loads((ROOT/'car-brands.json').read_text(encoding='utf-8')) if (ROOT/'car-brands.json').exists() else {}
@@ -55,6 +56,8 @@ class Runtime:
         self.sock = None
         self.preview_cache = {}
         self.portable_exports = {}
+        self.cloud = CloudSyncService()
+        self.cloud_sessions_cache = {}
 
     def status(self):
         with self.lock:
@@ -75,34 +78,148 @@ class Runtime:
             raise ValueError('Sesión inválida')
         return self.data/(sid+'.json')
 
+    def _attach_preview(self, meta):
+        meta['carName'] = car_name(meta.get('carOrdinal', 0))
+        meta['brand'] = BRANDS.get(str(meta.get('carOrdinal')))
+        path = self.data/(meta['id']+'.jsonl')
+        try:
+            stat = path.stat()
+            signature = (stat.st_mtime_ns, stat.st_size)
+            cached = self.preview_cache.get(meta['id'])
+            if not cached or cached[0] != signature:
+                cached = (signature, second_lap_preview(path, manual=meta.get('automatic') is False))
+                self.preview_cache[meta['id']] = cached
+            meta['preview'] = cached[1]
+        except FileNotFoundError:
+            meta['preview'] = None
+
     def sessions(self, offset=None, limit=None):
         with self.lock:
             sessions = sorted([json.loads(p.read_text(encoding='utf-8')) for p in self.data.glob('*.json')],
                               key=lambda s:s['created'], reverse=True)
-        total = len(sessions)
-        if offset is not None:
-            sessions = sessions[offset:offset+limit]
-        for meta in sessions:
-            meta['carName'] = car_name(meta.get('carOrdinal', 0))
-            meta['brand'] = BRANDS.get(str(meta.get('carOrdinal')))
-            path = self.data/(meta['id']+'.jsonl')
-            try:
-                stat = path.stat()
-                signature = (stat.st_mtime_ns, stat.st_size)
-                cached = self.preview_cache.get(meta['id'])
-                if not cached or cached[0] != signature:
-                    cached = (signature, second_lap_preview(path, manual=meta.get('automatic') is False))
-                    self.preview_cache[meta['id']] = cached
-                meta['preview'] = cached[1]
-            except FileNotFoundError:
-                meta['preview'] = None
-        if offset is not None:
-            keys = ('id', 'name', 'carName', 'carOrdinal', 'carClass', 'carPI', 'created',
-                    'ended', 'duration', 'version', 'featured', 'brand', 'preview')
-            items = [dict({k: meta[k] for k in keys if k in meta}, availability=dict(local=True, cloud=False)) for meta in sessions]
-            end = offset+len(items)
-            return dict(items=items, total=total, nextOffset=end if end < total else None)
-        return sessions
+        if offset is None:
+            for meta in sessions:
+                self._attach_preview(meta)
+            return sessions
+        keys = ('id', 'name', 'carName', 'carOrdinal', 'carClass', 'carPI', 'created',
+                'ended', 'duration', 'version', 'featured', 'brand', 'preview')
+        local_by_id = {meta['id']: meta for meta in sessions}
+        by_id = {}
+        for sid, meta in local_by_id.items():
+            by_id[sid] = dict({k: meta[k] for k in keys if k in meta}, availability=dict(local=True, cloud=False))
+        for sid, crow in self.cloud_sessions_cache.items():
+            cloud_info = dict(
+                driveFolderId=crow.get('drive_folder_id'),
+                driveMetaFileId=crow.get('drive_meta_file_id'),
+                driveTelemetryFileId=crow.get('drive_telemetry_file_id'),
+                driveVideoFileId=crow.get('drive_video_file_id'),
+                videoSize=crow.get('video_size'),
+                videoMime=crow.get('video_mime'),
+                videoName=crow.get('video_name'),
+                telemetryEncoding=crow.get('telemetry_encoding', 'gzip'),
+            )
+            if sid in by_id:
+                by_id[sid]['availability']['cloud'] = True
+                by_id[sid]['featured'] = bool(by_id[sid].get('featured') or crow.get('featured'))
+                by_id[sid]['cloud'] = cloud_info
+            else:
+                by_id[sid] = dict(
+                    id=sid,
+                    name=crow.get('name') or crow.get('car_name') or 'Sesión',
+                    carName=crow.get('car_name') or car_name(crow.get('car_ordinal', 0)),
+                    carOrdinal=crow.get('car_ordinal', 0),
+                    carClass=crow.get('car_class'),
+                    carPI=crow.get('car_pi'),
+                    created=crow.get('created_epoch', 0),
+                    ended=crow.get('ended_epoch'),
+                    duration=crow.get('duration'),
+                    version=crow.get('version', 2),
+                    featured=bool(crow.get('featured')),
+                    brand=crow.get('brand') or BRANDS.get(str(crow.get('car_ordinal'))),
+                    preview=crow.get('preview'),
+                    availability=dict(local=False, cloud=True),
+                    cloud=cloud_info,
+                )
+        ordered = sorted(by_id.values(), key=lambda s: (s.get('created') or 0, s['id']), reverse=True)
+        total = len(ordered)
+        items = ordered[offset:offset+limit]
+        for item in items:
+            if item['availability']['local'] and item['id'] in local_by_id:
+                meta = local_by_id[item['id']]
+                self._attach_preview(meta)
+                item['carName'] = meta['carName']
+                item['brand'] = meta['brand']
+                item['preview'] = meta['preview']
+        end = offset+len(items)
+        return dict(items=items, total=total, nextOffset=end if end < total else None)
+
+    def refresh_cloud_index(self):
+        if not self.cloud.configured or not self.cloud.user_jwt:
+            self.cloud_sessions_cache = {}
+            return []
+        rows = self.cloud.list_cloud_sessions()
+        self.cloud_sessions_cache = {row['id']: row for row in rows if row.get('id')}
+        return rows
+
+    def cloud_action(self, action, body):
+        if action == 'session':
+            token = str(body.get('accessToken') or '').strip()
+            user = body.get('user') if isinstance(body.get('user'), dict) else None
+            if not token or not user or not user.get('id'):
+                raise ValueError('Sesión de cuenta inválida')
+            self.cloud.set_session(token, user)
+            self.cloud.fetch_profile()
+            self.refresh_cloud_index()
+            return self.cloud.status()
+        if action == 'logout':
+            self.cloud.clear_session()
+            self.cloud_sessions_cache = {}
+            return self.cloud.status()
+        if action == 'refresh':
+            self.cloud.fetch_profile()
+            self.refresh_cloud_index()
+            return self.cloud.status()
+        if action == 'drive/exchange':
+            result = self.cloud.exchange_drive_code(body.get('code'), body.get('redirectUri'), body.get('codeVerifier'))
+            self.refresh_cloud_index()
+            return result
+        if action == 'drive/folder':
+            if body.get('createName'):
+                drive = DriveClient(self.cloud.get_drive_token(), http=self.cloud.http)
+                created = drive.create_folder(str(body['createName']).strip()[:128], body.get('parentId') or None)
+                return self.cloud.set_drive_folder(created['id'], created['name'])
+            return self.cloud.set_drive_folder(body.get('folderId'), body.get('folderName', 'VertexLab'))
+        if action == 'drive/disconnect':
+            result = self.cloud.disconnect_drive()
+            self.cloud_sessions_cache = {}
+            return result
+        if action.startswith('sync/'):
+            sid = action.split('/', 1)[1]
+            with self.lock:
+                if self.recorder.meta and self.recorder.meta['id'] == sid:
+                    raise ValueError('Finaliza la sesión antes de sincronizar con Google Drive')
+            row = self.cloud.sync_session(self.data, sid, car_name_fn=car_name, brands=BRANDS)
+            self.cloud_sessions_cache[sid] = row
+            return dict(ok=True, id=sid, cloud=row)
+        if action.startswith('download/'):
+            sid = action.split('/', 1)[1]
+            crow = self.cloud_sessions_cache.get(sid)
+            if not crow:
+                self.refresh_cloud_index()
+                crow = self.cloud_sessions_cache.get(sid)
+            if not crow:
+                raise ValueError('La sesión no se encontró en Google Drive')
+            return self.cloud.download_session(self.data, crow)
+        if action.startswith('delete/'):
+            sid = action.split('/', 1)[1]
+            if body.get('confirm') is not True:
+                raise ValueError('Confirma la eliminación en Google Drive')
+            crow = self.cloud_sessions_cache.get(sid)
+            folder_id = crow.get('drive_folder_id') if crow else body.get('driveFolderId')
+            result = self.cloud.delete_cloud_session(sid, folder_id)
+            self.cloud_sessions_cache.pop(sid, None)
+            return result
+        raise ValueError('Acción de nube desconocida')
 
     def read_session(self, sid):
         with self.lock:
@@ -374,6 +491,13 @@ def handler_for(runtime):
                     return self.portable_download(route.split('/')[-1])
                 if route == '/api/status':
                     return self.send(runtime.status())
+                if route == '/api/cloud/status':
+                    return self.send(runtime.cloud.status())
+                if route == '/api/cloud/drive/folders':
+                    drive = DriveClient(runtime.cloud.get_drive_token(), http=runtime.cloud.http)
+                    query = parse_qs(urlparse(self.path).query)
+                    parent = query.get('parentId', [None])[0]
+                    return self.send({'folders': drive.list_folders(parent)})
                 if route == '/api/sessions':
                     return self.send(runtime.sessions())
                 if route == '/api/library':
@@ -510,6 +634,8 @@ def handler_for(runtime):
                     return self.send(runtime.prepare_exports(body.get('ids'), body.get('date')))
                 if self.path.startswith('/api/portable/export/'):
                     return self.send(runtime.prepare_export(self.path.split('/')[-1],body.get('view')))
+                if self.path.startswith('/api/cloud/'):
+                    return self.send(runtime.cloud_action(self.path[len('/api/cloud/'):], body))
                 self.send(runtime.command(self.path[5:],body))
             except (ValueError,KeyError,OSError) as e:
                 self.send({'error':str(e)},400)
