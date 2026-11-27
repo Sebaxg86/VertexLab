@@ -76,3 +76,13 @@ test('cloudResponse streams HTTP 206 byte ranges on demand without reading the f
  const bad=Media.cloudResponse(new Request('https://example.test/__vertex_media/'+ID_C+'/video',{headers:{Range:`bytes=${total}-${total+10}`}}),{size:total,type:'video/mp4'},fetchRange);
  assert.equal(bad.status,416);
 });
+
+test('cloud-client initializes cleanly with default public Supabase and Google OAuth config',()=>{
+ require('../public/cloud-client.js');
+ assert.ok(globalThis.VertexCloud);
+ const st=globalThis.VertexCloud.state();
+ assert.equal(st.configured,true);
+ assert.equal(st.signedIn,false);
+ assert.equal(st.driveConnected,false);
+ assert.ok(st.googleClientId&&st.googleClientId.endsWith('.apps.googleusercontent.com'));
+});
