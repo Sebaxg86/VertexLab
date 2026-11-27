@@ -46,7 +46,16 @@
       const query=new URLSearchParams(path.split('?')[1]);
       const catalog=new Map([...saved].map(([id,item])=>[id,{...item.meta,preview:item.preview,availability:{local:true,cloud:false}}]));
       for(const [id,item] of sessions)if(item.file||saved.has(id))catalog.set(id,{...item.meta,preview:item.preview,availability:{local:true,cloud:false,temporary:!saved.has(id)}});
-      const cloudItems=globalThis.VertexCloud?.cachedSessions?.()||[];
+      const rawCloud=globalThis.VertexCloud?.cachedSessions?.()||[];
+      let cloudItems=rawCloud;
+      if(rawCloud.length){
+        const [cars,brands]=await catalogs();
+        cloudItems=rawCloud.map(item=>{
+          const key=String(item.carOrdinal??''),info=cars[key];
+          const carName=typeof info==='string'?info:info?.name||item.carName||item.name;
+          return {...item,carName,brand:brands[key]||null};
+        });
+      }
       const merged=globalThis.VertexCloudModel?VertexCloudModel.mergeLibrary([...catalog.values()],cloudItems):[...catalog.values()];
       return VertexHomeModel.page(merged,query.get('offset'),query.get('limit'));
     }

@@ -137,7 +137,7 @@ class Runtime:
                     duration=crow.get('duration'),
                     version=crow.get('version', 2),
                     featured=bool(crow.get('featured')),
-                    brand=crow.get('brand') or BRANDS.get(str(crow.get('car_ordinal'))),
+                    brand=BRANDS.get(str(crow.get('car_ordinal'))),
                     preview=crow.get('preview'),
                     availability=dict(local=False, cloud=True),
                     cloud=cloud_info,

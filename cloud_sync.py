@@ -477,6 +477,8 @@ class CloudSyncService:
 
             preview = second_lap_preview(telemetry_path, manual=meta.get('automatic') is False)
             ordinal = int(meta.get('carOrdinal') or 0)
+            brand_entry = (brands or {}).get(str(ordinal))
+            brand_name = brand_entry.get('name') if isinstance(brand_entry, dict) else brand_entry
             row = {
                 'user_id': self.user['id'],
                 'id': sid,
@@ -485,7 +487,7 @@ class CloudSyncService:
                 'car_name': car_name_fn(ordinal) if car_name_fn else meta.get('carName'),
                 'car_class': portable_meta.get('carClass'),
                 'car_pi': portable_meta.get('carPI'),
-                'brand': (brands or {}).get(str(ordinal)),
+                'brand': brand_name,
                 'created_epoch': portable_meta['created'],
                 'ended_epoch': portable_meta.get('ended'),
                 'duration': portable_meta.get('duration'),
