@@ -1,4 +1,18 @@
 project_id = "vertexlab"
 
+[auth]
+site_url = "https://sebaxg86.github.io/VertexLab/"
+additional_redirect_urls = [
+  "https://sebaxg86.github.io/VertexLab/",
+  "http://127.0.0.1:8766/",
+  "http://127.0.0.1:18773/",
+  "http://localhost:8770/"
+]
+
+[auth.external.google]
+enabled = true
+client_id = "420866989936-dq3an1aoh0p1uqqldof2g85a8d586rrd.apps.googleusercontent.com"
+secret = "env(GOOGLE_CLIENT_SECRET)"
+
 [functions.drive-auth]
 verify_jwt = false

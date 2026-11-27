@@ -16,10 +16,16 @@
  let rangeCacheBytes=0;
  const listeners=new Set();
 
+ const DEFAULT_CONFIG={
+  supabaseUrl:'https://enxifznsswmvnonvwlgc.supabase.co',
+  supabaseAnonKey:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVueGlmem5zc3dtdm5vbnZ3bGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU3Mzg5NDMsImV4cCI6MjExMTMxNDk0M30.lJVsoTxfyl5QdDCgzl2_sAyybl8bC3D6qG0Oe2DGkW0',
+  googleClientId:'420866989936-dq3an1aoh0p1uqqldof2g85a8d586rrd.apps.googleusercontent.com'
+ };
+
  function loadConfig(){
-  if(root.VERTEXLAB_CLOUD_CONFIG&&root.VERTEXLAB_CLOUD_CONFIG.supabaseUrl)return {...root.VERTEXLAB_CLOUD_CONFIG};
-  try{const raw=localStorage.getItem(CONFIG_KEY);if(raw)return JSON.parse(raw);}catch{}
-  return {supabaseUrl:'',supabaseAnonKey:'',googleClientId:''};
+  if(root.VERTEXLAB_CLOUD_CONFIG&&root.VERTEXLAB_CLOUD_CONFIG.supabaseUrl)return {...DEFAULT_CONFIG,...root.VERTEXLAB_CLOUD_CONFIG};
+  try{const raw=localStorage.getItem(CONFIG_KEY);if(raw)return {...DEFAULT_CONFIG,...JSON.parse(raw)};}catch{}
+  return {...DEFAULT_CONFIG};
  }
  function saveConfig(next){
   config={

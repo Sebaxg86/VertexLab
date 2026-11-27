@@ -244,13 +244,27 @@ class DriveClient:
             _json_or_error(status, body, 'No se pudo eliminar el archivo de Google Drive')
 
 
+DEFAULT_SUPABASE_URL = 'https://enxifznsswmvnonvwlgc.supabase.co'
+DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVueGlmem5zc3dtdm5vbnZ3bGdjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU3Mzg5NDMsImV4cCI6MjExMTMxNDk0M30.lJVsoTxfyl5QdDCgzl2_sAyybl8bC3D6qG0Oe2DGkW0'
+DEFAULT_GOOGLE_CLIENT_ID = '420866989936-dq3an1aoh0p1uqqldof2g85a8d586rrd.apps.googleusercontent.com'
+
+
 class CloudSyncService:
     """Coordinates Supabase Auth/index and Google Drive component storage for VertexLab."""
 
-    def __init__(self, supabase_url='', supabase_anon_key='', google_client_id='', http=_http_request):
-        self.supabase_url = (supabase_url or os.environ.get('VERTEXLAB_SUPABASE_URL', '')).rstrip('/')
-        self.supabase_anon_key = supabase_anon_key or os.environ.get('VERTEXLAB_SUPABASE_ANON_KEY', '')
-        self.google_client_id = google_client_id or os.environ.get('VERTEXLAB_GOOGLE_CLIENT_ID', '')
+    def __init__(self, supabase_url=None, supabase_anon_key=None, google_client_id=None, http=_http_request):
+        self.supabase_url = (
+            os.environ.get('VERTEXLAB_SUPABASE_URL', DEFAULT_SUPABASE_URL)
+            if supabase_url is None else supabase_url
+        ).rstrip('/')
+        self.supabase_anon_key = (
+            os.environ.get('VERTEXLAB_SUPABASE_ANON_KEY', DEFAULT_SUPABASE_ANON_KEY)
+            if supabase_anon_key is None else supabase_anon_key
+        )
+        self.google_client_id = (
+            os.environ.get('VERTEXLAB_GOOGLE_CLIENT_ID', DEFAULT_GOOGLE_CLIENT_ID)
+            if google_client_id is None else google_client_id
+        )
         self.http = http
         self.user_jwt = None
         self.user = None
