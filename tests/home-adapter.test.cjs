@@ -34,7 +34,7 @@ test('guest viewer shows read-only Safety Car DEMO and hides it once signed in',
  const core=require('../public/browser-core.js');
  const DEMO_ID='0000000000000000000000000000de01';
  let signedIn=false;
- const demoMeta={id:DEMO_ID,name:'Safety Car DEMO',carOrdinal:4265,carClass:7,carPI:999,created:1795859619,ended:1795859780,duration:10,version:2,syncSegments:[{tStart:0,tEnd:10,videoStart:0}],videoUrl:'https://vertexlab.racing/demo/safety-car-demo.mp4'};
+ const demoMeta={id:DEMO_ID,name:'Safety Car DEMO',carOrdinal:4265,carClass:7,carPI:999,created:1795859619,ended:1795859780,duration:10,version:2,syncSegments:[{tStart:0,tEnd:10,videoStart:0}],videoUrl:'https://media.vertexlab.racing/demo/safety-car-demo.mp4'};
  const sampleRows=[
   {t:0,x:0,z:0,speed:100,distance:0,lapTime:0,raceTime:0,lap:0,timestamp:1000,rpm:5000,gear:3,throttle:100,brake:0,carOrdinal:4265,carClass:7,carPI:999,breakBefore:false},
   {t:5,x:100,z:0,speed:120,distance:100,lapTime:5,raceTime:5,lap:0,timestamp:6000,rpm:6000,gear:4,throttle:100,brake:0,carOrdinal:4265,carClass:7,carPI:999,breakBefore:false}
@@ -71,7 +71,7 @@ test('guest viewer shows read-only Safety Car DEMO and hides it once signed in',
  assert.equal(opened.meta.demo,true);
  assert.equal(opened.laps.length,1);
  await prepareVideo(DEMO_ID);
- assert.equal(videoURL(DEMO_ID),'https://vertexlab.racing/demo/safety-car-demo.mp4');
+ assert.equal(videoURL(DEMO_ID),'https://media.vertexlab.racing/demo/safety-car-demo.mp4');
 
  // Demo is read-only for feature mutations.
  await assert.rejects(()=>request('feature/'+DEMO_ID,{featured:true}),/solo lectura/);

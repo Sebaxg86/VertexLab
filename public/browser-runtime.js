@@ -4,6 +4,7 @@
   const DOWNLOAD_URL='https://vertexlab.racing/#descargar';
   const DEMO_ID='0000000000000000000000000000de01';
   const DEMO_BASE='https://vertexlab.racing/demo/';
+  const DEMO_VIDEO_FALLBACK='https://media.vertexlab.racing/demo/safety-car-demo.mp4';
   const DEMO_ITEM={
     id:DEMO_ID,
     name:'Safety Car DEMO',
@@ -38,7 +39,7 @@
     const statusEl=typeof document!=='undefined'?document.querySelector?.('.session-loading-card>span'):null;
     if(statusEl)statusEl.textContent='Descargando sesión demo…';
     const [metaRes,telRes]=await Promise.all([
-      fetch(DEMO_BASE+'safety-car-demo.meta.json'),
+      fetch(DEMO_BASE+'safety-car-demo.meta.json',{cache:'no-cache'}),
       fetch(DEMO_BASE+'safety-car-demo.jsonl.gz')
     ]);
     if(!metaRes.ok||!telRes.ok)throw Error('No se pudo cargar la sesión demo. Comprueba tu conexión e inténtalo de nuevo.');
@@ -68,7 +69,7 @@
       laps,
       file:null,
       video:null,
-      demoVideoUrl:remoteMeta.videoUrl||(DEMO_BASE+'safety-car-demo.mp4'),
+      demoVideoUrl:remoteMeta.videoUrl||DEMO_VIDEO_FALLBACK,
       url:null,
       preview:remoteMeta.preview||DEMO_ITEM.preview
     };
