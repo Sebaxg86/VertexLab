@@ -35,7 +35,7 @@ class BatchPortableTests(unittest.TestCase):
             self.assertEqual(restored['count'],2)
             for item in restored['sessions']:
                 info=json.loads((destination/(item['id']+'.json')).read_text())
-                self.assertEqual(Path(info['videoPath']).parent,destination)
+                self.assertEqual(Path(info['videoPath']).parent.resolve(), destination.resolve())
                 self.assertEqual(Path(info['videoPath']).read_bytes(),self.video.read_bytes())
                 self.assertEqual((destination/(item['id']+'.jsonl')).read_bytes(),self.telemetry.read_bytes())
         finally:
