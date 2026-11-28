@@ -19,10 +19,24 @@ class OBS:
         self.error = None
         self.port = 4455
         self.password = os.environ.get('VERTEXLAB_OBS_PASSWORD', os.environ.get('RACELAB_OBS_PASSWORD', ''))
+        self.external_recording = False
+        self.external_paused = False
+        self.last_record_status = None
 
     def status(self):
         return dict(enabled=self.enabled, connected=self.ws is not None,
-                    owned=self.owned, error=self.error, port=self.port)
+                    owned=self.owned, error=self.error, port=self.port,
+                    externalRecording=self.external_recording,
+                    externalPaused=self.external_paused)
+
+    def _update_record_state(self, status):
+        if not isinstance(status, dict):
+            return
+        self.last_record_status = dict(status)
+        active = bool(status.get('outputActive'))
+        paused = bool(status.get('outputPaused'))
+        self.external_recording = active and not self.owned
+        self.external_paused = active and paused and not self.owned
 
     def connect(self, port=4455, password=''):
         if self.owned:
@@ -48,7 +62,8 @@ class OBS:
             self.ws.send(json.dumps(dict(op=1, d=identify)))
             if self._read().get('op') != 2:
                 raise ValueError('OBS rechazó la autenticación')
-            self.request('GetRecordStatus')
+            status = self.request('GetRecordStatus')
+            self._update_record_state(status)
             self.enabled = True
             self.error = None
         except Exception as e:
@@ -60,6 +75,9 @@ class OBS:
         if self.ws:
             self.ws.close()
         self.ws = None
+        self.external_recording = False
+        self.external_paused = False
+        self.last_record_status = None
 
     def _read(self):
         message = self.ws.recv()
@@ -108,18 +126,37 @@ class OBS:
             if self.ws is ws:
                 ws.settimeout(timeout)
 
+    def refresh_recording_state(self):
+        """Bounded read-only recording status check when idle; never modifies OBS."""
+        ws = self.ws
+        if not ws:
+            return None
+        timeout = ws.gettimeout()
+        try:
+            ws.settimeout(.25)
+            status = self.request('GetRecordStatus')
+            self._update_record_state(status)
+            return status
+        except Exception:
+            return None
+        finally:
+            if self.ws is ws:
+                ws.settimeout(timeout)
+
     def anchor(self):
         before = time.monotonic()
         status = self.request('GetRecordStatus')
         after = time.monotonic()
+        self._update_record_state(status)
         return dict(wall=(before+after)/2, video=status['outputDuration']/1000,
                     uncertainty=(after-before)/2, paused=status['outputPaused'],
                     active=status['outputActive'])
 
-    def wait_state(self, active, paused=None, message='OBS no confirmó el cambio'):
+    def wait_state(self, active, paused=None, message='OBS no confirmó el cambio', timeout=None):
         # WebSocket acknowledges the request before the OBS frontend applies it.
         # Read fresh status until the actual output reaches the requested state.
-        deadline = time.monotonic() + self.STATE_TIMEOUT
+        limit = self.STATE_TIMEOUT if timeout is None else (timeout if self.STATE_TIMEOUT >= 1.0 else self.STATE_TIMEOUT)
+        deadline = time.monotonic() + limit
         while True:
             anchor = self.anchor()
             if anchor['active'] == active and (paused is None or anchor['paused'] == paused):
@@ -150,10 +187,13 @@ class OBS:
         if not self.enabled:
             return None
         status = self.request('GetRecordStatus')
+        self._update_record_state(status)
         if status['outputActive']:
             raise ValueError('OBS ya graba por tu cuenta; VertexLab no modificará esa grabación')
         self.request('StartRecord')
         self.owned = True
+        self.external_recording = False
+        self.external_paused = False
         return self.settled_anchor(self.wait_state(True, False, 'OBS no confirmó el inicio de la grabación'))
 
     def pause(self):
@@ -174,6 +214,8 @@ class OBS:
         if not self.owned:
             return None
         response = self.request('StopRecord')
-        self.wait_state(False, message='OBS no confirmó la finalización del archivo')
+        self.wait_state(False, message='OBS no confirmó la finalización del archivo', timeout=15.0)
         self.owned = False
+        self.external_recording = False
+        self.external_paused = False
         return response.get('outputPath')

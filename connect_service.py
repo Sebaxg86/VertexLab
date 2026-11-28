@@ -20,7 +20,7 @@ class ConnectRuntime(Runtime):
         self.show_window = None
         self.monitor_stop = threading.Event()
         self.monitor_thread = None
-        super().__init__(config.values['dataPath'], obs)
+        super().__init__(config.values['dataPath'], obs, ownership_path=config.path.parent/'obs-owned.json')
         self.recorder.auto = False
         self.recorder.mode = 'idle'
 
@@ -32,6 +32,7 @@ class ConnectRuntime(Runtime):
         if self.config.values['complete'] and not self.config.values['telemetryOnly']:
             try:
                 self.recorder.obs.connect(self.config.values['obsPort'], self.config.password())
+                self.recorder.recover_obs_recording()
             except ValueError as error:
                 self.setup_error = str(error)
         self.recorder.auto = self.ready() and self.config.values['auto']
@@ -48,12 +49,21 @@ class ConnectRuntime(Runtime):
             try:
                 obs = self.recorder.obs
                 probe = getattr(obs, 'probe_connection', None)
-                if obs.ws is not None and probe and not probe():
-                    self.recorder.auto = False
-                    if self.recorder.meta or obs.owned:
-                        self.recorder.error = obs.error
-                    else:
-                        self.recorder.mode = 'idle'
+                if obs.ws is not None and probe:
+                    if not probe():
+                        self.recorder.auto = False
+                        if self.recorder.meta or obs.owned:
+                            self.recorder.error = obs.error
+                        else:
+                            self.recorder.mode = 'idle'
+                    elif not self.recorder.meta and not obs.owned:
+                        refresh = getattr(obs, 'refresh_recording_state', None)
+                        if refresh:
+                            status = refresh()
+                            if status is not None and not getattr(obs, 'external_recording', False):
+                                if self.recorder.error and 'OBS ya graba' in self.recorder.error:
+                                    self.recorder.error = None
+                                    obs.error = None
             finally:
                 self.lock.release()
 

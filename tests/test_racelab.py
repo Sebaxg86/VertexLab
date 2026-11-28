@@ -358,6 +358,55 @@ let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end'
         self.assertIsNone(self.rec.file)
         self.assertEqual(self.rec.mode, 'armed')
 
+    def test_persisted_obs_lease_recovers_orphaned_recording_after_restart(self):
+        lease_path = Path(self.tmp.name) / 'obs-owned.json'
+        self.rec = Recorder(self.tmp.name, self.obs, ownership_path=lease_path)
+        self.obs.path = 'orphaned-video.mp4'
+        self.feed(100)
+        sid = self.rec.meta['id']
+        self.assertTrue(lease_path.is_file())
+        # Simulate abrupt process kill without finish(): OBS is still active, new Recorder has owned=False.
+        self.rec.file.close()
+        self.rec.meta = None
+        self.rec.file = None
+        fresh_obs = FakeOBS()
+        fresh_obs.path = 'orphaned-video.mp4'
+        fresh_obs.port = 4455
+        fresh_obs.last_record_status = dict(outputActive=True, outputPaused=True, outputDuration=1200)
+        fresh_rec = Recorder(self.tmp.name, fresh_obs, ownership_path=lease_path)
+        self.assertTrue(fresh_rec.recover_obs_recording())
+        self.assertEqual(fresh_obs.calls, ['stop'])
+        self.assertFalse(fresh_obs.owned)
+        self.assertFalse(lease_path.is_file())
+        meta = json.loads((Path(self.tmp.name) / (sid + '.json')).read_text(encoding='utf-8'))
+        self.assertEqual(meta['videoPath'], 'orphaned-video.mp4')
+        self.assertIsNotNone(meta['ended'])
+        self.assertEqual(meta['events'][-1]['reason'], 'recovered-after-restart')
+
+    def test_legacy_paused_orphan_recovers_without_touching_manual_obs_recording(self):
+        # Legacy orphan (no lease file): ended=None, videoPath=None, paused OBS duration matches segment.
+        sid = 'b' * 32
+        meta = dict(id=sid, name='AMG GT', created=100, offset=0, version=2, carOrdinal=1009,
+                    automatic=True, events=[], syncSegments=[dict(tStart=0.5, tEnd=92.0, videoStart=0.0)],
+                    syncState='estimated', ended=None, videoPath=None)
+        (Path(self.tmp.name) / (sid + '.json')).write_text(json.dumps(meta), encoding='utf-8')
+        # Case 1: Manual OBS recording (not paused, mismatched duration) is NEVER stopped.
+        manual_obs = FakeOBS()
+        manual_obs.last_record_status = dict(outputActive=True, outputPaused=False, outputDuration=5000)
+        rec = Recorder(self.tmp.name, manual_obs)
+        self.assertFalse(rec.recover_obs_recording())
+        self.assertEqual(manual_obs.calls, [])
+        # Case 2: Paused OBS matching segment duration (91.5s vs 91.3s) IS recovered.
+        orphan_obs = FakeOBS()
+        orphan_obs.path = 'rescued-legacy.mp4'
+        orphan_obs.last_record_status = dict(outputActive=True, outputPaused=True, outputDuration=91300)
+        rec2 = Recorder(self.tmp.name, orphan_obs)
+        self.assertTrue(rec2.recover_obs_recording())
+        self.assertEqual(orphan_obs.calls, ['stop'])
+        saved = json.loads((Path(self.tmp.name) / (sid + '.json')).read_text(encoding='utf-8'))
+        self.assertEqual(saved['videoPath'], 'rescued-legacy.mp4')
+        self.assertIsNotNone(saved['ended'])
+
 
 class FakeWebSocket:
     def __init__(self, active=False, reject_pause=False, delay=0):
@@ -437,6 +486,7 @@ class OBSProtocolTests(unittest.TestCase):
 
     def test_existing_recording_is_never_controlled(self):
         fake = FakeWebSocket(active=True); obs = self.connect(fake)
+        self.assertTrue(obs.status()['externalRecording'])
         with self.assertRaisesRegex(ValueError,'ya graba'): obs.start()
         obs.pause(); obs.resume(); obs.stop()
         names = [m['d']['requestType'] for m in fake.sent if m['op']==6]

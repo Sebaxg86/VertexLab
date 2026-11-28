@@ -21,11 +21,12 @@ function render(){
  el('forza-detail').textContent=state.udpError||(connected?'Telemetría recibida · UDP '+c.udpPort:'Activa Data Out y entra al juego.');
  el('forza-next').disabled=locked||!connected;
  const only=el('telemetry-only').checked;
- const obs=VertexConnectModel.obsState(!!state.obs.connected,only);el('obs-signal').dataset.tone=obs.tone;el('obs-signal-label').textContent=obs.text;
+ const externalObs=!only&&!!state.obs.connected&&!!state.obs.externalRecording;
+ const obs=VertexConnectModel.obsState(!!state.obs.connected,only,externalObs);el('obs-signal').dataset.tone=obs.tone;el('obs-signal-label').textContent=obs.text;
  el('forza-signal').dataset.tone=connected?'green':'gray';
  for(const input of el('obs-fields').querySelectorAll('input,button'))input.disabled=locked||only;
  for(const id of ['udp-port','apply-port','telemetry-only','data-path','browse-folder','save-folder','auto-record'])el(id).disabled=locked;
- el('obs-state').textContent=only?'Solo telemetría · sin video':obsVerified&&state.obs.connected?'OBS conectado · listo para grabar':'OBS pendiente de conexión';
+ el('obs-state').textContent=only?'Solo telemetría · sin video':externalObs?(state.obs.externalPaused?'OBS tiene una grabación pausada. Detenla en OBS para grabar carreras automáticamente.':'OBS ya está grabando por tu cuenta. Detenla en OBS para grabar carreras automáticamente.'):obsVerified&&state.obs.connected?'OBS conectado · listo para grabar':'OBS pendiente de conexión';
  el('obs-next').disabled=locked||(!only&&!(obsVerified&&state.obs.connected));
  el('forza-body').hidden=!quickMode&&step!==1;el('obs-step').hidden=!quickMode&&(step===1||step===3);el('obs-body').hidden=!quickMode&&step!==2;
  el('forza-step').hidden=!quickMode&&step===3;el('ready-step').hidden=quickMode||step!==3;
@@ -34,9 +35,11 @@ function render(){
  el('forza-heading').disabled=quickMode;el('obs-heading').disabled=quickMode;
  for(const item of document.querySelectorAll('.progress [data-step]')){item.classList.toggle('current',Number(item.dataset.step)===step);item.classList.toggle('done',Number(item.dataset.step)<step);item.setAttribute('aria-current',Number(item.dataset.step)===step?'step':'false');item.disabled=locked||Number(item.dataset.step)>furthestStep;}
  el('ready-forza').textContent=connected?'Conectado':'Configurado · esperando al juego';
- el('ready-video').textContent=only?'Solo telemetría':state.obs.connected?'Video + telemetría':'OBS pendiente';
+ el('ready-video').textContent=only?'Solo telemetría':externalObs?'OBS ocupado (detén grabación)':state.obs.connected?'Video + telemetría':'OBS pendiente';
  el('open-app').disabled=busy||!c.complete;
- const summary=VertexConnectModel.readiness(connected,!!state.obs.connected,only);el('intro-status').dataset.tone=summary.tone;el('intro-status').dataset.ready=String(summary.tone==='green');el('intro-status').textContent=summary.text;
+ const summary=VertexConnectModel.readiness(connected,!!state.obs.connected,only,externalObs);el('intro-status').dataset.tone=summary.tone;el('intro-status').dataset.ready=String(summary.tone==='green');el('intro-status').textContent=summary.text;
+ const obsBusyMsg=externalObs?(state.obs.externalPaused?'OBS tiene una grabación pausada. Detenla en OBS antes de iniciar una carrera para grabar video.':'OBS ya graba por tu cuenta. Detén esa grabación en OBS antes de iniciar una carrera.'):'';
+ if(!busy&&!c.error){if(obsBusyMsg)error(obsBusyMsg);else if(el('connection-error').textContent.startsWith('OBS '))error('');}
 
 }
 async function refresh(){if(polling)return;polling=true;try{state=await request('status');if(!state.connect)throw Error('Abre VertexConnect desde su acceso directo.');if(!initialized){initialized=true;el('udp-port').value=state.connect.udpPort;el('obs-port').value=state.connect.obsPort;el('data-path').value=state.connect.dataPath;el('auto-record').checked=state.connect.auto;el('telemetry-only').checked=state.connect.telemetryOnly;obsVerified=state.obs.connected;quickMode=state.connect.complete;step=quickMode?3:1;}if(state.connect.error&&!busy)error(state.connect.error);render();}catch(e){error(e.message);}finally{polling=false;}}

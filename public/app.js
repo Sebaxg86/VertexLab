@@ -3,7 +3,7 @@ VertexPlayback.observe($('video'));
 const colors = ['#ff414c', '#b8c4d2', '#ffb65b', '#69baff', '#bc91ff'];
 let session = null, selected = new Set(), reference = null, t = 0, playing = false;
 let last = 0, zoom = 1, pan = [0, 0], drag = null, objectUrl = null, hasVideo = false;
-let latest = null, revision = null, pendingSeek = null, chartDragging = false;
+let latest = null, revision = null, pendingSeek = null, chartDragging = false, lastStateError = null;
 let liveHistory = [], lastLiveStamp = null, legendKey = null, toastTimer;
 let chartRange = null, liveChartSpan = 20, liveChartOffset = 0;
 let sessionRpmPeak = 0, liveRpmPeak = 0, liveRpmCar = null;
@@ -121,6 +121,26 @@ async function list() {
 
 }
 
+function setVideoEmptyState(mode, detail) {
+  const box = $('video-empty');
+  const title = box.querySelector('p'), sub = box.querySelector('small'), btn = box.querySelector('.viewer-open');
+  if (mode === 'session-error') {
+    if (title) title.textContent = 'Sesión guardada sin video';
+    if (sub) sub.textContent = (detail || 'Hubo un error de OBS al grabar esta sesión.') + ' Puedes reproducir y analizar la telemetría y las vueltas.';
+    if (btn) btn.hidden = true;
+  } else if (mode === 'session-no-video') {
+    if (title) title.textContent = 'Sesión solo con telemetría';
+    if (sub) sub.textContent = 'Esta sesión no tiene video asociado. Puedes reproducir y analizar todas las vueltas y gráficas.';
+    if (btn) btn.hidden = true;
+  } else if (globalThis.VertexBrowser?.enabled) {
+    if (title) title.textContent = 'Tus vueltas, en cualquier pantalla';
+    if (sub) sub.textContent = 'Abre una sesión .vrtx. El archivo se procesa aquí y no se sube a ningún servidor.';
+    if (btn) btn.hidden = false;
+  } else {
+    if (title) title.textContent = 'Tu carrera empieza aquí';
+    if (sub) sub.textContent = 'Selecciona una sesión con video desde el menú.';
+  }
+}
 function clearVideo() {
   $('video').pause(); $('compare-video').pause(); $('compare-video').removeAttribute('src'); $('compare-video').load();
   $('video').removeAttribute('src');
@@ -128,6 +148,7 @@ function clearVideo() {
   if (objectUrl) URL.revokeObjectURL(objectUrl);
   objectUrl = null;
   hasVideo = false;
+  setVideoEmptyState('default');
   $('video-empty').hidden = false;
 }
 async function load(id) {
@@ -161,6 +182,12 @@ async function loadSession(id) {
     else $('video').src='/api/video/'+id;
     $('video-status').textContent = 'Video asociado por OBS. Si tu navegador no admite el formato, remultiplexa a MP4 H.264 y ábrelo con «Abrir video local».';
   } else {
+    const obsError = [...(session.meta.events || [])].reverse().find(event => event.type === 'obs-error');
+    if (obsError || session.meta.syncState === 'error') {
+      setVideoEmptyState('session-error', obsError?.message);
+    } else {
+      setVideoEmptyState('session-no-video');
+    }
     $('video-status').textContent = 'Sin video asociado. Puedes abrir uno local; las sesiones antiguas admiten ajuste manual.';
   }
   $('sync-status').textContent = session.meta.syncState === 'estimated'
@@ -616,8 +643,13 @@ function live(state) {
   $('status').textContent = state.udpError ? 'Error UDP: '+state.udpError : `UDP ${connected ? 'activo' : 'en espera'} · ${state.packets} paquetes · ${state.invalid} rechazados · ${state.dropped} perdidos en cola`;
   $('auto').checked = state.auto;
   syncCaptureControls(state);
-  $('obs-status').textContent = state.obs.error || (state.obs.connected ? `OBS conectado${state.obs.owned ? ' · grabación de VertexLab' : ' · listo'}` : state.obs.enabled ? 'OBS desconectado · revisa la conexión' : 'Sin conectar · sólo telemetría');
-  if (state.error) $('message').textContent = state.error;
+  $('obs-status').textContent = state.obs.error || (state.obs.connected ? `OBS conectado${state.obs.owned ? ' · grabación de VertexLab' : state.obs.externalRecording ? ' · grabando por tu cuenta' : ' · listo'}` : state.obs.enabled ? 'OBS desconectado · revisa la conexión' : 'Sin conectar · sólo telemetría');
+  const nextError = state.error || null;
+  if (nextError !== lastStateError) {
+    if (nextError) $('message').textContent = nextError;
+    else if (lastStateError && $('message').textContent === lastStateError) $('message').textContent = '';
+    lastStateError = nextError;
+  }
   const packet = state.packet;
   if(packet?.active && Number.isFinite(packet.rpm)) {
     if(packet.carOrdinal!==liveRpmCar){liveRpmCar=packet.carOrdinal;liveRpmPeak=0;}

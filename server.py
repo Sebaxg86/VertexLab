@@ -40,9 +40,9 @@ class ThreadingHTTPServer(BaseHTTPServer):
 
 
 class Runtime:
-    def __init__(self, data, obs=None):
+    def __init__(self, data, obs=None, ownership_path=None):
         self.data = Path(data)
-        self.recorder = Recorder(self.data, obs or OBS())
+        self.recorder = Recorder(self.data, obs or OBS(), ownership_path=ownership_path)
         self.lock = threading.RLock()
         self.live_lock = threading.Lock()
         self.live = dict(packet=None, packets=0, invalid=0, dropped=0, lastPacket=None, udpError=None)
@@ -475,6 +475,7 @@ class Runtime:
                 raise ValueError('Termina la sesión antes de configurar OBS')
             r.obs.connect(body.get('port',4455), str(body.get('password','')))
             r.error = None
+            r.recover_obs_recording()
         elif name == 'obs-disable':
             if r.meta or r.obs.owned:
                 raise ValueError('Finaliza la grabación antes de desconectar OBS')

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import shutil
 
-PREFERENCES = ('connect.json', 'connect.tmp', 'window.json', 'window.tmp', 'settings.json', 'connect.log')
+PREFERENCES = ('connect.json', 'connect.tmp', 'window.json', 'window.tmp', 'settings.json', 'connect.log', 'obs-owned.json', 'obs-owned.tmp')
 MEDIA = {'.jsonl', '.vrtx', '.mp4', '.mkv', '.mov', '.webm', '.m4v', '.avi'}
 
 

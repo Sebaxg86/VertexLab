@@ -9,8 +9,11 @@ test('every Forza, OBS and telemetry-only combination has the requested readines
 });
 test('OBS signal gives priority to the explicit telemetry-only selection',()=>{
  assert.deepEqual(obsState(true,false),{tone:'green',text:'OBS conectado'});
+ assert.deepEqual(obsState(true,false,true),{tone:'yellow',text:'OBS grabando por tu cuenta'});
  assert.deepEqual(obsState(false,false),{tone:'gray',text:'OBS desconectado'});
  for(const connected of [true,false])assert.deepEqual(obsState(connected,true),{tone:'yellow',text:'Solo telemetría'});
+ assert.deepEqual(readiness(true,true,false,true),{tone:'yellow',text:'OBS ocupado · detén tu grabación'});
+ assert.deepEqual(readiness(true,true,true,true),{tone:'green',text:'LISTO PARA CAPTURAR · SIN VIDEO'});
 });
 test('configured Forza status tolerates paused UDP but the first setup still requires fresh packets',()=>{
  const state={packet:{active:false},packetAge:40,gameRunning:true,connect:{forzaConnected:false}};

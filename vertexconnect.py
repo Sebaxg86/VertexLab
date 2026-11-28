@@ -90,6 +90,19 @@ def show_error(message):
         print(message, file=sys.stderr)
 
 
+def confirm_stop_and_quit():
+    if os.name == 'nt':
+        import ctypes
+        # MB_YESNO (0x4) | MB_ICONQUESTION (0x20)
+        return ctypes.windll.user32.MessageBoxW(
+            None,
+            'Hay una sesión activa o en pausa.\n\n¿Finalizarla, guardar el video de OBS y salir de VertexConnect?',
+            'VertexConnect',
+            0x24,
+        ) == 6
+    return True
+
+
 def desktop(runtime, config, url):
     import webview
     import pystray
@@ -136,8 +149,16 @@ def desktop(runtime, config, url):
 
     def quit_app(*_):
         if not can_quit():
-            show_error('Hay una sesión en curso. Finalízala en VertexLab antes de salir.')
-            return
+            if not confirm_stop_and_quit():
+                return
+            try:
+                runtime.command('stop', {})
+            except Exception as error:
+                show_error(f'No se pudo finalizar la sesión en curso: {error}')
+                return
+            if not can_quit():
+                show_error('OBS conserva una grabación pendiente. Detenla o finaliza la sesión en VertexLab antes de salir.')
+                return
         quitting.set()
         if tray:
             tray.stop()
@@ -174,7 +195,7 @@ def desktop(runtime, config, url):
                                 enabled=lambda _: config.values['complete'], default=True),
                 pystray.MenuItem('Configurar conexiones', show_settings),
                 pystray.Menu.SEPARATOR,
-                pystray.MenuItem('Salir de VertexConnect', quit_app, enabled=can_quit)))
+                pystray.MenuItem('Salir de VertexConnect', quit_app)))
             tray.run_detached()
         except Exception:
             logging.exception('Notification icon unavailable; keeping the window open')

@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.2.17"
+  #define AppVersion "0.2.18"
 #endif
 [Setup]
 AppId={{72CD7404-CBB3-4DCD-85CC-EE0249E045AA}
@@ -128,16 +128,37 @@ begin
 end;
 
 
-function InitializeUninstall: Boolean;
+function IsVertexConnectRunning: Boolean;
 var
   Locator, Services, Processes: Variant;
 begin
   Result := False;
+  Locator := CreateOleObject('WbemScripting.SWbemLocator');
+  Services := Locator.ConnectServer('', 'root\CIMV2');
+  Processes := Services.ExecQuery('SELECT ProcessId FROM Win32_Process WHERE Name = ''VertexConnect.exe''');
+  Result := Processes.Count > 0;
+end;
+
+function InitializeSetup: Boolean;
+begin
+  Result := True;
+  if WizardSilent then
+    Exit;
   try
-    Locator := CreateOleObject('WbemScripting.SWbemLocator');
-    Services := Locator.ConnectServer('', 'root\CIMV2');
-    Processes := Services.ExecQuery('SELECT ProcessId FROM Win32_Process WHERE Name = ''VertexConnect.exe''');
-    if Processes.Count > 0 then begin
+    if IsVertexConnectRunning then begin
+      MsgBox('Cierra VertexConnect desde el icono junto al reloj (Salir de VertexConnect) antes de instalar o actualizar, para guardar cualquier grabación activa.', mbInformation, MB_OK);
+      Result := False;
+    end;
+  except
+    Result := True;
+  end;
+end;
+
+function InitializeUninstall: Boolean;
+begin
+  Result := False;
+  try
+    if IsVertexConnectRunning then begin
       MsgBox('Cierra VertexConnect desde el icono junto al reloj: Salir de VertexConnect. La X solo oculta la ventana. No se interrumpirá ninguna grabación.', mbInformation, MB_OK);
       Exit;
     end;
