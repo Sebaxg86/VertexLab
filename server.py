@@ -59,6 +59,7 @@ class Runtime:
         self.portable_exports = {}
         self.cloud = CloudSyncService()
         self.cloud_sessions_cache = {}
+        self.cloud_open_cache = {}
         self.cloud_jobs = {}
         self.cloud_jobs_lock = threading.Lock()
         self.cloud_account_lock = threading.RLock()
@@ -179,6 +180,7 @@ class Runtime:
             if (self.cloud.user or {}).get('id') != user['id']:
                 self.cloud_account_epoch += 1
                 self.cloud_sessions_cache = {}
+                self.cloud_open_cache.clear()
             self.cloud.set_session(token, user)
             self.cloud.fetch_profile()
             self.refresh_cloud_index()
@@ -187,6 +189,7 @@ class Runtime:
             self.cloud_account_epoch += 1
             self.cloud.clear_session()
             self.cloud_sessions_cache = {}
+            self.cloud_open_cache.clear()
             return self.cloud.status()
         if action == 'refresh':
             self.cloud.fetch_profile()
@@ -204,8 +207,10 @@ class Runtime:
             return self.cloud.set_drive_folder(body.get('folderId'), body.get('folderName', 'VertexLab'))
         if action == 'drive/disconnect':
             self.cloud_account_epoch += 1
-            result = self.cloud.disconnect_drive()
+            local_only = bool(body.get('localOnly')) or not self.cloud.user_jwt
+            result = self.cloud.disconnect_drive(local_only=local_only)
             self.cloud_sessions_cache = {}
+            self.cloud_open_cache.clear()
             return result
         if action.startswith('sync/'):
             sid = action.split('/', 1)[1]
@@ -282,28 +287,68 @@ class Runtime:
             folder_id = crow.get('drive_folder_id')
             result = self.cloud.delete_cloud_session(sid, folder_id)
             self.cloud_sessions_cache.pop(sid, None)
+            self.cloud_open_cache.pop(sid, None)
             return result
         raise ValueError('Acción de nube desconocida')
 
+    @staticmethod
+    def _cloud_info(crow):
+        return dict(
+            driveFolderId=crow.get('drive_folder_id'),
+            driveMetaFileId=crow.get('drive_meta_file_id'),
+            driveTelemetryFileId=crow.get('drive_telemetry_file_id'),
+            driveVideoFileId=crow.get('drive_video_file_id'),
+            videoSize=crow.get('video_size'),
+            videoMime=crow.get('video_mime'),
+            videoName=crow.get('video_name'),
+            telemetryEncoding=crow.get('telemetry_encoding', 'gzip'),
+        )
+
+    def _get_cloud_row(self, sid):
+        with self.cloud_account_lock:
+            crow = self.cloud_sessions_cache.get(sid)
+            if not crow and self.cloud.configured and self.cloud.user_jwt:
+                self.refresh_cloud_index()
+                crow = self.cloud_sessions_cache.get(sid)
+            return dict(crow) if crow else None
+
     def read_session(self, sid):
+        path = self.session_path(sid)
         with self.lock:
-            path = self.session_path(sid)
-            meta = json.loads(path.read_text(encoding='utf-8'))
-            rows = [json.loads(line) for line in path.with_suffix('.jsonl').read_text(encoding='utf-8').splitlines()]
-        crow = self.cloud_sessions_cache.get(sid)
-        meta['availability'] = dict(local=True, cloud=crow is not None)
-        if crow:
-            meta['cloud'] = dict(
-                driveFolderId=crow.get('drive_folder_id'),
-                driveMetaFileId=crow.get('drive_meta_file_id'),
-                driveTelemetryFileId=crow.get('drive_telemetry_file_id'),
-                driveVideoFileId=crow.get('drive_video_file_id'),
-                videoSize=crow.get('video_size'),
-                videoMime=crow.get('video_mime'),
-                videoName=crow.get('video_name'),
-                telemetryEncoding=crow.get('telemetry_encoding', 'gzip'),
-            )
-        return dict(meta=meta, laps=analyze(rows))
+            local_exists = path.is_file() and path.with_suffix('.jsonl').is_file()
+            if local_exists:
+                meta = json.loads(path.read_text(encoding='utf-8'))
+                rows = [json.loads(line) for line in path.with_suffix('.jsonl').read_text(encoding='utf-8').splitlines()]
+        if local_exists:
+            crow = self.cloud_sessions_cache.get(sid)
+            meta['availability'] = dict(local=True, cloud=crow is not None)
+            if crow:
+                meta['cloud'] = self._cloud_info(crow)
+            return dict(meta=meta, laps=analyze(rows))
+
+        crow = self._get_cloud_row(sid)
+        if not crow:
+            raise FileNotFoundError('No se encontró la sesión')
+        cache_key = (self.cloud_account_epoch, crow.get('drive_meta_file_id'), crow.get('drive_telemetry_file_id'))
+        with self.cloud_account_lock:
+            cached = self.cloud_open_cache.get(sid)
+        if cached and cached[0] == cache_key:
+            meta, laps = dict(cached[1]), cached[2]
+        else:
+            meta, rows = self.cloud.read_cloud_session(crow)
+            laps = analyze(rows)
+            with self.cloud_account_lock:
+                if len(self.cloud_open_cache) >= 4:
+                    self.cloud_open_cache.pop(next(iter(self.cloud_open_cache)))
+                self.cloud_open_cache[sid] = (cache_key, dict(meta), laps)
+        meta['featured'] = bool(crow.get('featured', meta.get('featured', False)))
+        if 'sync_offset' in crow:
+            meta['offset'] = float(crow.get('sync_offset') or 0)
+        meta['carName'] = crow.get('car_name') or car_name(meta.get('carOrdinal', 0))
+        meta['brand'] = BRANDS.get(str(meta.get('carOrdinal')))
+        meta['availability'] = dict(local=False, cloud=True)
+        meta['cloud'] = self._cloud_info(crow)
+        return dict(meta=meta, laps=laps)
 
     def prepare_export(self, sid, view, expire=True):
         with self.lock:
@@ -377,6 +422,25 @@ class Runtime:
         if prepared:
             prepared[0].unlink(missing_ok=True)
 
+    def sync_cloud_metadata(self, sid, changes, required=False):
+        crow = self._get_cloud_row(sid)
+        if not crow:
+            if required:
+                raise ValueError('No se encontró la sesión')
+            return
+        try:
+            with self.cloud_account_lock:
+                if not self.cloud.user_jwt:
+                    if required:
+                        raise ValueError('Inicia sesión en tu cuenta de VertexLab primero')
+                    return
+                self.cloud.update_cloud_metadata(sid, changes)
+                if sid in self.cloud_sessions_cache:
+                    self.cloud_sessions_cache[sid].update(changes)
+        except Exception:
+            if required:
+                raise
+
     def command(self, name, body):
         done = threading.Event()
         result = {}
@@ -385,7 +449,16 @@ class Runtime:
             raise ValueError('La operación sigue pendiente; revisa el estado antes de repetirla')
         if 'error' in result:
             raise ValueError(result['error'])
-        return result.get('value', {'ok':True})
+        value = result.get('value', {'ok':True})
+        if name.startswith('feature/') and isinstance(value, dict) and 'local' in value:
+            sid = name.split('/')[-1]
+            is_local = value.pop('local')
+            self.sync_cloud_metadata(sid, {'featured': value['featured']}, required=not is_local)
+        elif name.startswith('sync/') and isinstance(value, dict):
+            sid = name.split('/')[-1]
+            is_local = value.pop('local', True)
+            self.sync_cloud_metadata(sid, {'sync_offset': value['offset']}, required=not is_local)
+        return value
 
     def execute(self, name, body):
         r = self.recorder
@@ -408,14 +481,19 @@ class Runtime:
             r.obs.enabled = False
             r.obs.disconnect()
         elif name.startswith('feature/') or name.startswith('delete/'):
-            path = self.session_path(name.split('/')[-1])
-            meta = json.loads(path.read_text(encoding='utf-8'))
+            sid = name.split('/')[-1]
+            path = self.session_path(sid)
             if name.startswith('feature/'):
-                meta['featured'] = bool(body.get('featured'))
+                featured = bool(body.get('featured'))
+                if not path.is_file():
+                    return dict(featured=featured, local=False)
+                meta = json.loads(path.read_text(encoding='utf-8'))
+                meta['featured'] = featured
                 if r.meta and r.meta['id'] == meta['id']:
-                    r.meta['featured'] = meta['featured']
+                    r.meta['featured'] = featured
                 path.write_text(json.dumps(meta,ensure_ascii=False),encoding='utf-8')
-                return dict(featured=meta['featured'])
+                return dict(featured=featured, local=True)
+            meta = json.loads(path.read_text(encoding='utf-8'))
             if body.get('confirm') is not True:
                 raise ValueError('Confirma la eliminación de la sesión y su video')
             if r.meta and r.meta['id'] == meta['id']:
@@ -443,11 +521,14 @@ class Runtime:
                 r.last_saved = None
             return dict(ok=True)
         elif name.startswith('sync/'):
-            path = self.session_path(name.split('/')[-1])
-            meta = json.loads(path.read_text(encoding='utf-8'))
+            sid = name.split('/')[-1]
+            path = self.session_path(sid)
             offset = float(body['offset'])
             if not -86400 < offset < 86400:
                 raise ValueError('Desfase inválido')
+            if not path.is_file():
+                return dict(id=sid, offset=offset, local=False)
+            meta = json.loads(path.read_text(encoding='utf-8'))
             if r.meta and r.meta['id'] == meta['id']:
                 raise ValueError('Espera a que termine la sesión para ajustar la sincronización')
             meta['offset'] = offset
@@ -602,10 +683,31 @@ def handler_for(runtime):
                 self.send_header('Content-Length',str(len(payload)))
                 self.end_headers()
                 self.wfile.write(payload)
+            except CloudError as e:
+                self.send({'error':str(e)}, e.status if isinstance(e.status, int) and 400 <= e.status < 600 else 502)
             except (ValueError, FileNotFoundError) as e:
                 self.send({'error':str(e)},404)
             except ConnectionError:
                 pass
+
+        def do_HEAD(self):
+            if not self.valid_host():
+                self.send_response(403)
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+                return
+            route = urlparse(self.path).path
+            if route.startswith('/api/video/'):
+                try:
+                    return self.video(route.split('/')[-1], head_only=True)
+                except (ValueError, FileNotFoundError, CloudError):
+                    self.send_response(404)
+                    self.send_header('Content-Length', '0')
+                    self.end_headers()
+                    return
+            self.send_response(405)
+            self.send_header('Content-Length', '0')
+            self.end_headers()
 
         def events(self):
             self.send_response(200)
@@ -623,13 +725,16 @@ def handler_for(runtime):
                 pass
             self.close_connection = True
 
-        def video(self, sid):
-            # Only a file returned by OBS and saved in this session can be served.
+        def video(self, sid, head_only=False):
+            # Only a file returned by OBS and saved in this session (or its Google Drive backup) can be served.
+            session_file = runtime.session_path(sid)
             with runtime.lock:
-                meta = json.loads(runtime.session_path(sid).read_text(encoding='utf-8'))
-            if not meta.get('videoPath'):
+                local_meta = json.loads(session_file.read_text(encoding='utf-8')) if session_file.is_file() else None
+            if local_meta is None:
+                return self.cloud_video(sid, head_only=head_only)
+            if not local_meta.get('videoPath'):
                 return self.send({'error':'La sesión no tiene video asociado'},404)
-            path = Path(meta['videoPath'])
+            path = Path(local_meta['videoPath'])
             if not path.is_file():
                 return self.send({'error':'No se encuentra el archivo guardado por OBS'},404)
             size = path.stat().st_size
@@ -654,6 +759,8 @@ def handler_for(runtime):
             if header:
                 self.send_header('Content-Range',f'bytes {start}-{end}/{size}')
             self.end_headers()
+            if head_only:
+                return
             with path.open('rb') as f:
                 f.seek(start)
                 left = end-start+1
@@ -663,6 +770,79 @@ def handler_for(runtime):
                         break
                     self.wfile.write(chunk)
                     left -= len(chunk)
+
+        def cloud_video(self, sid, head_only=False):
+            crow = runtime._get_cloud_row(sid)
+            file_id = crow.get('drive_video_file_id') if crow else None
+            if not file_id:
+                return self.send({'error':'La sesión no tiene video asociado'},404)
+            size = crow.get('video_size')
+            mime = crow.get('video_mime') or mimetypes.guess_type(crow.get('video_name') or 'video.mp4')[0] or 'video/mp4'
+            if not isinstance(size, int) or size < 1:
+                return self.send({'error':'Tamaño de video en la nube desconocido'},404)
+            header = self.headers.get('Range')
+            if head_only and not header:
+                self.send_response(200)
+                self.send_header('Content-Type', mime)
+                self.send_header('Accept-Ranges', 'bytes')
+                self.send_header('Content-Length', str(size))
+                self.send_header('Cache-Control', 'private, max-age=60')
+                self.end_headers()
+                return
+            window = 2 * 1024 * 1024
+            if header:
+                match = re.fullmatch(r'bytes=(\d*)-(\d*)', header)
+                if not match or not any(match.groups()):
+                    return self.send({'error':'Rango inválido'},416)
+                a, b = match.groups()
+                if a:
+                    start = int(a)
+                    requested_end = min(int(b), size - 1) if b else size - 1
+                    end = min(requested_end, start + window - 1)
+                else:
+                    suffix = int(b)
+                    start = max(0, size - suffix)
+                    end = min(size - 1, start + window - 1)
+                if start > end or start >= size:
+                    self.send_response(416)
+                    self.send_header('Content-Range', f'bytes */{size}')
+                    self.send_header('Content-Length', '0')
+                    self.end_headers()
+                    return
+                if head_only:
+                    self.send_response(206)
+                    self.send_header('Content-Type', mime)
+                    self.send_header('Accept-Ranges', 'bytes')
+                    self.send_header('Content-Range', f'bytes {start}-{end}/{size}')
+                    self.send_header('Content-Length', str(end - start + 1))
+                    self.end_headers()
+                    return
+                _, _, payload = runtime.cloud.read_drive_video_range(file_id, start, end)
+                if not payload:
+                    return self.send({'error':'Google Drive no devolvió datos del video'}, 502)
+                actual_end = start + len(payload) - 1
+                self.send_response(206)
+                self.send_header('Content-Type', mime)
+                self.send_header('Accept-Ranges', 'bytes')
+                self.send_header('Content-Range', f'bytes {start}-{actual_end}/{size}')
+                self.send_header('Content-Length', str(len(payload)))
+                self.send_header('Cache-Control', 'private, max-age=60')
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+            end = min(size - 1, window - 1)
+            _, _, payload = runtime.cloud.read_drive_video_range(file_id, 0, end)
+            if not payload:
+                return self.send({'error':'Google Drive no devolvió datos del video'}, 502)
+            self.send_response(206 if end < size - 1 else 200)
+            self.send_header('Content-Type', mime)
+            self.send_header('Accept-Ranges', 'bytes')
+            if end < size - 1:
+                self.send_header('Content-Range', f'bytes 0-{len(payload) - 1}/{size}')
+            self.send_header('Content-Length', str(len(payload)))
+            self.send_header('Cache-Control', 'private, max-age=60')
+            self.end_headers()
+            self.wfile.write(payload)
 
         def portable_download(self, token):
             with runtime.lock:

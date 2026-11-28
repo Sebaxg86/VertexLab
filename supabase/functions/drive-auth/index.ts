@@ -10,6 +10,13 @@ const GOOGLE_REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
 const GOOGLE_ABOUT_URL = 'https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
+const DEFAULT_ALLOWED_ORIGINS = new Set([
+  'https://app.vertexlab.racing',
+  'https://vertexlab.racing',
+  'https://www.vertexlab.racing',
+  'https://sebaxg86.github.io',
+]);
+
 function allowedOrigin(origin: string | null): string {
   if (!origin) return '*';
   const extra = (Deno.env.get('ALLOWED_ORIGINS') || '')
@@ -18,12 +25,12 @@ function allowedOrigin(origin: string | null): string {
     .filter(Boolean);
   if (
     /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin) ||
-    origin === 'https://sebaxg86.github.io' ||
+    DEFAULT_ALLOWED_ORIGINS.has(origin) ||
     extra.includes(origin)
   ) {
     return origin;
   }
-  return 'https://sebaxg86.github.io';
+  return 'https://app.vertexlab.racing';
 }
 
 function corsHeaders(origin: string | null): HeadersInit {
@@ -32,6 +39,7 @@ function corsHeaders(origin: string | null): HeadersInit {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Cache-Control': 'no-store',
+    'Vary': 'Origin',
   };
 }
 

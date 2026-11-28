@@ -25,9 +25,16 @@ DRIVE_ID_RE = re.compile(r'^[A-Za-z0-9_-]{8,128}$')
 class CloudError(ValueError):
     """User-facing cloud sync error."""
 
+    def __init__(self, message, status=None):
+        super().__init__(message)
+        self.status = status
+
 
 def _http_request(url, method='GET', headers=None, data=None, timeout=30):
-    req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
+    merged_headers = dict(headers or {})
+    if not any(k.lower() == 'user-agent' for k in merged_headers):
+        merged_headers['User-Agent'] = 'VertexLab/0.2'
+    req = urllib.request.Request(url, data=data, method=method, headers=merged_headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status, dict(resp.headers.items()), resp.read()
@@ -52,7 +59,7 @@ def _json_or_error(status, body, fallback='Error en el servicio en la nube'):
         or parsed.get('message')
         or fallback
     )
-    raise CloudError(f'{message} (HTTP {status})')
+    raise CloudError(f'{message} (HTTP {status})', status=status)
 
 
 class DriveClient:
@@ -191,6 +198,21 @@ class DriveClient:
         if not 200 <= status < 300:
             _json_or_error(status, body, 'No se pudo descargar el archivo desde Google Drive')
         return body
+
+    def read_range(self, file_id, start, end):
+        if not DRIVE_ID_RE.match(file_id or ''):
+            raise CloudError('ID de archivo de Google Drive inválido')
+        if start < 0 or end < start:
+            raise CloudError('Rango de bytes inválido')
+        status, headers, body = self.http(
+            f'{DRIVE_API}/files/{urllib.parse.quote(file_id)}?alt=media&acknowledgeAbuse=false',
+            method='GET',
+            headers=self._headers({'Range': f'bytes={start}-{end}'}),
+            timeout=60,
+        )
+        if status not in (200, 206):
+            _json_or_error(status, body, 'No se pudo leer el video desde Google Drive')
+        return status, headers, body
 
     def download_file(self, file_id, destination, total_size=None, chunk_size=4 * 1024 * 1024, progress=None):
         """Download a Drive file to destination atomically via byte ranges (or single stream if size unknown)."""
@@ -389,14 +411,15 @@ class CloudSyncService:
         }
         return data
 
-    def disconnect_drive(self):
-        status, _, body = self.http(
-            f'{self.supabase_url}/functions/v1/drive-auth',
-            method='POST',
-            headers=self._sb_headers(),
-            data=json.dumps({'action': 'disconnect'}).encode('utf-8'),
-        )
-        _json_or_error(status, body, 'No se pudo desconectar Google Drive')
+    def disconnect_drive(self, local_only=False):
+        if not local_only:
+            status, _, body = self.http(
+                f'{self.supabase_url}/functions/v1/drive-auth',
+                method='POST',
+                headers=self._sb_headers(),
+                data=json.dumps({'action': 'disconnect'}).encode('utf-8'),
+            )
+            _json_or_error(status, body, 'No se pudo desconectar Google Drive')
         self._drive_token = None
         self._drive_token_expiry = 0.0
         self.profile = {
@@ -407,6 +430,45 @@ class CloudSyncService:
             'drive_root_folder_name': None,
         }
         return {'connected': False}
+
+    def _with_drive_retry(self, fn):
+        try:
+            return fn(DriveClient(self.get_drive_token(), http=self.http))
+        except CloudError as exc:
+            if exc.status != 401:
+                raise
+            return fn(DriveClient(self.get_drive_token(force_refresh=True), http=self.http))
+
+    def read_cloud_session(self, cloud_row):
+        """Fetch a cloud session's metadata and telemetry from Google Drive for direct streaming."""
+        sid = cloud_row.get('id', '')
+        if not HEX32_RE.match(sid):
+            raise CloudError('ID de sesión en la nube inválido')
+        meta_id = cloud_row.get('drive_meta_file_id')
+        tel_id = cloud_row.get('drive_telemetry_file_id')
+        if not meta_id or not tel_id:
+            raise CloudError('Metadatos de nube incompletos para esta sesión')
+        meta_raw = self._with_drive_retry(lambda drive: drive.download_bytes(meta_id))
+        meta = json.loads(meta_raw.decode('utf-8'))
+        meta['id'] = sid
+        if 'featured' in cloud_row:
+            meta['featured'] = bool(cloud_row['featured'])
+        if 'sync_offset' in cloud_row:
+            meta['offset'] = float(cloud_row['sync_offset'] or 0)
+        validate_meta(meta)
+        tel_raw = self._with_drive_retry(lambda drive: drive.download_bytes(tel_id))
+        if cloud_row.get('telemetry_encoding', 'gzip') == 'gzip':
+            tel_raw = gzip.decompress(tel_raw)
+        rows = [json.loads(line) for line in tel_raw.decode('utf-8').splitlines() if line.strip()]
+        if cloud_row.get('drive_video_file_id'):
+            meta['videoPath'] = 'streaming desde Google Drive'
+        else:
+            meta.pop('videoPath', None)
+        return meta, rows
+
+    def read_drive_video_range(self, file_id, start, end):
+        """Read a byte range of a Drive video with automatic 401 Drive token refresh."""
+        return self._with_drive_retry(lambda drive: drive.read_range(file_id, start, end))
 
     def list_cloud_sessions(self):
         if not self.configured or not self.user_jwt:

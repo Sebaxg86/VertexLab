@@ -217,5 +217,113 @@ class DownloadRangeTests(unittest.TestCase):
                 self.assertEqual(list(Path(directory).iterdir()), [target])
 
 
+class DesktopCloudStreamingTests(unittest.TestCase):
+    def test_desktop_server_reads_and_streams_cloud_only_session_with_range_and_metadata_sync(self):
+        import threading
+        import urllib.request
+        from server import Runtime, ThreadingHTTPServer, handler_for
+
+        transport = FakeCloudTransport()
+        token_calls = []
+        original_call = transport.__call__
+
+        def transport_with_401(url, method='GET', headers=None, data=None, timeout=30):
+            if '/functions/v1/drive-auth' in url:
+                body = json.loads(data.decode('utf-8'))
+                if body.get('action') == 'token':
+                    token_calls.append(len(token_calls) + 1)
+                    return 200, {}, json.dumps({
+                        'connected': True,
+                        'accessToken': f'ya29.token-{len(token_calls)}',
+                        'expiresIn': 3600,
+                        'driveEmail': transport.profile['drive_email'],
+                        'driveRootFolderId': transport.profile['drive_root_folder_id'],
+                        'driveRootFolderName': transport.profile['drive_root_folder_name'],
+                    }).encode('utf-8')
+            if '/drive/v3/files/' in url and 'alt=media' in url and (headers or {}).get('Authorization') == 'Bearer ya29.token-1':
+                # Simulate an expired cached Drive token on the first attempt so 401 refresh retry is verified.
+                if len(token_calls) == 1:
+                    return 401, {}, json.dumps({'error': {'message': 'Invalid Credentials'}}).encode('utf-8')
+            return original_call(url, method=method, headers=headers, data=data, timeout=timeout)
+
+        uploader = CloudSyncService('https://demo.supabase.co', 'anon-key', http=transport)
+        uploader.set_session('user-jwt', {'id': 'user-123', 'email': 'driver@example.com'}, dict(transport.profile))
+
+        with tempfile.TemporaryDirectory() as src_dir, tempfile.TemporaryDirectory() as desktop_dir:
+            sid, video_path = CloudSyncTests()._make_session(src_dir)
+            cloud_row = uploader.sync_session(src_dir, sid)
+            expected_video = video_path.read_bytes()
+
+            runtime = Runtime(desktop_dir)
+            runtime.cloud = CloudSyncService('https://demo.supabase.co', 'anon-key', http=transport_with_401)
+            runtime.cloud.set_session('user-jwt', {'id': 'user-123', 'email': 'driver@example.com'}, dict(transport.profile))
+            runtime.cloud_sessions_cache[sid] = cloud_row
+
+            httpd = ThreadingHTTPServer(('127.0.0.1', 0), handler_for(runtime))
+            port = httpd.server_address[1]
+            thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+            thread.start()
+            base = f'http://127.0.0.1:{port}'
+            try:
+                # 1. Read cloud-only session in desktop mode (triggers 401 refresh retry cleanly)
+                with urllib.request.urlopen(f'{base}/api/sessions/{sid}', timeout=5) as resp:
+                    payload = json.loads(resp.read().decode('utf-8'))
+                self.assertEqual(payload['meta']['id'], sid)
+                self.assertEqual(payload['meta']['availability'], {'local': False, 'cloud': True})
+                self.assertEqual(payload['meta']['videoPath'], 'streaming desde Google Drive')
+                self.assertGreaterEqual(len(payload['laps']), 1)
+                self.assertGreaterEqual(len(token_calls), 2)
+
+                # 2. Stream cloud-only video with HTTP 206 Range request + HEAD support
+                head_req = urllib.request.Request(f'{base}/api/video/{sid}', method='HEAD')
+                with urllib.request.urlopen(head_req, timeout=5) as head_resp:
+                    self.assertEqual(head_resp.status, 200)
+                    self.assertEqual(head_resp.headers['Content-Length'], str(len(expected_video)))
+                    self.assertEqual(head_resp.headers['Accept-Ranges'], 'bytes')
+
+                range_req = urllib.request.Request(f'{base}/api/video/{sid}', headers={'Range': 'bytes=16-143'})
+                with urllib.request.urlopen(range_req, timeout=5) as range_resp:
+                    self.assertEqual(range_resp.status, 206)
+                    self.assertEqual(range_resp.headers['Content-Range'], f'bytes 16-143/{len(expected_video)}')
+                    self.assertEqual(range_resp.read(), expected_video[16:144])
+
+                # 3. Feature + sync offset update Supabase cloud metadata for cloud-only session
+                feat_req = urllib.request.Request(
+                    f'{base}/api/feature/{sid}',
+                    data=json.dumps({'featured': False}).encode('utf-8'),
+                    headers={'Content-Type': 'application/json'},
+                    method='POST',
+                )
+                with urllib.request.urlopen(feat_req, timeout=5) as feat_resp:
+                    self.assertEqual(json.loads(feat_resp.read().decode('utf-8')), {'featured': False})
+                self.assertFalse(transport.rows[sid]['featured'])
+
+                sync_req = urllib.request.Request(
+                    f'{base}/api/sync/{sid}',
+                    data=json.dumps({'offset': 0.42}).encode('utf-8'),
+                    headers={'Content-Type': 'application/json'},
+                    method='POST',
+                )
+                with urllib.request.urlopen(sync_req, timeout=5) as sync_resp:
+                    self.assertAlmostEqual(json.loads(sync_resp.read().decode('utf-8'))['offset'], 0.42)
+                self.assertAlmostEqual(transport.rows[sid]['sync_offset'], 0.42)
+
+                # 4. localOnly disconnect clears desktop state without calling drive-auth again
+                disc_req = urllib.request.Request(
+                    f'{base}/api/cloud/drive/disconnect',
+                    data=json.dumps({'localOnly': True}).encode('utf-8'),
+                    headers={'Content-Type': 'application/json'},
+                    method='POST',
+                )
+                with urllib.request.urlopen(disc_req, timeout=5) as disc_resp:
+                    self.assertEqual(json.loads(disc_resp.read().decode('utf-8')), {'connected': False})
+                self.assertEqual(runtime.cloud_sessions_cache, {})
+                self.assertTrue(transport.profile['drive_connected'])
+            finally:
+                httpd.shutdown()
+                runtime.close()
+                httpd.server_close()
+
+
 if __name__ == '__main__':
     unittest.main()

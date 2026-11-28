@@ -19,7 +19,7 @@ Esta carpeta contiene la infraestructura de base de datos y la Edge Function par
    supabase secrets set GOOGLE_CLIENT_ID="tu-client-id.apps.googleusercontent.com"
    supabase secrets set GOOGLE_CLIENT_SECRET="tu-client-secret"
    supabase secrets set DRIVE_TOKEN_SECRET="una-clave-aleatoria-de-al-menos-32-caracteres"
-   supabase secrets set ALLOWED_ORIGINS="https://sebaxg86.github.io"
+   supabase secrets set ALLOWED_ORIGINS="https://app.vertexlab.racing,https://vertexlab.racing,https://www.vertexlab.racing,https://sebaxg86.github.io"
    ```
 
 3. Desplegar la Edge Function:
@@ -30,9 +30,19 @@ Esta carpeta contiene la infraestructura de base de datos y la Edge Function par
 
 ## Google Cloud Console (OAuth)
 
-- Crear credenciales **OAuth 2.0 Client ID** (tipo *Web application* para el visor y/o *Desktop* si se desea) con el scope `https://www.googleapis.com/auth/drive.file`.
+- Crear credenciales **OAuth 2.0 Client ID** (tipo *Web application*) con el scope `https://www.googleapis.com/auth/drive.file`.
+- Agregar en *Authorized JavaScript origins*:
+  - `https://app.vertexlab.racing`
+  - `https://vertexlab.racing`
+  - `https://www.vertexlab.racing`
+  - `https://sebaxg86.github.io`
+  - `http://127.0.0.1:8766`
+  - `http://localhost:8766`
 - Agregar en *Authorized redirect URIs*:
-  - `https://sebaxg86.github.io/VertexLab/` (y el dominio propio cuando se configure)
-  - `http://127.0.0.1:8766/api/cloud/drive/callback`
-  - `http://127.0.0.1:18773/api/cloud/drive/callback` (solo para pruebas aisladas)
+  - `https://enxifznsswmvnonvwlgc.supabase.co/auth/v1/callback`
+  - `https://app.vertexlab.racing/`
+  - `https://sebaxg86.github.io/VertexLab/`
+  - `http://127.0.0.1:8766/`
+  - `http://localhost:8766/`
+  - `http://127.0.0.1:18773/` (solo para pruebas aisladas)
 - En **Supabase Auth → Providers → Google**, habilitar Google solo con perfil básico (`email`, `profile`) para crear la cuenta VertexLab de forma separada a Google Drive.

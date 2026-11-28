@@ -1,10 +1,17 @@
 project_id = "vertexlab"
 
 [auth]
-site_url = "https://sebaxg86.github.io/VertexLab/"
+site_url = "https://app.vertexlab.racing/"
 additional_redirect_urls = [
+  "https://app.vertexlab.racing/",
+  "https://app.vertexlab.racing/**",
+  "https://vertexlab.racing/",
+  "https://www.vertexlab.racing/",
   "https://sebaxg86.github.io/VertexLab/",
   "http://127.0.0.1:8766/",
+  "http://127.0.0.1:8766/**",
+  "http://localhost:8766/",
+  "http://localhost:8766/**",
   "http://127.0.0.1:18773/",
   "http://localhost:8770/"
 ]

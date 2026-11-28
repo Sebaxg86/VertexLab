@@ -116,7 +116,12 @@
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));
   return {verifier,challenge:base64url(new Uint8Array(digest))};
  }
- function redirectUri(){return location.origin+location.pathname;}
+ function redirectUri(loc=globalThis.location){
+  const origin=String(loc?.origin||'').replace(/\/+$/,'');
+  const rawPath=String(loc?.pathname||'/').replace(/\/index\.html$/i,'/');
+  const path=rawPath.startsWith('/')?rawPath:'/'+rawPath;
+  return origin+(path.endsWith('/')?path:path+'/');
+ }
 
  async function sbFetch(path,options={}){
   if(!configured())throw Error('Configura tu proyecto de Supabase para usar la nube');
@@ -128,6 +133,21 @@
   let data={};try{data=text?JSON.parse(text):{};}catch{}
   if(!response.ok)throw Error(data.error_description||data.error||data.message||('Error de nube HTTP '+response.status));
   return data;
+ }
+
+ async function postSessionToLocal(token,user,required=false){
+  if(root.VertexBrowser?.enabled||!token||!user?.id)return;
+  try{
+   const res=await fetch('/api/cloud/session',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({accessToken:token,user})
+   });
+   if(required&&!res.ok){
+    const err=await res.json().catch(()=>({}));
+    throw Error(err.error||'No se pudo sincronizar tu sesión con el servicio local');
+   }
+  }catch(error){if(required)throw error;}
  }
 
  async function ensureValidJwt(){
@@ -147,6 +167,7 @@
    expiresAt:Date.now()+(Number(data.expires_in)||3600)*1000,
    user:{id:data.user.id,email:data.user.email,displayName:data.user.user_metadata?.full_name||data.user.user_metadata?.name||data.user.email}
   });
+  postSessionToLocal(auth.accessToken,auth.user,false);
   return auth.accessToken;
  }
 
@@ -157,17 +178,7 @@
    if(required)throw Error('Tu sesión de VertexLab expiró. Vuelve a iniciar sesión desde el menú •••.');
    return;
   }
-  try{
-   const res=await fetch('/api/cloud/session',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({accessToken:token,user:auth.user})
-   });
-   if(required&&!res.ok){
-    const err=await res.json().catch(()=>({}));
-    throw Error(err.error||'No se pudo sincronizar tu sesión con el servicio local');
-   }
-  }catch(error){if(required)throw error;}
+  await postSessionToLocal(token,auth.user,required);
  }
 
  async function refreshProfile(){
@@ -178,12 +189,37 @@
   return profile;
  }
 
- async function refreshCloudSessions(){
+ async function refreshCloudSessions(syncLocal=false){
   if(!signedIn()){cloudSessions=[];return [];}
+  if(syncLocal&&!root.VertexBrowser?.enabled){
+   await pushSessionToLocal(true);
+  }
   const rows=await sbFetch('/rest/v1/cloud_sessions?select=*&order=created_epoch.desc,id.asc');
   cloudSessions=Array.isArray(rows)?rows.map(VertexCloudModel.cloudRowToLibraryItem).filter(Boolean):[];
   emit();
   return cloudSessions;
+ }
+
+ async function updateCloudMetadata(id,changes){
+  if(!signedIn()||!VertexCloudModel.validSessionId(id))return null;
+  const allowed={};
+  if('featured' in changes)allowed.featured=!!changes.featured;
+  if('sync_offset' in changes&&Number.isFinite(Number(changes.sync_offset)))allowed.sync_offset=Number(changes.sync_offset);
+  if('name' in changes&&typeof changes.name==='string')allowed.name=changes.name;
+  if(!Object.keys(allowed).length)return null;
+  await sbFetch('/rest/v1/cloud_sessions?user_id=eq.'+encodeURIComponent(auth.user.id)+'&id=eq.'+encodeURIComponent(id),{
+   method:'PATCH',
+   headers:{Prefer:'return=representation'},
+   body:JSON.stringify(allowed)
+  });
+  for(const item of cloudSessions){
+   if(item.id!==id)continue;
+   if('featured' in allowed)item.featured=allowed.featured;
+   if('sync_offset' in allowed)item.offset=allowed.sync_offset;
+   if('name' in allowed)item.name=allowed.name;
+  }
+  emit();
+  return allowed;
  }
 
  function normalizeUsername(raw){
@@ -280,7 +316,7 @@
   driveToken=null;driveTokenExpiry=0;cloudSessions=[];clearDriveRanges();
   if(profile){profile.drive_connected=false;profile.drive_email=null;profile.drive_root_folder_id=null;profile.drive_root_folder_name=null;}
   if(!root.VertexBrowser?.enabled){
-   try{await fetch('/api/cloud/drive/disconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});}catch{}
+   try{await fetch('/api/cloud/drive/disconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({localOnly:true})});}catch{}
   }
   emit();
  }
@@ -519,6 +555,13 @@
 
  async function handleCallback(){
   const params=new URLSearchParams(location.search);
+  const cbError=params.get('error');
+  if(cbError){
+   const desc=params.get('error_description');
+   history.replaceState(null,'',location.pathname+(location.hash||''));
+   takePendingAuth(PKCE_KEY);
+   throw Error(cbError==='access_denied'?'Autorización cancelada.':'No se pudo autorizar la cuenta: '+(desc||cbError));
+  }
   const code=params.get('code');
   const cbState=params.get('state')||'';
   if(!code)return false;
@@ -661,7 +704,7 @@
    dialog=document.createElement('dialog');
    dialog.id='cloud-auth-dialog';
    dialog.className='cloud-auth-dialog';
-   dialog.innerHTML=`<span class="eyebrow" id="cloud-auth-eyebrow">CUENTA VERTEXLAB</span><h2 id="cloud-auth-title">Iniciar sesión</h2><p id="cloud-auth-subtitle" class="auth-subtitle"></p><form id="cloud-auth-form"><div class="cloud-auth-field"><label for="cloud-auth-username">Nombre de usuario</label><div class="cloud-auth-input-wrap"><span>@</span><input id="cloud-auth-username" maxlength="24" autocomplete="username" placeholder="ej. sebaz_gt"></div><small id="cloud-auth-hint">3–24 caracteres (letras, números, . _ -). Si ya tienes cuenta puedes dejarlo vacío.</small></div><button id="cloud-auth-submit" class="cloud-google-btn" type="submit"></button><p id="cloud-auth-error" class="cloud-auth-error" role="alert" hidden></p></form><div class="cloud-auth-footer"><button type="button" id="cloud-auth-cancel" class="cloud-auth-cancel">Cancelar</button></div>`;
+   dialog.innerHTML=`<span class="eyebrow" id="cloud-auth-eyebrow">CUENTA VERTEXLAB</span><h2 id="cloud-auth-title">Iniciar sesión</h2><p id="cloud-auth-subtitle" class="auth-subtitle"></p><form id="cloud-auth-form"><div class="cloud-auth-field"><label for="cloud-auth-username">Nombre de usuario</label><div class="cloud-auth-input-wrap"><span>@</span><input id="cloud-auth-username" maxlength="24" autocomplete="username" placeholder="ej. sebaz_gt"></div><small id="cloud-auth-hint">3–24 caracteres (letras, números, . _ -). Si ya tienes cuenta puedes dejarlo vacío.</small></div><button id="cloud-auth-submit" class="cloud-google-btn" type="submit"></button><p id="cloud-auth-error" class="cloud-auth-error" role="alert" hidden></p></form><div class="cloud-auth-footer"><span class="cloud-auth-legal"><a href="https://vertexlab.racing/privacy" target="_blank" rel="noopener noreferrer">Privacidad</a> · <a href="https://vertexlab.racing/terms" target="_blank" rel="noopener noreferrer">Términos</a></span><button type="button" id="cloud-auth-cancel" class="cloud-auth-cancel">Cancelar</button></div>`;
    document.body.append(dialog);
    dialog.querySelector('#cloud-auth-cancel').onclick=()=>dialog.close();
    dialog.addEventListener('click',event=>{
@@ -767,7 +810,7 @@
    },{icon:MenuIcons.folder});
    addButton('Actualizar biblioteca en la nube',s.driveEmail||'Sincronizar índice',async()=>{
     if(typeof closeHomeMenus==='function')closeHomeMenus();
-    try{await refreshCloudSessions();if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();}
+    try{await refreshCloudSessions(true);if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();}
     catch(e){const msg=document.getElementById('message');if(msg)msg.textContent=e.message;}
    },{icon:MenuIcons.refresh});
    addButton('Desconectar Google Drive','Tus archivos en Drive se conservan',async()=>{
@@ -852,7 +895,7 @@
    },{icon:MenuIcons.folder});
    addButton('Actualizar biblioteca en la nube',s.driveEmail||'Sincronizar índice',async()=>{
     if(typeof closeHomeMenus==='function')closeHomeMenus();
-    try{await refreshCloudSessions();if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();}
+    try{await refreshCloudSessions(true);if(typeof HomeLibrary!=='undefined')await HomeLibrary.refresh();}
     catch(e){const msg=document.getElementById('message');if(msg)msg.textContent=e.message;}
    },{icon:MenuIcons.refresh});
    addDivider();
@@ -891,10 +934,10 @@
  onChange(()=>{renderAccountHeader();renderProfileMenu();});
 
  root.VertexCloud={
-  init,state,actionState,cachedSessions,onChange,onJobUpdate,jobFor,pollJobs,saveConfig,
+  init,state,actionState,cachedSessions,onChange,onJobUpdate,jobFor,pollJobs,saveConfig,redirectUri,
   signIn,signOut,saveUsername,openAuthDialog,connectDrive,disconnectDrive,
   listFolders,createFolder,selectFolder,getDriveAccessToken,
-  refreshProfile,refreshCloudSessions,openCloudSession,
+  refreshProfile,refreshCloudSessions,updateCloudMetadata,openCloudSession,
   syncSession,downloadSession,deleteCloudSession,renderMenu,renderAccountHeader,renderProfileMenu
  };
 })(globalThis);

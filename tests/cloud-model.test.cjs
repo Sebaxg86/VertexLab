@@ -92,6 +92,12 @@ test('cloud-client initializes cleanly with default public Supabase and Google O
  assert.equal(st.signedIn,false);
  assert.equal(st.driveConnected,false);
  assert.ok(st.googleClientId&&st.googleClientId.endsWith('.apps.googleusercontent.com'));
+ assert.equal(globalThis.VertexCloud.redirectUri({origin:'https://app.vertexlab.racing',pathname:'/'}),'https://app.vertexlab.racing/');
+ assert.equal(globalThis.VertexCloud.redirectUri({origin:'https://app.vertexlab.racing',pathname:'/index.html'}),'https://app.vertexlab.racing/');
+ assert.equal(globalThis.VertexCloud.redirectUri({origin:'http://127.0.0.1:8766',pathname:'/'}),'http://127.0.0.1:8766/');
+ assert.equal(globalThis.VertexCloud.redirectUri({origin:'http://127.0.0.1:8766',pathname:'/index.html'}),'http://127.0.0.1:8766/');
+ assert.equal(globalThis.VertexCloud.redirectUri({origin:'https://sebaxg86.github.io',pathname:'/VertexLab/index.html'}),'https://sebaxg86.github.io/VertexLab/');
+ assert.equal(globalThis.VertexCloud.redirectUri({origin:'https://sebaxg86.github.io',pathname:'/VertexLab'}),'https://sebaxg86.github.io/VertexLab/');
 });
 
 test('Drive playback reuses aligned blocks across seeks and leaves tiny browser probes exact',()=>{

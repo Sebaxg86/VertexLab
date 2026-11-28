@@ -1,7 +1,7 @@
 /* In-memory storage adapter for the static viewer. Session files never leave the device. */
 (function(root){
   const enabled=document.body.dataset.mode==='viewer',sessions=new Map();let catalog=null;let initialized;let openStorageSettings=()=>{};
-  const DOWNLOAD_URL='https://github.com/sebaxg86/VertexLab/releases/latest';
+  const DOWNLOAD_URL='https://vertexlab.racing/#descargar';
   let liveDemoActive=false,demoData=null,demoTimer=null,demoStart=0,deferredInstallPrompt=null;
   function isStandalone(){return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;}
   function canInstall(){
@@ -92,10 +92,13 @@
     const [action,id]=path.split('/');
     if(action==='feature'){
       const stored=saved.get(id),opened=sessions.get(id);
-      if(!stored&&!opened)throw Error('Esta sesión ya no está en la biblioteca');
-      if(stored){const updated={...stored,meta:{...stored.meta,featured:!!body.featured}};await VertexLibrary.update(updated);saved.set(id,updated);}
-      if(opened)opened.meta.featured=!!body.featured;
-      return {featured:!!body.featured};
+      const cloudMatch=(globalThis.VertexCloud?.cachedSessions?.()||[]).find(item=>item.id===id);
+      if(!stored&&!opened&&!cloudMatch)throw Error('Esta sesión ya no está en la biblioteca');
+      const featured=!!body.featured;
+      if(stored){const updated={...stored,meta:{...stored.meta,featured}};await VertexLibrary.update(updated);saved.set(id,updated);}
+      if(opened)opened.meta.featured=featured;
+      if(cloudMatch)await globalThis.VertexCloud?.updateCloudMetadata?.(id,{featured});
+      return {featured};
     }
     if(action==='delete'&&body?.removeLocal){
       if(body.confirm!==true)throw Error('Confirma la eliminación de la copia local');
@@ -133,14 +136,28 @@
     const item=get(id);
     if(action==='sessions')return {meta:{...item.meta},laps:item.laps};
     if(action==='delete'){release(item);sessions.delete(id);return {ok:true};}
-    if(action==='sync'){item.meta.offset=Number(body.offset)||0;return {ok:true};}
+    if(action==='sync'){
+      const offset=Number(body.offset)||0;
+      item.meta.offset=offset;
+      if(item.meta.availability?.cloud)await globalThis.VertexCloud?.updateCloudMetadata?.(id,{sync_offset:offset});
+      return {ok:true};
+    }
     throw Error('Esta función requiere VertexLab Capture en la PC');
+  }
+  async function waitServiceWorkerController(timeoutMs=3000){
+    const registration=await navigator.serviceWorker?.ready;
+    if(!registration)return {registration:null,controller:null};
+    if(navigator.serviceWorker.controller)return {registration,controller:navigator.serviceWorker.controller};
+    await new Promise(resolve=>{
+      const timer=setTimeout(resolve,timeoutMs);
+      navigator.serviceWorker.addEventListener('controllerchange',()=>{clearTimeout(timer);resolve();},{once:true});
+    });
+    return {registration,controller:navigator.serviceWorker.controller};
   }
   async function prepareVideo(id){
     const item=get(id);
     if(item.cloudVideo){
-      const registration=await navigator.serviceWorker?.ready;
-      const controller=navigator.serviceWorker?.controller;
+      const {registration,controller}=await waitServiceWorkerController();
       if(!controller||!registration)throw Error('Recarga VertexLab para activar el reproductor de streaming desde Google Drive.');
       const channel=new MessageChannel();
       await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{channel.port1.close();reject(Error('El reproductor en la nube necesita recargarse.'));},4000);channel.port1.onmessage=event=>{clearTimeout(timer);channel.port1.close();event.data.ok?resolve():reject(Error('No se pudo preparar el streaming de video'));};controller.postMessage({type:'vertex-cloud-media',id,fileId:item.cloudVideo.fileId,size:item.cloudVideo.size,mime:item.cloudVideo.type},[channel.port2]);});
