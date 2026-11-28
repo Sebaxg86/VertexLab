@@ -1,5 +1,5 @@
 #ifndef AppVersion
-  #define AppVersion "0.2.16"
+  #define AppVersion "0.2.17"
 #endif
 [Setup]
 AppId={{72CD7404-CBB3-4DCD-85CC-EE0249E045AA}
@@ -150,14 +150,9 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   ResultCode: Integer;
-  Ran: Boolean;
 begin
   if CurUninstallStep = usUninstall then begin
-    if IsAdminInstallMode then
-      Ran := ExecAsOriginalUser(ExpandConstant('{app}\VertexConnect.exe'), '--uninstall-cleanup', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode)
-    else
-      Ran := Exec(ExpandConstant('{app}\VertexConnect.exe'), '--uninstall-cleanup', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    if not Ran then
+    if not Exec(ExpandConstant('{app}\VertexConnect.exe'), '--uninstall-cleanup', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
       Log('No se pudo limpiar la configuración; las sesiones se conservan.')
     else if ResultCode <> 0 then
       Log('Limpieza de configuración incompleta; se conservaron los archivos que no pudieron validarse.');
