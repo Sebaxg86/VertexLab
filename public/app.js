@@ -433,8 +433,8 @@ function drawInstruments(sample) {
   textValue('g-longitudinal',measured.longitudinal === null ? '—' : measured.longitudinal.toFixed(2)+' G');
   textValue('g-total',measured.total === null ? 'Sin datos' : measured.total.toFixed(2)+' G');
   $('g-point').style.opacity = measured.total === null ? 0 : 1;
-  const size = Math.max(2, measured.total || 0);
-  $('g-point').style.transform = `translate(${(measured.lateral || 0)/size*55}px,${-(measured.longitudinal || 0)/size*55}px)`;
+  const gPos = RaceInstruments.gPointOffset(measured.lateral, measured.longitudinal, 55);
+  $('g-point').style.transform = `translate(${gPos.x}px,${gPos.y}px)`;
   for (const [index, tire] of measured.tires.entries()) {
     const hue = tire.temp === null ? 210 : Math.max(0,Math.min(210,210-(tire.temp-40)/100*210));
     $('tire-'+index).style.setProperty('--tire-color', tire.temp === null ? '#526174' : `hsl(${hue} 75% 65%)`);

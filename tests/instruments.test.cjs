@@ -45,3 +45,14 @@ test('red has a usable range before blue and each pair fades progressively',()=>
 
 test('gear changes restart a fast RPM light sweep in either direction',()=>{const {revSweep}=require('../public/instruments.js');let state=revSweep(null,{context:'live:1',gear:3,ratio:.9,animate:true},0);assert.equal(state.ratio,.9);state=revSweep(state,{context:'live:1',gear:4,ratio:.6,animate:true},100);assert.equal(state.ratio,0);assert.equal(state.active,true);state=revSweep(state,{context:'live:1',gear:4,ratio:.65,animate:true},210);assert.ok(state.ratio>0&&state.ratio<.65);state=revSweep(state,{context:'live:1',gear:4,ratio:.7,animate:true},320);assert.equal(state.ratio,.7);assert.equal(state.active,false);state=revSweep(state,{context:'live:1',gear:3,ratio:.8,animate:true},400);assert.equal(state.ratio,0);assert.equal(state.active,true);});
 test('seeking paused analysis, reconnecting or changing cars never creates fake shift sweeps',()=>{const {revSweep}=require('../public/instruments.js');const initial=revSweep(null,{context:'session:false',gear:3,ratio:.6,animate:false},0);assert.equal(revSweep(initial,{context:'session:false',gear:5,ratio:.8,animate:false},50).ratio,.8);assert.equal(revSweep(initial,{context:'new-car',gear:5,ratio:.8,animate:true},50).active,false);const missing=revSweep(initial,{context:'session:false',gear:null,ratio:null,animate:true},50);assert.equal(missing.active,false);assert.equal(missing.ratio,null);});
+test('G-meter point follows inertia convention: right turn left, braking up, acceleration down',()=>{
+  const {gPointOffset}=require('../public/instruments.js');
+  const rightTurn=gPointOffset(1.5,0,55);
+  assert.ok(rightTurn.x<0&&Math.abs(rightTurn.y)<1e-9);
+  const leftTurn=gPointOffset(-1.5,0,55);
+  assert.ok(leftTurn.x>0);
+  const braking=gPointOffset(0,-1.5,55);
+  assert.ok(braking.y<0&&Math.abs(braking.x)<1e-9);
+  const accelerating=gPointOffset(0,1.0,55);
+  assert.ok(accelerating.y>0);
+});

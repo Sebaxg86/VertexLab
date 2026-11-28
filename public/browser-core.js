@@ -13,7 +13,32 @@
       row.gap=!!(previous&&(row.breakBefore||row.t-previous.t>1||step>100));
       row.d=(previous?.d||0)+(row.gap?0:step);lap.rows.push(row);this.count++;
     }
-    finish(){if(!this.count)throw Error('La sesión no contiene telemetría');this.laps.forEach((lap,i)=>{lap.partial=i===0||i===this.laps.length-1||lap.rows.some(row=>row.gap);});return this.laps;}
+    finish(){
+      if(!this.count)throw Error('La sesión no contiene telemetría');
+      const isComplete=index=>{
+        const lap=this.laps[index],lrows=lap.rows;
+        if(lrows.length<2||lrows.some(row=>row.gap))return false;
+        if(index>0&&index<this.laps.length-1)return true;
+        const lt0=lrows[0].lapTime;
+        let maxLt=0;
+        for(const r of lrows)if(Number.isFinite(r.lapTime)&&r.lapTime>maxLt)maxLt=r.lapTime;
+        if(!Number.isFinite(lt0)||maxLt<=0)return false;
+        if(index===0&&this.laps.length>1)return lt0>=0&&lt0<=1&&this.laps[1].number!==lap.number;
+        if(index===this.laps.length-1){
+          if(!(lt0>=0&&lt0<=1))return false;
+          const lineRow=index>0?lrows[0]:(lrows.find(r=>Number.isFinite(r.lapTime)&&r.lapTime>0)||lrows[0]);
+          const closeDist=Math.hypot(lrows.at(-1).x-lineRow.x,lrows.at(-1).z-lineRow.z);
+          const lapD=lrows.at(-1).d;
+          let refD=0;
+          for(let j=0;j<this.laps.length-1;j++){const pr=this.laps[j].rows;if(pr.length>1&&pr.at(-1).d>100)refD=pr.at(-1).d;}
+          if(refD>0)return closeDist<=60&&lapD>=refD*.85;
+          return lapD>=200&&maxLt>=10&&closeDist<=60;
+        }
+        return false;
+      };
+      this.laps.forEach((lap,i)=>{lap.partial=!isComplete(i);});
+      return this.laps;
+    }
   }
   function analyze(rows){const builder=new LapBuilder();for(const row of rows)builder.push(row);return builder.finish();}
   function metadata(meta){

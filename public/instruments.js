@@ -56,6 +56,14 @@
       ? {context, gear: previous.gear, pendingSince}
       : {context, gear, pendingSince: null};
   }
-  root.RaceInstruments = {values,duration,rpmReference,revLights,revSweep,gearDisplay};
+  function gPointOffset(lateral, longitudinal, radius=55) {
+    // Inertia ("ball") convention used by Forza HUD, F1 TV & real dashes:
+    // right turn (+lateral) pushes left (-x); braking (-longitudinal) pushes forward/up (-y).
+    const lat = finite(lateral) ? lateral : 0;
+    const lon = finite(longitudinal) ? longitudinal : 0;
+    const scale = Math.max(2, Math.hypot(lat, lon));
+    return {x: -lat/scale*radius, y: lon/scale*radius};
+  }
+  root.RaceInstruments = {values,duration,rpmReference,revLights,revSweep,gearDisplay,gPointOffset};
   if (typeof module !== 'undefined') module.exports = root.RaceInstruments;
 })(globalThis);

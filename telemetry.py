@@ -42,7 +42,32 @@ def analyze(rows):
         row['gap'] = bool(previous and (row.get('breakBefore') or row['t']-previous['t'] > 1 or step > 100))
         row['d'] = (previous['d'] if previous else 0) + (step if not row['gap'] else 0)
         lap['rows'].append(row)
+    def is_complete(index):
+        lap = laps[index]
+        lrows = lap['rows']
+        if len(lrows) < 2 or any(r['gap'] for r in lrows):
+            return False
+        if 0 < index < len(laps)-1:
+            return True
+        lt0 = lrows[0].get('lapTime')
+        max_lt = max((r.get('lapTime') or 0 for r in lrows if isinstance(r.get('lapTime'), (int, float)) and math.isfinite(r.get('lapTime'))), default=0)
+        if not isinstance(lt0, (int, float)) or not math.isfinite(lt0) or max_lt <= 0:
+            return False
+        if index == 0 and len(laps) > 1:
+            return 0 <= lt0 <= 1.0 and laps[1]['number'] != lap['number']
+        if index == len(laps)-1:
+            if not (0 <= lt0 <= 1.0):
+                return False
+            line_row = lrows[0] if index > 0 else next((r for r in lrows if isinstance(r.get('lapTime'), (int, float)) and r['lapTime'] > 0), lrows[0])
+            close_dist = math.hypot(lrows[-1]['x']-line_row['x'], lrows[-1]['z']-line_row['z'])
+            lap_d = lrows[-1]['d']
+            prev_ds = [laps[j]['rows'][-1]['d'] for j in range(len(laps)-1) if len(laps[j]['rows']) > 1 and laps[j]['rows'][-1]['d'] > 100]
+            ref_d = prev_ds[-1] if prev_ds else 0
+            if ref_d > 0:
+                return close_dist <= 60 and lap_d >= ref_d*.85
+            return lap_d >= 200 and max_lt >= 10 and close_dist <= 60
+        return False
     for i, lap in enumerate(laps):
         lap['id'] = i
-        lap['partial'] = i == 0 or i == len(laps)-1 or any(r['gap'] for r in lap['rows'])
+        lap['partial'] = not is_complete(i)
     return laps

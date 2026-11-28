@@ -112,6 +112,22 @@ class DecoderTests(unittest.TestCase):
         self.assertTrue(laps[0]['rows'][2]['gap'])
         self.assertFalse(laps[1]['partial'])
 
+    def test_complete_first_and_final_laps_on_closed_circuit_are_not_marked_partial(self):
+        # 3-lap closed circuit (start/finish near x=0,z=0, ~400m per lap) + aborted 4th lap case
+        def lap_rows(lap_idx, base_t, finish=True):
+            pts = [(0, 0), (80, 0), (80, 80), (0, 80), (2, 1)] if finish else [(0, 0), (80, 0)]
+            out = []
+            for k, (x, z) in enumerate(pts):
+                t = base_t + k * .5
+                out.append(dict(decode(packet(stamp=int(t*1000))), x=x, z=z, t=t, lap=lap_idx, lapTime=k*10.0, timestamp=int(t*1000), breakBefore=False))
+            return out
+        full = lap_rows(0, 0) + lap_rows(1, 3) + lap_rows(2, 6)
+        laps = analyze(full)
+        self.assertEqual([l['partial'] for l in laps], [False, False, False])
+        aborted = lap_rows(0, 0) + lap_rows(1, 3, finish=False)
+        laps_aborted = analyze(aborted)
+        self.assertEqual([l['partial'] for l in laps_aborted], [False, True])
+
 
 class RecorderTests(unittest.TestCase):
     def setUp(self):

@@ -24,3 +24,10 @@ test('browser library previews prefer the second lap and keep free-session gaps'
  const free=analyze([row(0,0,0,{lapTime:0}),row(.1,0,10,{lapTime:0}),row(.2,1,1000,{lapTime:0}),row(.3,1,1010,{lapTime:0})]);
  const route=preview(free,{automatic:false});assert.equal(route.source,'session');assert.equal((route.path.match(/M/g)||[]).length,2);
 });
+test('complete first and final closed-circuit laps are marked complete while aborted final laps stay partial',()=>{
+ const mk=(lap,baseT,finish=true)=>(finish?[[0,0],[80,0],[80,80],[0,80],[2,1]]:[[0,0],[80,0]]).map(([x,z],k)=>({t:baseT+k*.5,timestamp:(baseT+k*.5)*1000,lap,x,z,speed:100,lapTime:k*10}));
+ const full=analyze([...mk(0,0),...mk(1,3),...mk(2,6)]);
+ assert.deepEqual(full.map(l=>l.partial),[false,false,false]);
+ const aborted=analyze([...mk(0,0),...mk(1,3,false)]);
+ assert.deepEqual(aborted.map(l=>l.partial),[false,true]);
+});
