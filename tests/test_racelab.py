@@ -319,6 +319,29 @@ let input='';process.stdin.on('data',chunk=>input+=chunk);process.stdin.on('end'
         meta = json.loads((Path(self.tmp.name)/(sid+'.json')).read_text())
         self.assertEqual(meta['videoPath'],'recovered.mp4')
 
+    def test_recreates_missing_sessions_dir_and_rolls_back_failed_begin(self):
+        missing = Path(self.tmp.name)/'removed-sessions'
+        self.rec.data = missing
+        self.feed(100)
+        self.assertTrue(missing.is_dir())
+        self.assertIsNotNone(self.rec.meta)
+        self.assertIsNotNone(self.rec.file)
+        persist_dir = Path(self.tmp.name)/'recreated-on-finish'
+        self.rec.data = persist_dir
+        self.rec.finish('manual')
+        self.assertTrue(persist_dir.is_dir())
+        self.assertTrue((persist_dir/(self.rec.last_saved+'.json')).is_file())
+        self.assertIsNone(self.rec.meta)
+        self.assertIsNone(self.rec.file)
+
+        # If opening the telemetry log fails, Recorder never leaves meta set with file=None.
+        with patch.object(Path, 'open', side_effect=OSError('disk full')):
+            with self.assertRaises(OSError):
+                self.rec.begin(200, manual=True)
+        self.assertIsNone(self.rec.meta)
+        self.assertIsNone(self.rec.file)
+        self.assertEqual(self.rec.mode, 'armed')
+
 
 class FakeWebSocket:
     def __init__(self, active=False, reject_pause=False, delay=0):

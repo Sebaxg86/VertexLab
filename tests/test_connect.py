@@ -10,7 +10,7 @@ import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
-from connect_config import ConnectConfig, protect_password
+from connect_config import ConnectConfig, default_sessions_dir, protect_password
 from connect_service import ConnectRuntime
 from test_racelab import FakeOBS, packet
 from server import ThreadingHTTPServer, handler_for
@@ -291,6 +291,16 @@ class ConnectTests(unittest.TestCase):
         secret = protect_password('OBS-private-test-ñ')
         self.assertNotIn('OBS-private', secret)
         self.assertEqual(protect_password(secret, decrypt=True), 'OBS-private-test-ñ')
+
+    def test_default_sessions_dir_creates_sessions_under_install_dir(self):
+        install_dir = Path(self.tmp.name) / 'VertexLabInstall'
+        install_dir.mkdir()
+        sessions = default_sessions_dir(install_dir)
+        self.assertEqual(sessions.resolve(), (install_dir / 'Sessions').resolve())
+        self.assertTrue(sessions.is_dir())
+        with patch('connect_config.tempfile.TemporaryFile', side_effect=PermissionError('read-only')):
+            fallback = default_sessions_dir(install_dir)
+        self.assertEqual(fallback, Path.home() / 'Documents' / 'VertexLab' / 'Sessions')
 
 
 if __name__ == '__main__':

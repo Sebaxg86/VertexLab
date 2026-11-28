@@ -1,14 +1,15 @@
 #ifndef AppVersion
-  #define AppVersion "0.2.14"
+  #define AppVersion "0.2.15"
 #endif
 [Setup]
 AppId={{72CD7404-CBB3-4DCD-85CC-EE0249E045AA}
 AppName=VertexLab
 AppVersion={#AppVersion}
 AppPublisher=VertexLab
-DefaultDirName={localappdata}\Programs\VertexLab
+DefaultDirName={autopf}\VertexLab
 DefaultGroupName=VertexLab
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
+PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir=..\dist\installer
@@ -30,6 +31,9 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 Source: "assets\welcome.bmp"; Flags: dontcopy
 Source: "assets\finished.bmp"; Flags: dontcopy
 Source: "..\dist\VertexConnect\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+[Dirs]
+Name: "{app}\Sessions"; Permissions: users-modify; Check: IsAdminInstallMode
+Name: "{app}\Sessions"; Check: not IsAdminInstallMode
 [Icons]
 Name: "{group}\VertexLab"; Filename: "{app}\VertexConnect.exe"
 
@@ -101,14 +105,20 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
+  Launched: Boolean;
 begin
   if (CurStep = ssDone) and DesktopShortcut.Checked then
     CreateShellLink(ExpandConstant('{autodesktop}\VertexLab.lnk'),
       'VertexLab + VertexConnect', ExpandConstant('{app}\VertexConnect.exe'),
       '', ExpandConstant('{app}'), ExpandConstant('{app}\VertexConnect.exe'), 0, SW_SHOWNORMAL);
-  if (CurStep = ssDone) and not WizardSilent and StartConnect.Checked then
-    if not Exec(ExpandConstant('{app}\VertexConnect.exe'), '', ExpandConstant('{app}'), SW_SHOWNORMAL, ewNoWait, ResultCode) then
+  if (CurStep = ssDone) and not WizardSilent and StartConnect.Checked then begin
+    if IsAdminInstallMode then
+      Launched := ExecAsOriginalUser(ExpandConstant('{app}\VertexConnect.exe'), '', ExpandConstant('{app}'), SW_SHOWNORMAL, ewNoWait, ResultCode)
+    else
+      Launched := Exec(ExpandConstant('{app}\VertexConnect.exe'), '', ExpandConstant('{app}'), SW_SHOWNORMAL, ewNoWait, ResultCode);
+    if not Launched then
       MsgBox('La instalación terminó. Abre VertexConnect desde el menú Inicio.', mbInformation, MB_OK);
+  end;
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
@@ -140,9 +150,14 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   ResultCode: Integer;
+  Ran: Boolean;
 begin
   if CurUninstallStep = usUninstall then begin
-    if not Exec(ExpandConstant('{app}\VertexConnect.exe'), '--uninstall-cleanup', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    if IsAdminInstallMode then
+      Ran := ExecAsOriginalUser(ExpandConstant('{app}\VertexConnect.exe'), '--uninstall-cleanup', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode)
+    else
+      Ran := Exec(ExpandConstant('{app}\VertexConnect.exe'), '--uninstall-cleanup', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    if not Ran then
       Log('No se pudo limpiar la configuración; las sesiones se conservan.')
     else if ResultCode <> 0 then
       Log('Limpieza de configuración incompleta; se conservaron los archivos que no pudieron validarse.');

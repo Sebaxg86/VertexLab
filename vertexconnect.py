@@ -10,7 +10,7 @@ import webbrowser
 from pathlib import Path
 
 from connect_window import WindowPlacement, WIDTH, HEIGHT
-from connect_config import ConnectConfig
+from connect_config import ConnectConfig, default_sessions_dir
 from connect_service import ConnectRuntime
 from server import ThreadingHTTPServer, handler_for, ROOT
 
@@ -25,7 +25,7 @@ def main():
     if args.uninstall_cleanup:
         from uninstall_cleanup import main as cleanup
         return cleanup()
-    config = ConnectConfig(args.config, default_data=None if getattr(sys, 'frozen', False) else ROOT/'data')
+    config = ConnectConfig(args.config, default_data=default_sessions_dir() if getattr(sys, 'frozen', False) else ROOT/'data')
     config.path.parent.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(filename=config.path.parent/'connect.log', level=logging.INFO,
                         format='%(asctime)s %(levelname)s %(message)s', encoding='utf-8')

@@ -44,6 +44,7 @@ class Recorder:
 
     def persist(self):
         if self.meta:
+            self.data.mkdir(exist_ok=True, parents=True)
             path = self.data/(self.meta['id']+'.json')
             temporary = path.with_suffix('.tmp')
             temporary.write_text(json.dumps(self.meta, ensure_ascii=False), encoding='utf-8')
@@ -66,6 +67,7 @@ class Recorder:
             raise ValueError('Ya hay una sesión abierta')
         if self.obs.owned:
             raise ValueError('OBS conserva una grabación pendiente. Reintenta finalizarla antes de grabar otra sesión.')
+        self.data.mkdir(exist_ok=True, parents=True)
         name = name.strip() if name else None
         if manual and not name:
             counter_path = self.data/'.manual-sequence'
@@ -83,25 +85,40 @@ class Recorder:
             temporary.replace(counter_path)
             name = f'Sesión libre {counter:03d}'
         ordinal = row.get('carOrdinal', 0) if row else 0
-        self.meta = dict(id=uuid.uuid4().hex, name=name or car_name(ordinal), created=time.time(),
-                         offset=0, version=2, carOrdinal=ordinal, carClass=(row or {}).get('carClass'),
-                         carPI=(row or {}).get('carPI'), automatic=not manual, events=[],
-                         syncSegments=[], syncState='none', ended=None, videoPath=None)
-        self.file = (self.data/(self.meta['id']+'.jsonl')).open('a', encoding='utf-8')
-        self.mode = 'recording'
-        self.t = 0
-        self.last = wall
-        self.last_row = None
-        self.segment = None
-        self.paused_video = None
-        self.negative_since = None
-        self.error = None
-        anchor = self.obs_call('start')
-        if anchor:
-            self.set_segment(anchor, wall, baseline=0)
-        self.persist()
-        self.revision += 1
-        return self.meta['id']
+        meta = dict(id=uuid.uuid4().hex, name=name or car_name(ordinal), created=time.time(),
+                    offset=0, version=2, carOrdinal=ordinal, carClass=(row or {}).get('carClass'),
+                    carPI=(row or {}).get('carPI'), automatic=not manual, events=[],
+                    syncSegments=[], syncState='none', ended=None, videoPath=None)
+        handle = (self.data/(meta['id']+'.jsonl')).open('a', encoding='utf-8')
+        try:
+            self.meta = meta
+            self.file = handle
+            self.mode = 'recording'
+            self.t = 0
+            self.last = wall
+            self.last_row = None
+            self.segment = None
+            self.paused_video = None
+            self.negative_since = None
+            self.error = None
+            anchor = self.obs_call('start')
+            if anchor:
+                self.set_segment(anchor, wall, baseline=0)
+            self.persist()
+            self.revision += 1
+            return self.meta['id']
+        except Exception:
+            try:
+                handle.close()
+            except OSError:
+                pass
+            self.meta = None
+            self.file = None
+            self.mode = 'armed' if self.auto else 'idle'
+            self.segment = None
+            self.paused_video = None
+            self.negative_since = None
+            raise
 
     def set_segment(self, anchor, wall, baseline=None):
         # Only backdate coverage by footage actually confirmed since start or
@@ -150,17 +167,23 @@ class Recorder:
         self.meta['ended'] = time.time()
         self.meta['duration'] = self.t
         self.meta['events'].append(dict(type='end', t=self.t, reason=reason))
-        self.persist()
-        self.file.close()
-        self.last_saved = self.meta['id']
-        self.meta = None
-        self.file = None
-        self.mode = 'armed' if self.auto else 'idle'
-        self.segment = None
-        self.negative_since = None
-        self.revision += 1
-        if reason == 'manual':
-            self.block_auto = True
+        try:
+            self.persist()
+            self.last_saved = self.meta['id']
+        finally:
+            if self.file:
+                try:
+                    self.file.close()
+                except OSError:
+                    pass
+            self.meta = None
+            self.file = None
+            self.mode = 'armed' if self.auto else 'idle'
+            self.segment = None
+            self.negative_since = None
+            self.revision += 1
+            if reason == 'manual':
+                self.block_auto = True
 
     def feed(self, row, wall):
         manual = self.meta is not None and not self.meta['automatic']
@@ -213,6 +236,9 @@ class Recorder:
                    if self.segment and self.t >= self.segment['tStart'] else None)
         if self.segment:
             self.segment['tEnd'] = max(self.segment['tStart'], self.t)
+        if self.file is None:
+            self.data.mkdir(exist_ok=True, parents=True)
+            self.file = (self.data/(self.meta['id']+'.jsonl')).open('a', encoding='utf-8')
         self.file.write(json.dumps(row)+'\n')
         self.file.flush()
         self.last = wall

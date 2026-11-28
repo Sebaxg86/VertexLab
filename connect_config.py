@@ -3,7 +3,26 @@ import base64
 import ctypes
 import json
 import os
+import sys
+import tempfile
 from pathlib import Path
+
+
+def default_sessions_dir(app_dir=None):
+    """Prefer `<install_dir>/Sessions` when writable; fall back to Documents/VertexLab/Sessions."""
+    base = Path(app_dir) if app_dir is not None else (
+        Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else None
+    )
+    if base is not None:
+        candidate = base / 'Sessions'
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryFile(dir=candidate):
+                pass
+            return candidate
+        except OSError:
+            pass
+    return Path.home() / 'Documents' / 'VertexLab' / 'Sessions'
 
 
 def protect_password(value, decrypt=False):
@@ -31,14 +50,23 @@ def protect_password(value, decrypt=False):
 class ConnectConfig:
     def __init__(self, path=None, default_data=None):
         self.path = Path(path) if path else Path(os.environ.get('LOCALAPPDATA', Path.home()))/'VertexLab'/'connect.json'
+        legacy_default = Path.home() / 'Documents' / 'VertexLab' / 'Sessions'
+        resolved_default = Path(default_data) if default_data else default_sessions_dir()
         self.values = dict(version=1, complete=False, udpPort=5301, obsPort=4455,
                            telemetryOnly=False, auto=True, obsSecret='',
-                           dataPath=str(default_data or Path.home()/'Documents'/'VertexLab'/'Sessions'))
+                           dataPath=str(resolved_default))
         if self.path.exists():
             saved = json.loads(self.path.read_text(encoding='utf-8'))
             if saved.get('version') != 1:
                 raise ValueError('Configuración de VertexConnect no compatible')
             self.values.update({k: v for k, v in saved.items() if k in self.values})
+            saved_data = Path(self.values['dataPath'])
+            if (
+                saved_data == legacy_default
+                and resolved_default != legacy_default
+                and (not legacy_default.exists() or not any(legacy_default.glob('*.json')))
+            ):
+                self.values['dataPath'] = str(resolved_default)
         self.port(self.values['udpPort'])
         self.port(self.values['obsPort'])
 

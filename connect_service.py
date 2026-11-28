@@ -142,6 +142,7 @@ class ConnectRuntime(Runtime):
                     pass
                 self.data = path.resolve()
                 r.data = self.data
+                r.error = None
                 self.preview_cache.clear()
                 self.config.save(dataPath=str(self.data))
             elif name == 'connect/obs':

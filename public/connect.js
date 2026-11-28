@@ -50,15 +50,31 @@ el('test-obs').onclick=action(async()=>{obsVerified=false;await request('connect
 for(const id of ['obs-port','obs-password'])el(id).oninput=()=>{obsVerified=false;render();};
 el('telemetry-only').onchange=action(async()=>{if(quickMode){try{await request('connect/video',{telemetryOnly:el('telemetry-only').checked});}catch(e){el('telemetry-only').checked=state.connect.telemetryOnly;throw e;}}});
 el('obs-next').onclick=action(async()=>{await request('connect/complete',{telemetryOnly:el('telemetry-only').checked,auto:el('auto-record').checked});step=3;furthestStep=3;});
-el('save-folder').onclick=action(async()=>{await request('connect/data',{path:el('data-path').value});});
+let folderSavedTimer=null;
+function flashFolderSaved(){
+ clearTimeout(folderSavedTimer);
+ el('save-folder').textContent='Guardado ✓';
+ folderSavedTimer=setTimeout(()=>{el('save-folder').textContent='Guardar';},1600);
+}
+async function saveSessionsFolder(path){
+ const clean=String(path||'').trim();
+ if(!clean)return;
+ await request('connect/data',{path:clean});
+ flashFolderSaved();
+}
+el('save-folder').onclick=action(async()=>{await saveSessionsFolder(el('data-path').value);});
 el('auto-record').onchange=action(async()=>{if(state.connect.complete)await request('auto',{enabled:el('auto-record').checked});});
-el('open-app').onclick=action(async()=>{quickMode=true;render();if(window.pywebview?.api){await window.pywebview.api.open_vertexlab();}else location.assign('/');});
+el('open-app').onclick=action(async()=>{
+ const typed=el('data-path').value.trim();
+ if(typed&&state?.connect&&typed!==state.connect.dataPath&&!state.recording){await saveSessionsFolder(typed);}
+ quickMode=true;render();if(window.pywebview?.api){await window.pywebview.api.open_vertexlab();}else location.assign('/');
+});
 for(const button of document.querySelectorAll('[data-copy]'))button.onclick=action(async()=>{await navigator.clipboard.writeText(button.dataset.copy);button.dataset.copied='true';setTimeout(()=>delete button.dataset.copied,1200);});
 function enableNativeControls(){el('browse-folder').hidden=false;for(const id of ['window-minimize','window-close'])el(id).disabled=false;}
 window.addEventListener('pywebviewready',enableNativeControls);
 el('window-minimize').onclick=()=>window.pywebview?.api.minimize_window();el('window-close').onclick=()=>window.pywebview?.api.close_window();
 for(const id of ['window-minimize','window-close'])el(id).disabled=true;
-el('browse-folder').onclick=action(async()=>{const path=await window.pywebview.api.choose_folder();if(path)el('data-path').value=path;});
+el('browse-folder').onclick=action(async()=>{const path=await window.pywebview.api.choose_folder();if(path){el('data-path').value=path;await saveSessionsFolder(path);}});
 window.addEventListener('vertexconnectshown',async()=>{await refresh();if(quickMode&&state?.connect.complete){el('udp-port').value=state.connect.udpPort;el('obs-port').value=state.connect.obsPort;el('data-path').value=state.connect.dataPath;el('auto-record').checked=state.connect.auto;el('telemetry-only').checked=state.connect.telemetryOnly;obsVerified=state.obs.connected;render();}});
 // Keep the common controls inside the hidden final step until status arrives.
 el('ready-storage').append(el('storage-settings'));el('ready-actions').append(el('capture-options'));
