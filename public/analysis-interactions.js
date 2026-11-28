@@ -1,5 +1,14 @@
 let expandedMetric=null,analysisHover=null,mapSegments=[],chartSegments=new Map(),mapPointer=null,scrollLocked=false,preferredMapLap=null,legendHoverLap=null;
 function updateSessionActions(){
+ if(session?.meta?.demo){
+  $('feature-session').hidden=true;
+  $('export-session').hidden=true;
+  const cloud=$('analysis-cloud-actions');if(cloud){cloud.replaceChildren();cloud.hidden=true;}
+  $('delete-session').hidden=false;
+  $('delete-session').disabled=false;
+  updateAnalysisCloudProgress(null);
+  return;
+ }
  const featured=!!session?.meta.featured;
  $('feature-session').setAttribute('aria-pressed',String(featured));
  $('feature-label').textContent=featured?'Quitar destacado':'Destacar sesión';

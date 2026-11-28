@@ -490,3 +490,32 @@ body:not([data-live-connected=true]) #picker-live:focus-visible{box-shadow:inset
     text-align: center;
   }
 }
+
+.home-session-row.is-demo {
+  border-left-color: #ff455d99;
+}
+.home-session-row.is-demo:hover,
+.home-session-row.is-demo:focus-within {
+  border-left-color: #ff455d;
+}
+.home-availability .home-demo-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border: 1px solid #ff455d;
+  border-radius: 2px;
+  background: linear-gradient(135deg, #35111b, #1d0c12);
+  color: #ff9aa8;
+  font-family: RaceNumbers, 'Segoe UI', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  line-height: 1;
+  box-shadow: 0 0 12px #ff3b5722;
+}
+#session-picker .home-availability .home-demo-pill {
+  padding: 3px 7px;
+  font-size: 10px;
+  letter-spacing: 1.2px;
+}

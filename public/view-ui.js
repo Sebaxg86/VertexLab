@@ -121,9 +121,15 @@ function createSessionButton(item){
     const text=document.createElement('span');text.className='picker-session-text';
     const title=document.createElement('b'),date=document.createElement('small');
     const knownCar=item.carName&&!item.carName.startsWith('Vehículo #');
-    title.textContent=knownCar?item.carName:item.name;
-    if(knownCar&&item.name!==item.carName){const label=document.createElement('span');label.className='picker-custom-name';label.textContent=item.name;text.append(label);}
-    date.textContent=new Date(item.created*1000).toLocaleString()+(item.version===2&&!item.ended?' · En curso':'');
+    if(item.demo){
+      title.textContent=item.name||item.carName||'Demo';
+      if(knownCar&&item.carName!==title.textContent){const label=document.createElement('span');label.className='picker-custom-name';label.textContent=item.carName;text.append(label);}
+      date.textContent=(item.lapCount?item.lapCount+' vueltas · ':'')+'Sesión de prueba · Video + telemetría';
+    }else{
+      title.textContent=knownCar?item.carName:item.name;
+      if(knownCar&&item.name!==item.carName){const label=document.createElement('span');label.className='picker-custom-name';label.textContent=item.name;text.append(label);}
+      date.textContent=new Date(item.created*1000).toLocaleString()+(item.version===2&&!item.ended?' · En curso':'');
+    }
     if(item.featured){const star=document.createElement('span');star.className='session-star';star.textContent='★';star.setAttribute('aria-label','Sesión destacada');title.append(star);}
     const metadata=document.createElement('span');metadata.className='picker-session-metadata';const badge=createPerformanceBadge(item.carClass,item.carPI,true);if(badge)metadata.append(badge);metadata.append(date);text.prepend(title);text.append(metadata);button.append(preview,brand,text);
   return button;

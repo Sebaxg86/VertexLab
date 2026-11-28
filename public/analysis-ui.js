@@ -16,7 +16,7 @@ function renderCarBadges(){
   if(!session){$('session-info').textContent='Abre una sesión desde el menú';return;}
   const meta=session.meta,badge=createPerformanceBadge(meta.carClass,meta.carPI,true);
   if(badge)$('session-info').append(badge);
-
+  if(meta.demo&&meta.carName&&meta.carName!==meta.name){const car=document.createElement('span');car.textContent=' · '+meta.carName;$('session-info').append(car);}
 }
 function renderAnalysisMenu(){
   $('all-laps').setAttribute('aria-pressed',String(allMode));

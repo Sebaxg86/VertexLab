@@ -2,6 +2,79 @@
 (function(root){
   const enabled=document.body.dataset.mode==='viewer',sessions=new Map();let catalog=null;let initialized;let openStorageSettings=()=>{};
   const DOWNLOAD_URL='https://vertexlab.racing/#descargar';
+  const DEMO_ID='0000000000000000000000000000de01';
+  const DEMO_BASE='https://vertexlab.racing/demo/';
+  const DEMO_ITEM={
+    id:DEMO_ID,
+    name:'Safety Car DEMO',
+    carName:'2021 Mercedes-AMG GT Black Series',
+    carOrdinal:4265,
+    carClass:7,
+    carPI:999,
+    brand:{name:'Mercedes-AMG',logo:'brand-mercedes-amg.png'},
+    created:1795859619.5706332,
+    ended:1795859780.6939113,
+    duration:145.70300000000134,
+    version:2,
+    featured:false,
+    demo:true,
+    lapCount:3,
+    availability:{local:false,cloud:false,demo:true},
+    preview:{path:'M68.52,41.53 L67.37,40.00 L66.16,38.37 L64.89,36.69 L63.67,35.11 L62.41,33.53 L61.31,32.21 L60.28,31.04 L59.33,30.03 L58.38,29.22 L57.36,28.58 L56.21,28.05 L54.95,27.66 L53.51,27.38 L52.08,27.18 L50.63,27.00 L49.23,26.86 L47.88,26.77 L46.68,26.76 L45.50,26.89 L44.39,27.23 L43.37,27.77 L42.48,28.47 L41.67,29.34 L41.00,30.27 L40.36,31.31 L39.64,32.53 L38.89,33.84 L38.15,35.15 L37.39,36.50 L36.71,37.69 L36.10,38.73 L35.55,39.62 L34.88,40.49 L34.05,41.26 L33.16,41.84 L32.19,42.27 L31.16,42.56 L30.03,42.69 L28.83,42.68 L27.45,42.58 L25.99,42.37 L24.74,42.08 L23.51,41.65 L22.38,41.07 L21.42,40.37 L20.62,39.53 L19.94,38.54 L19.32,37.40 L18.71,36.12 L18.07,34.71 L17.51,33.34 L16.95,31.87 L16.40,30.45 L15.85,29.02 L15.25,27.47 L14.64,25.88 L14.01,24.23 L13.35,22.53 L12.65,20.71 L11.97,18.98 L11.33,17.36 L10.77,15.98 L10.28,14.76 L9.83,13.66 L9.44,12.70 L9.15,11.92 L8.91,11.22 L8.74,10.60 L8.65,10.04 L8.68,9.48 L8.82,8.99 L9.08,8.57 L9.44,8.25 L9.86,8.05 L10.30,8.00 L10.73,8.08 L11.09,8.29 L11.43,8.62 L11.71,9.08 L11.98,9.64 L12.29,10.32 L12.63,11.09 L13.01,11.99 L13.38,12.99 L13.74,14.03 L14.13,15.13 L14.60,16.20 L15.22,17.22 L15.95,18.09 L16.84,18.84 L17.84,19.45 L18.86,19.88 L20.15,20.24 L21.42,20.46 L22.79,20.58 L24.20,20.63 L25.73,20.67 L27.26,20.74 L28.70,20.83 L30.15,20.94 L31.65,21.06 L33.26,21.17 L35.07,21.28 L36.89,21.40 L38.61,21.52 L40.44,21.65 L42.21,21.78 L44.01,21.92 L45.97,22.08 L48.19,22.29 L50.29,22.51 L52.25,22.73 L53.98,22.93 L55.53,23.13 L56.91,23.37 L58.15,23.73 L59.32,24.27 L60.40,25.00 L61.38,25.91 L62.21,26.86 L63.08,27.92 L63.96,28.93 L64.93,29.90 L65.93,30.68 L67.02,31.29 L68.15,31.71 L69.34,31.94 L70.62,32.05 L71.99,32.06 L73.45,32.03 L75.08,31.98 L76.63,31.95 L78.12,31.94 L79.50,31.93 L80.76,31.94 L81.86,31.95 L82.79,31.99 L83.68,32.12 L84.56,32.38 L85.40,32.83 L86.10,33.44 L86.61,34.20 L86.92,35.03 L87.08,35.91 L87.11,36.86 L87.09,37.91 L87.08,39.00 L87.08,40.19 L87.09,41.65 L87.12,43.11 L87.17,44.67 L87.21,46.34 L87.26,47.88 L87.30,49.29 L87.33,50.58 L87.35,51.62 L87.33,52.54 L87.22,53.35 L86.91,54.17 L86.44,54.84 L85.80,55.40 L85.10,55.77 L84.36,55.97 L83.55,55.99 L82.70,55.89 L81.80,55.63 L80.93,55.20 L80.03,54.58 L79.12,53.80 L78.18,52.91 L77.27,51.91 L76.30,50.71 L75.37,49.51 L74.43,48.30 L73.39,46.97 L72.30,45.60 L71.20,44.26 L70.06,42.90 L68.83,41.47',source:'lap',lap:2,partial:false,recordedLap:2}
+  };
+  function showGuestDemo(){
+    return enabled&&typeof fetch==='function'&&!!globalThis.VertexCloud&&!globalThis.VertexCloud.state?.()?.signedIn;
+  }
+  async function decodeMaybeGzip(buffer){
+    const bytes=new Uint8Array(buffer);
+    if(bytes.length>=2&&bytes[0]===0x1f&&bytes[1]===0x8b){
+      if(typeof DecompressionStream==='undefined')throw Error('Este navegador no soporta descompresión gzip para la sesión demo.');
+      const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+      return new Response(stream).text();
+    }
+    return new TextDecoder().decode(bytes);
+  }
+  async function openDemoSession(){
+    const statusEl=typeof document!=='undefined'?document.querySelector?.('.session-loading-card>span'):null;
+    if(statusEl)statusEl.textContent='Descargando sesión demo…';
+    const [metaRes,telRes]=await Promise.all([
+      fetch(DEMO_BASE+'safety-car-demo.meta.json'),
+      fetch(DEMO_BASE+'safety-car-demo.jsonl.gz')
+    ]);
+    if(!metaRes.ok||!telRes.ok)throw Error('No se pudo cargar la sesión demo. Comprueba tu conexión e inténtalo de nuevo.');
+    const [remoteMeta,telBuf]=await Promise.all([metaRes.json(),telRes.arrayBuffer()]);
+    if(statusEl)statusEl.textContent='Procesando telemetría…';
+    const telText=await decodeMaybeGzip(telBuf);
+    const builder=new VertexBrowserCore.LapBuilder();
+    for(const line of telText.split('\n')){if(line.trim())builder.push(JSON.parse(line));}
+    const laps=builder.finish();
+    let cars={},brands={};
+    try{[cars,brands]=await catalogs();}catch{}
+    const meta=VertexBrowserCore.metadata({...remoteMeta,id:DEMO_ID,name:remoteMeta.name||DEMO_ITEM.name});
+    Object.assign(meta,{
+      id:DEMO_ID,
+      name:remoteMeta.name||DEMO_ITEM.name,
+      demo:true,
+      featured:false,
+      lapCount:laps.length,
+      videoPath:'demo',
+      availability:{local:false,cloud:false,demo:true}
+    });
+    const key=String(meta.carOrdinal??''),info=cars[key];
+    meta.carName=typeof info==='string'?info:info?.name||remoteMeta.carName||DEMO_ITEM.carName;
+    meta.brand=brands[key]||remoteMeta.brand||DEMO_ITEM.brand;
+    const item={
+      meta,
+      laps,
+      file:null,
+      video:null,
+      demoVideoUrl:remoteMeta.videoUrl||(DEMO_BASE+'safety-car-demo.mp4'),
+      url:null,
+      preview:remoteMeta.preview||DEMO_ITEM.preview
+    };
+    sessions.set(DEMO_ID,item);
+    return item;
+  }
   let liveDemoActive=false,demoData=null,demoTimer=null,demoStart=0,deferredInstallPrompt=null;
   function isStandalone(){return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;}
   function canInstall(){
@@ -72,7 +145,12 @@
   }
   async function request(path,body){
     await initialize();
-    if(path==='sessions'){const result=new Map([...saved].map(([id,item])=>[id,{...item.meta,preview:item.preview}]));for(const [id,item] of sessions)result.set(id,{...item.meta,preview:item.preview});return [...result.values()];}
+    if(path==='sessions'){
+      const result=new Map([...saved].map(([id,item])=>[id,{...item.meta,preview:item.preview}]));
+      for(const [id,item] of sessions)if(id!==DEMO_ID||showGuestDemo())result.set(id,{...item.meta,preview:item.preview});
+      if(showGuestDemo()&&!result.has(DEMO_ID))result.set(DEMO_ID,{...DEMO_ITEM});
+      return [...result.values()];
+    }
     if(path.startsWith('library?')){
       const query=new URLSearchParams(path.split('?')[1]);
       let cars={},brands={};
@@ -87,10 +165,12 @@
       for(const [id,item] of sessions)if(item.file||saved.has(id))catalog.set(id,enrich({...item.meta,preview:item.preview,availability:{local:true,cloud:false,temporary:!saved.has(id)}}));
       const cloudItems=(globalThis.VertexCloud?.cachedSessions?.()||[]).map(enrich);
       const merged=globalThis.VertexCloudModel?VertexCloudModel.mergeLibrary([...catalog.values()],cloudItems):[...catalog.values()];
+      if(showGuestDemo()&&!merged.some(item=>item.id===DEMO_ID))merged.unshift(enrich({...DEMO_ITEM}));
       return VertexHomeModel.page(merged,query.get('offset'),query.get('limit'));
     }
     const [action,id]=path.split('/');
     if(action==='feature'){
+      if(id===DEMO_ID)throw Error('La sesión demo es de solo lectura');
       const stored=saved.get(id),opened=sessions.get(id);
       const cloudMatch=(globalThis.VertexCloud?.cachedSessions?.()||[]).find(item=>item.id===id);
       if(!stored&&!opened&&!cloudMatch)throw Error('Esta sesión ya no está en la biblioteca');
@@ -124,13 +204,17 @@
       }
     }
     if(action==='sessions'&&!sessions.has(id)&&!saved.has(id)){
-      const cloudItem=(globalThis.VertexCloud?.cachedSessions?.()||[]).find(item=>item.id===id);
-      if(cloudItem){
-        const opened=await VertexCloud.openCloudSession(cloudItem,progress=>{const el=document.querySelector('.session-loading-card>span');if(el)el.textContent=progress.phase+' · '+progress.percent+'%';});
-        const [cars,brands]=await catalogs();
-        const info=cars[String(opened.meta.carOrdinal)],carName=typeof info==='string'?info:info?.name||opened.meta.name;
-        opened.meta.carName=carName;opened.meta.brand=brands[String(opened.meta.carOrdinal)]||null;
-        sessions.set(id,{meta:opened.meta,laps:opened.laps,file:null,video:null,cloudVideo:opened.cloudVideo,url:null,preview:cloudItem.preview});
+      if(id===DEMO_ID){
+        await openDemoSession();
+      }else{
+        const cloudItem=(globalThis.VertexCloud?.cachedSessions?.()||[]).find(item=>item.id===id);
+        if(cloudItem){
+          const opened=await VertexCloud.openCloudSession(cloudItem,progress=>{const el=document.querySelector('.session-loading-card>span');if(el)el.textContent=progress.phase+' · '+progress.percent+'%';});
+          const [cars,brands]=await catalogs();
+          const info=cars[String(opened.meta.carOrdinal)],carName=typeof info==='string'?info:info?.name||opened.meta.name;
+          opened.meta.carName=carName;opened.meta.brand=brands[String(opened.meta.carOrdinal)]||null;
+          sessions.set(id,{meta:opened.meta,laps:opened.laps,file:null,video:null,cloudVideo:opened.cloudVideo,url:null,preview:cloudItem.preview});
+        }
       }
     }
     const item=get(id);
@@ -139,7 +223,7 @@
     if(action==='sync'){
       const offset=Number(body.offset)||0;
       item.meta.offset=offset;
-      if(item.meta.availability?.cloud)await globalThis.VertexCloud?.updateCloudMetadata?.(id,{sync_offset:offset});
+      if(id!==DEMO_ID&&item.meta.availability?.cloud)await globalThis.VertexCloud?.updateCloudMetadata?.(id,{sync_offset:offset});
       return {ok:true};
     }
     throw Error('Esta función requiere VertexLab Capture en la PC');
@@ -156,6 +240,10 @@
   }
   async function prepareVideo(id){
     const item=get(id);
+    if(item.demoVideoUrl){
+      item.url=item.demoVideoUrl;
+      return;
+    }
     if(item.cloudVideo){
       const {registration,controller}=await waitServiceWorkerController();
       if(!controller||!registration)throw Error('Recarga VertexLab para activar el reproductor de streaming desde Google Drive.');
@@ -249,8 +337,21 @@
       document.querySelector('.settings-wrap').hidden=true;
       return;
     }
-    $('export-session').lastElementChild.textContent='Guardar archivo .vrtx original';
-    $('delete-session').lastElementChild.textContent='Cerrar sesión de esta pestaña';
+    const isDemo=!!session?.meta?.demo;
+    if(isDemo){
+      $('view-eyebrow').textContent='SESIÓN DEMO';
+      $('feature-session').hidden=true;
+      $('export-session').hidden=true;
+      $('analysis-cloud-actions').hidden=true;
+      $('delete-session').hidden=false;
+      $('delete-session').lastElementChild.textContent='Salir de la sesión demo';
+    }else{
+      $('feature-session').hidden=false;
+      $('export-session').hidden=false;
+      $('analysis-cloud-actions').hidden=false;
+      $('export-session').lastElementChild.textContent='Guardar archivo .vrtx original';
+      $('delete-session').lastElementChild.textContent='Cerrar sesión de esta pestaña';
+    }
     if(!session){$('title').textContent='Abre una sesión';$('view-eyebrow').textContent='VISOR PORTABLE';$('session-info').textContent='Biblioteca privada de este dispositivo';}
   }
   function setup(){
@@ -309,7 +410,13 @@
       homeLink.addEventListener('click',openDownloadModal);
       homeZone.append(homeLink);
     }
-    $('delete-session').onclick=action(async()=>{if(!session)return;const id=session.meta.id;clearVideo();await request('delete/'+id,{});openHome();await list();$('message').textContent='Sesión cerrada. Tu archivo original no se ha eliminado.';});
+    $('delete-session').onclick=action(async()=>{if(!session)return;const id=session.meta.id,isDemo=!!session.meta.demo;clearVideo();await request('delete/'+id,{});openHome();await list();$('message').textContent=isDemo?'Sesión demo cerrada.':'Sesión cerrada. Tu archivo original no se ha eliminado.';});
+    globalThis.VertexCloud?.onChange?.(s=>{
+      if(s?.signedIn){
+        if(sessions.has(DEMO_ID)){release(sessions.get(DEMO_ID));sessions.delete(DEMO_ID);}
+        if(session?.meta?.demo&&typeof openHome==='function'){clearVideo();openHome();}
+      }
+    });
     if('serviceWorker' in navigator&&isSecureContext)navigator.serviceWorker.register(new URL('sw.js',document.baseURI),{updateViaCache:'none'}).catch(()=>{});
     window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();deferredInstallPrompt=event;globalThis.VertexCloud?.renderMenu?.();});
     window.addEventListener('appinstalled',()=>{deferredInstallPrompt=null;globalThis.VertexCloud?.renderMenu?.();$('message').textContent='VertexLab instalada como app en este dispositivo.';});

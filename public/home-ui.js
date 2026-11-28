@@ -128,7 +128,12 @@ function applyCloudProgress(status,item){
  }
 }
 function createAvailability(item){
-  const availability=document.createElement('div');availability.className='home-availability';const state=VertexHomeModel.availability(item);
+  const availability=document.createElement('div');availability.className='home-availability';
+  if(item.demo){
+   const badge=document.createElement('span');badge.className='home-demo-pill';badge.textContent='DEMO';badge.setAttribute('aria-label','Sesión demo precargada');badge.title='Sesión demo precargada · solo lectura';
+   availability.append(badge);return availability;
+  }
+  const state=VertexHomeModel.availability(item);
   for(const [key,icon,active,label] of [['local',HomeGlyphs.computer,state.local,state.temporary?'Disponible temporalmente en este dispositivo':'Disponible en este dispositivo'],['cloud',HomeGlyphs.cloud,state.cloud,'Respaldada en Google Drive']]){
    const status=document.createElement('span');status.dataset.storage=key;status.setAttribute('role','img');
    if(key==='cloud'){applyCloudProgress(status,item);}
@@ -147,12 +152,13 @@ const HomeLibrary=(()=>{
  function removed(id){homeExportSelection.delete(id);syncHomeExportControls();const index=items.findIndex(item=>item.id===id);if(index<0)return;items.splice(index,1);cards.delete(id);total=Math.max(0,(total||0)-1);if(nextOffset!==null)nextOffset=Math.max(0,nextOffset-1);render(true);if(visiblePicker())renderPicker();if(!items.length&&nextOffset!==null)loadMore();}
  function row(item,index){
   let card=cards.get(item.id);if(card){syncHomeExportRow(card,item);return card;}
-  card=document.createElement('article');card.className='home-session-row'+(item.featured?' is-featured':'');card.setAttribute('role','listitem');card.dataset.id=item.id;
+  card=document.createElement('article');card.className='home-session-row'+(item.featured?' is-featured':'')+(item.demo?' is-demo':'');card.setAttribute('role','listitem');card.dataset.id=item.id;
   const button=createSessionButton(item);button.className='home-session-main';button.id='home-open-'+item.id;button.title=item.name||item.carName;button.setAttribute('aria-label','Analizar '+(item.name||item.carName));
-  button.onclick=action(async()=>{if(homeExportMode){toggleHomeExport(item);return;}button.disabled=true;closeHomeMenus();try{await transitionView(()=>load(item.id));}finally{button.disabled=false;}});
+  button.onclick=action(async()=>{if(homeExportMode){if(!item.demo)toggleHomeExport(item);return;}button.disabled=true;closeHomeMenus();try{await transitionView(()=>load(item.id));}finally{button.disabled=false;}});
   const availability=createAvailability(item);
   const gear=document.createElement('button');gear.id='home-settings-'+item.id;gear.className='home-row-settings';gear.innerHTML=$('settings-toggle').innerHTML;
   gear.setAttribute('aria-label','Opciones de '+(item.name||item.carName));gear.setAttribute('aria-expanded','false');gear.setAttribute('aria-controls','home-row-menu');gear.onclick=()=>openHomeSessionMenu(item,gear);
+  if(item.demo)gear.hidden=true;
   const check=document.createElement('input');check.type='checkbox';check.className='home-export-check';check.setAttribute('aria-label','Seleccionar '+(item.name||item.carName)+' para exportar');check.onchange=()=>toggleHomeExport(item,check.checked);card.append(check,button,availability,gear);syncHomeExportRow(card,item);cards.set(item.id,card);return card;
  }
  function render(force=false){
@@ -215,7 +221,7 @@ function setupHome(){
   homeSelectingAll=true;syncHomeExportControls();
   try{
    const selection=new Map();let offset=0;
-   do{const page=await api('library?offset='+offset+'&limit=48');for(const item of page.items)if(VertexHomeModel.availability(item).local&&item.id!==latest?.recording)selection.set(item.id,item);offset=page.nextOffset;}while(offset!==null);
+   do{const page=await api('library?offset='+offset+'&limit=48');for(const item of page.items)if(!item.demo&&VertexHomeModel.availability(item).local&&item.id!==latest?.recording)selection.set(item.id,item);offset=page.nextOffset;}while(offset!==null);
    if(homeExportMode){homeExportSelection.clear();for(const [id,item] of selection)homeExportSelection.set(id,item);homeAllSelected=true;}
   }catch(error){$('message').textContent=error.message;}
   finally{homeSelectingAll=false;syncHomeExportControls();HomeLibrary.render(true);}
@@ -269,7 +275,7 @@ function transitionView(change){
 function enterHomeLive(){return transitionView(openLiveView);}
 
 function syncHomeExportRow(card,item){
- const check=card.querySelector('.home-export-check');check.hidden=!homeExportMode;check.checked=homeExportSelection.has(item.id);check.disabled=homeSelectingAll||!VertexHomeModel.availability(item).local||item.id===latest?.recording;
+ const check=card.querySelector('.home-export-check');check.hidden=!homeExportMode||!!item.demo;check.checked=!item.demo&&homeExportSelection.has(item.id);check.disabled=!!item.demo||homeSelectingAll||!VertexHomeModel.availability(item).local||item.id===latest?.recording;
  card.classList.toggle('export-selected',homeExportMode&&check.checked);
 }
 function syncHomeExportControls(){
@@ -283,6 +289,6 @@ function syncHomeExportControls(){
 }
 function setHomeExportMode(enabled){if(homeSelectingAll)return;closeHomeMenus();homeExportMode=enabled;homeExportSelection.clear();homeAllSelected=false;syncHomeExportControls();HomeLibrary.render(true);}
 function toggleHomeExport(item,checked=!homeExportSelection.has(item.id)){
- if(homeSelectingAll||!VertexHomeModel.availability(item).local||item.id===latest?.recording)return;
+ if(item.demo||homeSelectingAll||!VertexHomeModel.availability(item).local||item.id===latest?.recording)return;
  checked?homeExportSelection.set(item.id,item):homeExportSelection.delete(item.id);homeAllSelected=false;syncHomeExportControls();HomeLibrary.render(true);
 }
