@@ -37,8 +37,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $tag = $env:GITHUB_REF_NAME
-          $installers = Get-ChildItem dist\installer\*.exe | ForEach-Object { $_.FullName }
-          if (-not $installers) { throw 'No installer executable found in dist/installer' }
+          $installers = @(Get-ChildItem dist\installer\*.exe | ForEach-Object { $_.FullName })
+          if ($installers.Count -eq 0) { throw 'No installer executable found in dist/installer' }
           gh release view $tag *> $null
           if ($LASTEXITCODE -eq 0) {
             gh release upload $tag @installers --clobber
